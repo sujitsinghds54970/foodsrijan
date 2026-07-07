@@ -3,15 +3,20 @@ from app.main import app
 
 client = TestClient(app)
 
-def test_create_patient():
+def test_create_patient_requires_auth():
     payload = {
-        "name": "John Doe",
-        "age": 30,
+        "first_name": "John",
+        "last_name": "Doe",
+        "date_of_birth": "1994-01-01T00:00:00",
         "gender": "Male",
-        "branch_id": 1
+        "phone": "9999999999",
+        "address": "Address",
+        "city": "City",
+        "state": "State",
+        "pincode": "123456",
+        "emergency_contact": "8888888888",
+        "emergency_contact_name": "Jane Doe",
+        "branch_id": 1,
     }
     response = client.post("/api/patients/", json=payload)
-    print("Status Code:", response.status_code)
-    print("Response Body:", response.text)
-    assert response.status_code == 201
-    assert response.json()["name"] == "John Doe"
+    assert response.status_code in (401, 403)

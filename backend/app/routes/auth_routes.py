@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import Optional
 
 from app.database import get_db
@@ -9,7 +9,7 @@ from app.utils.auth_system import (
     authenticate_user, create_user_token, update_last_login,
     auth_guard, TokenData, get_current_user
 )
-from app.models import User, Branch
+from app.models import User, Branch, ActivityLog
 from app.schemas.user import UserCreate, UserResponse, TokenResponse
 from app.utils.auth_system import auth_guard
 
@@ -20,53 +20,109 @@ def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    """User login endpoint"""
-    user = authenticate_user(db, form_data.username, form_data.password)
+    """User login endpoint with comprehensive error logging"""
+    import logging
+    import traceback
+    logger = logging.getLogger(__name__)
     
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    # Create access token
-    access_token = create_user_token(user)
-    
-    # Update last login
-    update_last_login(db, user)
-    
-    # Log activity
-    auth_guard.log_activity(
-        db=db, 
-        user=user, 
-        action="login", 
-        entity_type="user", 
-        entity_id=user.id, 
-        description=f"User {user.username} logged in"
-    )
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "role": user.role,
-            "branch_id": user.branch_id
+    try:
+        # DEBUG LOGGING
+        logger.info(f"🔐 LOGIN ATTEMPT - Username: {form_data.username}, Password Length: {len(form_data.password)}")
+        
+        # Check if user exists
+        db_user = db.query(User).filter(User.username == form_data.username).first()
+        if db_user:
+            logger.info(f"✅ USER FOUND - ID: {db_user.id}, Username: {db_user.username}, Role: {db_user.role}, Active: {db_user.is_active}, Hash: {db_user.hashed_password[:20]}...")
+        else:
+            logger.error(f"❌ USER NOT FOUND - Username: {form_data.username}")
+        
+        user = authenticate_user(db, form_data.username, form_data.password)
+        
+        if not user:
+            logger.error(f"❌ AUTHENTICATION FAILED - Username: {form_data.username}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        logger.info(f"✅ AUTHENTICATION SUCCESS - User: {user.username}, Role: {user.role}")
+        
+        # Create access token
+        access_token = create_user_token(user)
+        logger.info(f"✅ TOKEN CREATED - Length: {len(access_token)}")
+        
+        # Update last login
+        update_last_login(db, user)
+        logger.info(f"✅ LAST LOGIN UPDATED")
+        
+        # Log activity (wrapped in try-catch to prevent login failure)
+        try:
+            auth_guard.log_activity(
+                db=db, 
+                user=user, 
+                action="login", 
+                entity_type="user", 
+                entity_id=user.id, 
+                description=f"User {user.username} logged in"
+            )
+            logger.info(f"✅ ACTIVITY LOGGED")
+        except Exception as log_error:
+            logger.warning(f"⚠️  Failed to log activity: {log_error}")
+        
+        logger.info(f"✅ PREPARING RESPONSE")
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "phone": user.phone,
+                "role": user.role,
+                "branch_id": user.branch_id,
+                "is_active": user.is_active,
+                "created_at": user.created_at,
+                "last_login": user.last_login
+            }
         }
-    }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 401)
+        raise
+    except Exception as e:
+        # Catch ALL other exceptions and log them
+        logger.error(f"❌❌❌ CRITICAL LOGIN ERROR ❌❌❌")
+        logger.error(f"Error Type: {type(e).__name__}")
+        logger.error(f"Error Message: {str(e)}")
+        logger.error(f"Full Traceback:")
+        logger.error(traceback.format_exc())
+        
+        # Also print to console for immediate visibility
+        print("\n" + "="*80)
+        print("❌❌❌ CRITICAL LOGIN ERROR ❌❌❌")
+        print(f"Error Type: {type(e).__name__}")
+        print(f"Error Message: {str(e)}")
+        print("Full Traceback:")
+        print(traceback.format_exc())
+        print("="*80 + "\n")
+        
+        # Return 500 with error details
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error during login: {str(e)}"
+        )
 
 
-@router.post("/public-register", response_model=UserResponse)
+@router.post("/public-register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def public_register_user(
     user_data: UserCreate,
     db: Session = Depends(get_db)
 ):
-    """Public registration endpoint for patients, staff, and branch users"""
+    """Public registration endpoint for patients, staff, and branch users - Returns auth token for auto-login"""
     
     # Check if username already exists
     if db.query(User).filter(User.username == user_data.username).first():
@@ -139,16 +195,30 @@ def public_register_user(
         description=f"User {db_user.username} self-registered as {db_user.role}"
     )
     
-    return UserResponse(
-        id=db_user.id,
-        username=db_user.username,
-        email=db_user.email,
-        first_name=db_user.first_name,
-        last_name=db_user.last_name,
-        role=db_user.role,
-        branch_id=db_user.branch_id,
-        is_active=db_user.is_active
-    )
+    # Generate auth token for auto-login
+    access_token = create_user_token(db_user)
+    
+    # Update last login
+    update_last_login(db, db_user)
+    
+    # Return token and user data for immediate login
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": db_user.id,
+            "username": db_user.username,
+            "email": db_user.email,
+            "first_name": db_user.first_name,
+            "last_name": db_user.last_name,
+            "phone": db_user.phone,
+            "role": db_user.role,
+            "branch_id": db_user.branch_id,
+            "is_active": db_user.is_active,
+            "created_at": db_user.created_at,
+            "last_login": db_user.last_login
+        }
+    }
 
 @router.post("/register", response_model=UserResponse)
 def register_user(
@@ -221,19 +291,25 @@ def register_user(
         is_active=db_user.is_active
     )
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me")
 def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get current user information"""
-    return UserResponse(
-        id=current_user.id,
-        username=current_user.username,
-        email=current_user.email,
-        first_name=current_user.first_name,
-        last_name=current_user.last_name,
-        role=current_user.role,
-        branch_id=current_user.branch_id,
-        is_active=current_user.is_active
-    )
+    # Ensure created_at exists; if missing, fallback to now for response stability
+    created_at = current_user.created_at if getattr(current_user, 'created_at', None) is not None else datetime.utcnow()
+    last_login = getattr(current_user, 'last_login', None)
+
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+        "role": current_user.role,
+        "branch_id": current_user.branch_id,
+        "is_active": current_user.is_active,
+        "created_at": created_at,
+        "last_login": last_login,
+    }
 
 @router.post("/logout")
 def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

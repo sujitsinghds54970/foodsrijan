@@ -282,6 +282,11 @@ class QRCodeService:
 
 
 # Convenience functions
+def generate_qr_code(data: str, box_size: int = 10, border: int = 4) -> io.BytesIO:
+    """Generate a standard QR code - convenience wrapper"""
+    return QRCodeService.generate_qr_code(data, box_size, border)
+
+
 def generate_patient_qr_code(patient_id: str, patient_name: str, dob: str, blood_group: str = None) -> str:
     """Generate patient QR and return as base64"""
     buffer = QRCodeService.generate_patient_qr(patient_id, patient_name, dob, blood_group)

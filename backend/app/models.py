@@ -1,9 +1,3 @@
-from sqlalchemy import Column, Integer, String
-from app.database import Base
-
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
+# This file is deprecated - all models are now in app/models/__init__.py
+# Keeping this file for backward compatibility
+from app.models import *

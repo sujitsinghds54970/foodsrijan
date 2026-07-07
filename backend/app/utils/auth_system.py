@@ -7,24 +7,38 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 import bcrypt
 import os
+import logging
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from passlib.context import CryptContext
 
 from app.database import get_db
 from app.models import User, Branch, ActivityLog
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Security Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-super-secret-key-for-vaidya-vihar-2024")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 10080))  # 7 days (10080 minutes)
+
+# Log security configuration (without exposing secrets)
+logger.info(f"Auth system initialized - Token expiry: {ACCESS_TOKEN_EXPIRE_MINUTES} minutes")
+logger.info(f"SECRET_KEY configured: {'Yes' if os.getenv('SECRET_KEY') else 'No (using default)'}")
 
 # Rate Limiting
 limiter = Limiter(key_func=get_remote_address)
 
 # Security
 security = HTTPBearer()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class TokenData:
     def __init__(self, username: str = None, branch_id: int = None, role: str = None):
@@ -43,8 +57,45 @@ class AuthGuard:
         return hashed.decode('utf-8')
     
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify password against hash"""
-        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+        """
+        Verify password against hash with backward-compatible fallback.
+        OWASP compliant password verification with detailed logging.
+        """
+        if not plain_password or not hashed_password:
+            logger.warning("Password verification failed: Empty password or hash")
+            return False
+
+        try:
+            # Primary path: direct bcrypt verification (current hashing strategy)
+            result = bcrypt.checkpw(
+                plain_password.encode('utf-8'),
+                hashed_password.encode('utf-8')
+            )
+            
+            if result:
+                logger.info("Password verification successful (bcrypt)")
+            else:
+                logger.warning("Password verification failed (bcrypt mismatch)")
+            
+            return result
+            
+        except ValueError as e:
+            # Hash format issue - try passlib fallback
+            logger.warning(f"Bcrypt verification failed, trying passlib fallback: {str(e)}")
+            try:
+                result = pwd_context.verify(plain_password, hashed_password)
+                if result:
+                    logger.info("Password verification successful (passlib fallback)")
+                else:
+                    logger.warning("Password verification failed (passlib mismatch)")
+                return result
+            except Exception as fallback_error:
+                logger.error(f"All password verification methods failed: {str(fallback_error)}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Unexpected error during password verification: {str(e)}")
+            return False
     
     def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None):
         """Create JWT access token"""
@@ -81,29 +132,48 @@ class AuthGuard:
                 headers={"WWW-Authenticate": "Bearer"},
             )
     
-    def get_current_user(self, token_data: TokenData = Depends(verify_token), db: Session = Depends(get_db)) -> User:
+    def get_current_user(self, token_data: Optional[TokenData] = None, db: Session = Depends(get_db)) -> User:
         """Get current authenticated user from database"""
+        if token_data is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
         user = db.query(User).filter(User.username == token_data.username).first()
-        
+
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         if not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Inactive user",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         return user
-    
+
+    def current_user_dependency(self):
+        """FastAPI-safe dependency wrapper to avoid bound-method signature issues."""
+        def _dep(
+            token_data: TokenData = Depends(self.verify_token),
+            db: Session = Depends(get_db),
+        ) -> User:
+            return self.get_current_user(token_data=token_data, db=db)
+
+        return _dep
+
     def require_role(self, allowed_roles: List[str]):
         """Decorator to require specific roles"""
-        def role_checker(current_user: User = Depends(get_current_user)):
+        current_user_dep = self.current_user_dependency()
+
+        def role_checker(current_user: User = Depends(current_user_dep)):
             if current_user.role not in allowed_roles:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -121,10 +191,11 @@ class AuthGuard:
             )
         return current_user
     
-    def log_activity(self, db: Session, user: User, action: str, entity_type: str, entity_id: int = None, description: str = ""):
+    def log_activity(self, db: Session, user: User, action: str, entity_type: str, entity_id: int = None, description: str = "", branch_id: int = None):
         """Log user activity for audit trail"""
         activity = ActivityLog(
             user_id=user.id,
+            branch_id=branch_id,
             action=action,
             entity_type=entity_type,
             entity_id=entity_id,
@@ -136,41 +207,87 @@ class AuthGuard:
 
 # Authentication functions
 def authenticate_user(db: Session, username: str, password: str):
-    """Authenticate user with username and password"""
-    user = db.query(User).filter(User.username == username).first()
+    """
+    Authenticate user with username and password.
+    Implements OWASP authentication best practices with detailed logging.
+    """
+    logger.info(f"Authentication attempt for username: {username}")
     
-    if not user:
+    try:
+        # Query user with timeout protection
+        user = db.query(User).filter(User.username == username).first()
+        
+        if not user:
+            logger.warning(f"Authentication failed: User '{username}' not found")
+            # Use constant-time comparison to prevent timing attacks
+            # Hash a dummy password to maintain consistent timing
+            AuthGuard().hash_password("dummy_password_for_timing")
+            return False
+        
+        logger.info(f"User '{username}' found (ID: {user.id}, Role: {user.role})")
+        
+        # Check if user is active before password verification
+        if not user.is_active:
+            logger.warning(f"Authentication failed: User '{username}' is inactive")
+            return False
+        
+        # Verify password with detailed logging
+        password_valid = AuthGuard().verify_password(password, user.hashed_password)
+        
+        if not password_valid:
+            logger.warning(f"Authentication failed: Invalid password for user '{username}'")
+            return False
+        
+        logger.info(f"Authentication successful for user '{username}' (Role: {user.role})")
+        return user
+        
+    except Exception as e:
+        logger.error(f"Authentication error for user '{username}': {str(e)}")
         return False
-    
-    if not AuthGuard().verify_password(password, user.hashed_password):
-        return False
-    
-    if not user.is_active:
-        return False
-    
-    return user
 
 def create_user_token(user: User):
-    """Create access token for user"""
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    token_data = {
-        "sub": user.username,
-        "branch_id": user.branch_id,
-        "role": user.role,
-        "user_id": user.id
-    }
-    
-    return AuthGuard().create_access_token(data=token_data, expires_delta=access_token_expires)
+    """
+    Create access token for user.
+    Implements JWT best practices with proper expiration and claims.
+    """
+    try:
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        
+        token_data = {
+            "sub": user.username,
+            "branch_id": user.branch_id,
+            "role": user.role,
+            "user_id": user.id,
+            "iat": datetime.utcnow(),  # Issued at
+            "type": "access"  # Token type
+        }
+        
+        token = AuthGuard().create_access_token(data=token_data, expires_delta=access_token_expires)
+        logger.info(f"Token created for user '{user.username}' (expires in {ACCESS_TOKEN_EXPIRE_MINUTES} minutes)")
+        
+        return token
+        
+    except Exception as e:
+        logger.error(f"Token creation failed for user '{user.username}': {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create access token"
+        )
 
 def update_last_login(db: Session, user: User):
-    """Update user's last login timestamp"""
-    user.last_login = datetime.utcnow()
-    db.commit()
+    """Update user's last login timestamp with error handling"""
+    try:
+        user.last_login = datetime.utcnow()
+        db.commit()
+        logger.info(f"Updated last login for user '{user.username}'")
+    except Exception as e:
+        logger.error(f"Failed to update last login for user '{user.username}': {str(e)}")
+        db.rollback()
+        # Don't fail the login if we can't update last_login
 
 # FastAPI dependencies
 auth_guard = AuthGuard()
-get_current_user = auth_guard.get_current_user
+get_current_user = auth_guard.current_user_dependency()
 verify_token = auth_guard.verify_token
 require_role = auth_guard.require_role
 

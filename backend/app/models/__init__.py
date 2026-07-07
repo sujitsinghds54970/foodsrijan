@@ -38,6 +38,8 @@ class Branch(Base):
     inventory_items = relationship("InventoryItem", back_populates="branch")
     invoices = relationship("Invoice", back_populates="branch")
     calendar_days = relationship("CalendarDay", back_populates="branch")
+    assets = relationship("Asset", back_populates="branch")
+    bank_details = relationship("BranchBankDetails", back_populates="branch", uselist=False)
 
 class User(Base):
     __tablename__ = "users"
@@ -296,25 +298,47 @@ class StockMovement(Base):
 
 
 
-class ActivityLog(Base):
-    __tablename__ = "activity_logs"
+from .activity_log import ActivityLog
+
+
+# Multi-modality support
+from sqlalchemy import Table
+
+branch_modalities = Table(
+    "branch_modalities",
+    Base.metadata,
+    Column("id", Integer, primary_key=True),
+    Column("branch_id", Integer, ForeignKey("branches.id"), nullable=False),
+    Column("modality_id", Integer, ForeignKey("modalities.id"), nullable=False),
+)
+
+
+class Modality(Base):
+    __tablename__ = "modalities"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
-    # Activity Details
-    action = Column(String(100), nullable=False)  # create, update, delete, login, etc.
-    entity_type = Column(String(50), nullable=False)  # patient, appointment, invoice, etc.
-    entity_id = Column(Integer, nullable=True)
-    description = Column(Text, nullable=False)
-    
-    # Technical Details
-    ip_address = Column(String(45), nullable=True)
-    user_agent = Column(String(500), nullable=True)
-    timestamp = Column(DateTime, default=func.now())
-    
-    # Relationships
-    user = relationship("User", back_populates="activity_logs")
+    name = Column(String(100), unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    branches = relationship("Branch", secondary=branch_modalities, backref="modalities")
+
+
+class Asset(Base):
+    __tablename__ = "assets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    asset_name = Column(String(200), nullable=False)
+    model = Column(String(200), nullable=True)
+    serial_no = Column(String(200), nullable=True)
+    purchase_date = Column(DateTime, nullable=True)
+    last_maintenance_date = Column(DateTime, nullable=True)
+    status = Column(String(50), default="active")  # active, under_repair, retired
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    branch = relationship("Branch", back_populates="assets")
 
 class SystemSettings(Base):
     __tablename__ = "system_settings"

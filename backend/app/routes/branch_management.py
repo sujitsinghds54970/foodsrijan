@@ -1,15 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc
+from datetime import datetime, timedelta
+import secrets
+import string
 from typing import List, Optional
-from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import and_, desc
+from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.utils.auth_system import auth_guard, require_staff, get_current_user
-from app.models import User, Branch
-from pydantic import BaseModel, Field
+from app.models import Branch, User
+from app.models import Modality
+from app.utils.auth_system import auth_guard, get_current_user
+from app.utils.security import hash_password
 
-# Pydantic models for branch management
+
+router = APIRouter()
+
+
 class BranchCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     location: str = Field(..., min_length=1, max_length=200)
@@ -22,6 +30,13 @@ class BranchCreate(BaseModel):
     license_number: Optional[str] = Field(None, max_length=100)
     opening_hours: Optional[str] = Field(None, max_length=500)
     facilities: Optional[str] = Field(None, max_length=1000)
+    modalities: Optional[List[str]] = Field(None, description="List of modality names enabled at this branch")
+
+    # Optional branch admin bootstrap fields
+    admin_first_name: str = Field(default="Branch", max_length=100)
+    admin_last_name: str = Field(default="Admin", max_length=100)
+    admin_phone: Optional[str] = Field(default=None, max_length=15)
+
 
 class BranchUpdate(BaseModel):
     name: Optional[str] = None
@@ -35,7 +50,9 @@ class BranchUpdate(BaseModel):
     license_number: Optional[str] = None
     opening_hours: Optional[str] = None
     facilities: Optional[str] = None
+    modalities: Optional[List[str]] = None
     is_active: Optional[bool] = None
+
 
 class BranchResponse(BaseModel):
     id: int
@@ -54,14 +71,25 @@ class BranchResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime]
-    
-    # Computed fields
     total_staff: Optional[int] = 0
     total_patients: Optional[int] = 0
     monthly_revenue: Optional[float] = 0.0
-    
+    modalities: Optional[List[str]] = []
+
     class Config:
         from_attributes = True
+
+
+class BranchAdminCredentials(BaseModel):
+    username: str
+    email: str
+    password: str
+    role: str = "branch_admin"
+
+
+class BranchCreateResponse(BranchResponse):
+    branch_admin_credentials: BranchAdminCredentials
+
 
 class BranchStatistics(BaseModel):
     branch_id: int
@@ -74,73 +102,152 @@ class BranchStatistics(BaseModel):
     inventory_value: float
     active_services: int
 
-router = APIRouter()
 
-@router.post("/branches/", response_model=BranchResponse)
+def _generate_branch_code(db: Session, branch_name: str) -> str:
+    prefix = "".join(ch for ch in branch_name.upper() if ch.isalnum())[:3] or "BR"
+    last_branch = db.query(Branch).order_by(desc(Branch.id)).first()
+    if last_branch and last_branch.branch_code and len(last_branch.branch_code) >= 3:
+        try:
+            number = int(last_branch.branch_code[-3:]) + 1
+        except ValueError:
+            number = 1
+    else:
+        number = 1
+    return f"VV{prefix[:2]}{number:03d}"
+
+
+def _generate_admin_username(branch_name: str, branch_code: str) -> str:
+    base = "".join(ch for ch in branch_name.lower() if ch.isalnum())[:6] or "branch"
+    return f"{base}_{branch_code.lower()}"[:30]
+
+
+def _generate_temp_password(length: int = 12) -> str:
+    alphabet = string.ascii_letters + string.digits + "@#_-"
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+@router.post("/branches/", response_model=BranchCreateResponse)
 def create_branch(
     branch_data: BranchCreate,
-    current_user: User = Depends(auth_guard.require_role(['super_admin'])),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Create a new branch (super admin only)"""
-    
-    # Check for duplicate branch name
-    existing_branch = db.query(Branch).filter(Branch.name == branch_data.name).first()
-    
-    if existing_branch:
-        raise HTTPException(
-            status_code=400,
-            detail="Branch with this name already exists"
-        )
-    
-    # Generate branch code
-    branch_name = branch_data.name.upper().replace(" ", "")[:3]
-    last_branch = db.query(Branch).order_by(desc(Branch.id)).first()
-    
-    if last_branch:
-        try:
-            last_number = int(last_branch.branch_code[-3:])
-            new_number = last_number + 1
-        except:
-            new_number = 1
-    else:
-        new_number = 1
-    
-    branch_code = f"VV{branch_name[:2]}{new_number:03d}"
-    
-    # Create branch
+    # Check if user is super admin
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admin can create branches")
+    branch_name = branch_data.name.strip()
+    location = branch_data.location.strip()
+    city = branch_data.city.strip()
+    state = branch_data.state.strip()
+    pincode = branch_data.pincode.strip()
+    phone = branch_data.phone.strip()
+    email = branch_data.email.strip() if branch_data.email else None
+    address = branch_data.address.strip()
+    license_number = branch_data.license_number.strip() if branch_data.license_number else None
+    opening_hours = branch_data.opening_hours.strip() if branch_data.opening_hours else None
+    facilities = branch_data.facilities.strip() if branch_data.facilities else None
+
+    existing_name = db.query(Branch).filter(Branch.name.ilike(branch_name)).first()
+    if existing_name:
+        raise HTTPException(status_code=400, detail="Branch with this name already exists")
+
+    if license_number:
+        existing_license = db.query(Branch).filter(Branch.license_number == license_number).first()
+        if existing_license:
+            raise HTTPException(status_code=400, detail="Branch with this license number already exists")
+
+    branch_code = _generate_branch_code(db, branch_name)
+
     db_branch = Branch(
-        name=branch_data.name,
-        location=branch_data.location,
-        city=branch_data.city,
-        state=branch_data.state,
-        pincode=branch_data.pincode,
-        phone=branch_data.phone,
-        email=branch_data.email,
-        address=branch_data.address,
-        license_number=branch_data.license_number,
-        opening_hours=branch_data.opening_hours,
-        facilities=branch_data.facilities,
-        branch_code=branch_code
+        name=branch_name,
+        location=location,
+        city=city,
+        state=state,
+        pincode=pincode,
+        phone=phone,
+        email=email or f"{branch_code.lower()}@vaidyavihar.local",
+        address=address,
+        license_number=license_number,
+        opening_hours=opening_hours,
+        facilities=facilities,
+        branch_code=branch_code,
+        is_active=True,
     )
-    
+    # attach modalities if provided
+    if branch_data.modalities:
+        for mname in [m.strip() for m in branch_data.modalities if m and m.strip()]:
+            modality = db.query(Modality).filter(Modality.name == mname).first()
+            if not modality:
+                modality = Modality(name=mname)
+                db.add(modality)
+                db.flush()
+            db_branch.modalities.append(modality)
     db.add(db_branch)
+    db.flush()
+
+    username = _generate_admin_username(branch_data.name, branch_code)
+    email = f"{username}@vaidyavihar.com"
+    existing_user = db.query(User).filter((User.username == username) | (User.email == email)).first()
+    if existing_user:
+        username = f"{username}{db_branch.id}"
+        email = f"{username}@vaidyavihar.com"
+
+    temp_password = _generate_temp_password()
+    branch_admin = User(
+        username=username,
+        email=email,
+        hashed_password=hash_password(temp_password),
+        role="branch_admin",
+        branch_id=db_branch.id,
+        is_active=True,
+        first_name=branch_data.admin_first_name or "Branch",
+        last_name=branch_data.admin_last_name or "Admin",
+        phone=branch_data.admin_phone or branch_data.phone,
+    )
+    db.add(branch_admin)
     db.commit()
     db.refresh(db_branch)
-    
-    # Log activity
+
     auth_guard.log_activity(
         db=db,
         user=current_user,
         action="create",
         entity_type="branch",
         entity_id=db_branch.id,
-        description=f"Created branch {db_branch.name}"
+        branch_id=db_branch.id,
+        description=f"Created branch {db_branch.name} and branch admin {branch_admin.username}",
     )
-    
-    return db_branch
 
-@router.get("/branches/", response_model=List[BranchResponse])
+    result = {
+        "id": db_branch.id,
+        "name": db_branch.name,
+        "location": db_branch.location,
+        "city": db_branch.city,
+        "state": db_branch.state,
+        "pincode": db_branch.pincode,
+        "phone": db_branch.phone,
+        "email": db_branch.email,
+        "address": db_branch.address,
+        "license_number": db_branch.license_number,
+        "opening_hours": db_branch.opening_hours,
+        "facilities": db_branch.facilities,
+        "branch_code": db_branch.branch_code,
+        "is_active": db_branch.is_active,
+        "created_at": db_branch.created_at,
+        "updated_at": db_branch.updated_at,
+        "modalities": [m.name for m in (db_branch.modalities or [])],
+        "branch_admin_credentials": {
+            "username": branch_admin.username,
+            "email": branch_admin.email,
+            "password": temp_password,
+            "role": branch_admin.role,
+        },
+    }
+    print("CREATE_RESPONSE:", result)
+    return result
+
+
+@router.get("/branches/")
 def get_branches(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -150,289 +257,459 @@ def get_branches(
     active_only: bool = Query(True),
     include_stats: bool = Query(False),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Get list of branches with filtering"""
-    
-    # Super admin can see all branches, others only their branch
-    if current_user.role == 'super_admin':
+    if current_user.role == "super_admin":
         query = db.query(Branch)
     else:
         query = db.query(Branch).filter(Branch.id == current_user.branch_id)
-    
-    # Apply filters
+
     if search:
         query = query.filter(
-            Branch.name.ilike(f"%{search}%") |
-            Branch.location.ilike(f"%{search}%") |
-            Branch.city.ilike(f"%{search}%") |
-            Branch.branch_code.ilike(f"%{search}%")
+            Branch.name.ilike(f"%{search}%")
+            | Branch.location.ilike(f"%{search}%")
+            | Branch.city.ilike(f"%{search}%")
+            | Branch.branch_code.ilike(f"%{search}%")
         )
-    
+
     if city:
         query = query.filter(Branch.city == city)
-    
     if state:
         query = query.filter(Branch.state == state)
-    
     if active_only:
-        query = query.filter(Branch.is_active == True)
-    
+        query = query.filter(Branch.is_active.is_(True))
+
     branches = query.order_by(desc(Branch.created_at)).offset(skip).limit(limit).all()
-    
-    # Add statistics if requested
-    if include_stats:
-        for branch in branches:
-            # Calculate statistics
-            from app.models import Staff, Patient, DailyEntry, InventoryItem
-            
-            # Total staff
-            branch.total_staff = db.query(Staff).filter(
-                Staff.branch_id == branch.id,
-                Staff.is_active == True
-            ).count()
-            
-            # Total patients
-            branch.total_patients = db.query(Patient).filter(
-                Patient.branch_id == branch.id,
-                Patient.is_active == True
-            ).count()
-            
-            # Monthly revenue (current month)
-            current_month = datetime.now().replace(day=1)
-            monthly_revenue = db.query(DailyEntry).filter(
-                and_(
-                    DailyEntry.branch_id == branch.id,
-                    DailyEntry.entry_date >= current_month
-                )
+
+    results = []
+    from app.models import DailyEntry, Patient, Staff
+
+    current_month = datetime.now().replace(day=1)
+    for branch in branches:
+        b = {
+            "id": branch.id,
+            "name": branch.name,
+            "location": branch.location,
+            "city": branch.city,
+            "state": branch.state,
+            "pincode": branch.pincode,
+            "phone": branch.phone,
+            "email": branch.email,
+            "address": branch.address,
+            "license_number": branch.license_number,
+            "opening_hours": branch.opening_hours,
+            "facilities": branch.facilities,
+            "branch_code": branch.branch_code,
+            "is_active": branch.is_active,
+            "created_at": branch.created_at,
+            "updated_at": branch.updated_at,
+            "modalities": [m.name for m in (branch.modalities or [])],
+        }
+
+        if include_stats:
+            b["total_staff"] = db.query(Staff).filter(Staff.branch_id == branch.id, Staff.is_active.is_(True)).count()
+            b["total_patients"] = db.query(Patient).filter(Patient.branch_id == branch.id, Patient.is_active.is_(True)).count()
+            monthly_entries = db.query(DailyEntry).filter(
+                DailyEntry.branch_id == branch.id,
+                DailyEntry.entry_date >= current_month,
             ).all()
-            
-            branch.monthly_revenue = sum(float(entry.total_amount) for entry in monthly_revenue)
-    
-    return branches
+            b["monthly_revenue"] = float(sum(float(e.total_amount) for e in monthly_entries))
+
+        results.append(b)
+
+    return results
+
 
 @router.get("/branches/{branch_id}", response_model=BranchResponse)
 def get_branch(
     branch_id: int,
-    include_stats: bool = Query(False),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Get branch by ID"""
-    
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
-    
-    # Check access - super admin can see all, others only their branch
-    if current_user.role != 'super_admin' and branch.id != current_user.branch_id:
+
+    if current_user.role != "super_admin" and current_user.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this branch")
-    
-    # Add statistics if requested
-    if include_stats:
-        from app.models import Staff, Patient, DailyEntry, InventoryItem
-        
-        # Total staff
-        branch.total_staff = db.query(Staff).filter(
-            Staff.branch_id == branch.id,
-            Staff.is_active == True
-        ).count()
-        
-        # Total patients
-        branch.total_patients = db.query(Patient).filter(
-            Patient.branch_id == branch.id,
-            Patient.is_active == True
-        ).count()
-        
-        # Monthly revenue (current month)
-        current_month = datetime.now().replace(day=1)
-        monthly_revenue = db.query(DailyEntry).filter(
-            and_(
-                DailyEntry.branch_id == branch.id,
-                DailyEntry.entry_date >= current_month
-            )
-        ).all()
-        
-        branch.monthly_revenue = sum(float(entry.total_amount) for entry in monthly_revenue)
-    
-    return branch
+
+    from app.models import DailyEntry, Patient, Staff
+
+    monthly_revenue = float(
+        sum(
+            float(e.total_amount)
+            for e in db.query(DailyEntry)
+            .filter(DailyEntry.branch_id == branch.id, DailyEntry.entry_date >= datetime.now().replace(day=1))
+            .all()
+        )
+    )
+
+    return {
+        "id": branch.id,
+        "name": branch.name,
+        "location": branch.location,
+        "city": branch.city,
+        "state": branch.state,
+        "pincode": branch.pincode,
+        "phone": branch.phone,
+        "email": branch.email,
+        "address": branch.address,
+        "license_number": branch.license_number,
+        "opening_hours": branch.opening_hours,
+        "facilities": branch.facilities,
+        "branch_code": branch.branch_code,
+        "is_active": branch.is_active,
+        "created_at": branch.created_at,
+        "updated_at": branch.updated_at,
+        "modalities": [m.name for m in (branch.modalities or [])],
+        "total_staff": db.query(Staff).filter(Staff.branch_id == branch.id, Staff.is_active.is_(True)).count(),
+        "total_patients": db.query(Patient).filter(Patient.branch_id == branch.id, Patient.is_active.is_(True)).count(),
+        "monthly_revenue": monthly_revenue,
+    }
+
 
 @router.put("/branches/{branch_id}", response_model=BranchResponse)
 def update_branch(
     branch_id: int,
     branch_data: BranchUpdate,
-    current_user: User = Depends(auth_guard.require_role(['super_admin', 'branch_admin'])),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Update branch information"""
-    
+    # Check if user has permission
+    if current_user.role not in ["super_admin", "branch_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
-    
-    # Check access - super admin can update any, branch admin can only update their branch
-    if current_user.role == 'branch_admin' and branch.id != current_user.branch_id:
+
+    if current_user.role == "branch_admin" and current_user.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this branch")
-    
-    # Update fields
-    for field, value in branch_data.dict(exclude_unset=True).items():
-        setattr(branch, field, value)
-    
-    # Update timestamp
+
+    for field, value in branch_data.model_dump(exclude_unset=True).items():
+        if field == 'modalities' and isinstance(value, list):
+            # replace modalities
+            branch.modalities = []
+            for mname in value:
+                modality = db.query(Modality).filter(Modality.name == mname).first()
+                if not modality:
+                    modality = Modality(name=mname)
+                    db.add(modality)
+                    db.flush()
+                branch.modalities.append(modality)
+        else:
+            setattr(branch, field, value)
+
     branch.updated_at = datetime.utcnow()
-    
     db.commit()
     db.refresh(branch)
-    
-    # Log activity
+
     auth_guard.log_activity(
         db=db,
         user=current_user,
         action="update",
         entity_type="branch",
         entity_id=branch.id,
-        description=f"Updated branch {branch.name}"
+        branch_id=branch.id,
+        description=f"Updated branch {branch.name}",
     )
-    
-    return branch
+
+    # return serialized branch with modalities
+    return {
+        "id": branch.id,
+        "name": branch.name,
+        "location": branch.location,
+        "city": branch.city,
+        "state": branch.state,
+        "pincode": branch.pincode,
+        "phone": branch.phone,
+        "email": branch.email,
+        "address": branch.address,
+        "license_number": branch.license_number,
+        "opening_hours": branch.opening_hours,
+        "facilities": branch.facilities,
+        "branch_code": branch.branch_code,
+        "is_active": branch.is_active,
+        "created_at": branch.created_at,
+        "updated_at": branch.updated_at,
+        "modalities": [m.name for m in (branch.modalities or [])],
+    }
+
 
 @router.delete("/branches/{branch_id}")
-def deactivate_branch(
+def delete_branch(
     branch_id: int,
-    current_user: User = Depends(auth_guard.require_role(['super_admin'])),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Deactivate branch (super admin only)"""
+    # Check if user is super admin
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admin can delete branches")
     
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
+
+    branch_name = branch.name
     
-    # Check if branch has active staff or patients
-    from app.models import Staff, Patient
-    
-    active_staff = db.query(Staff).filter(
-        and_(
-            Staff.branch_id == branch_id,
-            Staff.is_active == True
+    try:
+        # Cascading hard delete with transaction
+        from app.models import Patient, Staff, User, DailyEntry, InventoryItem, Asset
+        
+        # Delete all associated records
+        db.query(Staff).filter(Staff.branch_id == branch_id).delete(synchronize_session=False)
+        db.query(Patient).filter(Patient.branch_id == branch_id).delete(synchronize_session=False)
+        db.query(DailyEntry).filter(DailyEntry.branch_id == branch_id).delete(synchronize_session=False)
+        db.query(InventoryItem).filter(InventoryItem.branch_id == branch_id).delete(synchronize_session=False)
+        
+        # Delete assets if Asset model exists
+        try:
+            db.query(Asset).filter(Asset.branch_id == branch_id).delete(synchronize_session=False)
+        except:
+            pass
+        
+        # Delete branch admin users
+        db.query(User).filter(User.branch_id == branch_id).delete(synchronize_session=False)
+        
+        # Delete the branch itself
+        db.delete(branch)
+        
+        # Commit transaction
+        db.commit()
+        
+        auth_guard.log_activity(
+            db=db,
+            user=current_user,
+            action="delete",
+            entity_type="branch",
+            entity_id=branch_id,
+            description=f"Permanently deleted branch {branch_name} and all associated data",
         )
-    ).count()
-    
-    active_patients = db.query(Patient).filter(
-        and_(
-            Patient.branch_id == branch_id,
-            Patient.is_active == True
-        )
-    ).count()
-    
-    if active_staff > 0 or active_patients > 0:
+        
+        return {"message": "Branch permanently deleted along with all associated data"}
+        
+    except Exception as e:
+        db.rollback()
         raise HTTPException(
-            status_code=400,
-            detail="Cannot deactivate branch with active staff or patients. Please transfer or deactivate them first."
+            status_code=500,
+            detail=f"Failed to delete branch: {str(e)}"
         )
+
+
+@router.delete("/branches/{branch_id}/permanent")
+def delete_branch_permanent(
+    branch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Permanently delete a branch - archives associated data instead of hard delete"""
+    # Check if user is super admin
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admin can delete branches")
     
-    # Deactivate branch
-    branch.is_active = False
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+
+    # Check for dependencies
+    from app.models import Patient, Staff, User, DailyEntry, InventoryItem
+    
+    staff_count = db.query(Staff).filter(Staff.branch_id == branch_id).count()
+    patient_count = db.query(Patient).filter(Patient.branch_id == branch_id).count()
+    user_count = db.query(User).filter(User.branch_id == branch_id).count()
+    entry_count = db.query(DailyEntry).filter(DailyEntry.branch_id == branch_id).count()
+    inventory_count = db.query(InventoryItem).filter(InventoryItem.branch_id == branch_id).count()
+    
+    total_dependencies = staff_count + patient_count + user_count + entry_count + inventory_count
+    
+    if total_dependencies > 0:
+        # Soft-archive: deactivate branch and all associated records
+        branch.is_active = False
+        
+        # Archive associated records
+        db.query(Staff).filter(Staff.branch_id == branch_id).update({"is_active": False})
+        db.query(Patient).filter(Patient.branch_id == branch_id).update({"is_active": False})
+        db.query(User).filter(User.branch_id == branch_id).update({"is_active": False})
+        db.query(InventoryItem).filter(InventoryItem.branch_id == branch_id).update({"is_active": False})
+        
+        db.commit()
+        
+        auth_guard.log_activity(
+            db=db,
+            user=current_user,
+            action="archive",
+            entity_type="branch",
+            entity_id=branch.id,
+            branch_id=branch.id,
+            description=f"Archived branch {branch.name} and {total_dependencies} associated records (soft-delete)",
+        )
+        
+        return {
+            "message": "Branch and associated data archived successfully",
+            "archived_records": {
+                "staff": staff_count,
+                "patients": patient_count,
+                "users": user_count,
+                "entries": entry_count,
+                "inventory": inventory_count
+            }
+        }
+    else:
+        # No dependencies - safe to hard delete
+        db.delete(branch)
+        db.commit()
+        
+        auth_guard.log_activity(
+            db=db,
+            user=current_user,
+            action="delete",
+            entity_type="branch",
+            entity_id=branch_id,
+            description=f"Permanently deleted branch {branch.name} (no dependencies)",
+        )
+        
+        return {"message": "Branch permanently deleted successfully"}
+
+
+@router.post("/branches/{branch_id}/activate", response_model=BranchResponse)
+def activate_branch(
+    branch_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admin can activate branches")
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+
+    branch.is_active = True
     branch.updated_at = datetime.utcnow()
-    
     db.commit()
-    
-    # Log activity
+    db.refresh(branch)
+
     auth_guard.log_activity(
         db=db,
         user=current_user,
-        action="deactivate",
+        action="activate",
         entity_type="branch",
         entity_id=branch.id,
-        description=f"Deactivated branch {branch.name}"
+        branch_id=branch.id,
+        description=f"Activated branch {branch.name}",
     )
-    
-    return {"message": "Branch deactivated successfully"}
 
-@router.get("/branches/{branch_id}/statistics", response_model=BranchStatistics)
-def get_branch_statistics(
+    return {
+        "id": branch.id,
+        "name": branch.name,
+        "location": branch.location,
+        "city": branch.city,
+        "state": branch.state,
+        "pincode": branch.pincode,
+        "phone": branch.phone,
+        "email": branch.email,
+        "address": branch.address,
+        "license_number": branch.license_number,
+        "opening_hours": branch.opening_hours,
+        "facilities": branch.facilities,
+        "branch_code": branch.branch_code,
+        "is_active": branch.is_active,
+        "created_at": branch.created_at,
+        "updated_at": branch.updated_at,
+        "modalities": [m.name for m in (branch.modalities or [])],
+    }
+
+
+@router.get("/branches/{branch_id}/admin-credentials")
+def reset_branch_admin_credentials(
     branch_id: int,
-    year: int = Query(datetime.now().year, ge=2020, le=2030),
-    month: int = Query(datetime.now().month, ge=1, le=12),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Get comprehensive branch statistics"""
-    
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admin can access branch admin credentials")
+
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
-    
-    # Check access
-    if current_user.role != 'super_admin' and branch.id != current_user.branch_id:
+
+    branch_admin = (
+        db.query(User)
+        .filter(User.branch_id == branch_id, User.role == "branch_admin")
+        .order_by(desc(User.id))
+        .first()
+    )
+    if not branch_admin:
+        raise HTTPException(status_code=404, detail="Branch admin user not found")
+
+    new_temp_password = _generate_temp_password()
+    branch_admin.hashed_password = hash_password(new_temp_password)
+    db.commit()
+    db.refresh(branch_admin)
+
+    auth_guard.log_activity(
+        db=db,
+        user=current_user,
+        action="reset_credentials",
+        entity_type="user",
+        entity_id=branch_admin.id,
+        branch_id=branch_id,
+        description=f"Reset branch admin credentials for branch {branch.name} ({branch_admin.username})",
+    )
+
+    response_data = {
+        "branch_id": branch.id,
+        "branch_name": branch.name,
+        "branch_admin_credentials": {
+            "username": branch_admin.username,
+            "email": branch_admin.email,
+            "password": new_temp_password,
+            "role": branch_admin.role,
+        },
+    }
+    print("ADMIN_CREDENTIALS_RESPONSE:", response_data)
+    return response_data
+
+
+@router.get("/branches/{branch_id}/statistics")
+def get_branch_statistics(
+    branch_id: int,
+    year: int = Query(datetime.now().year, ge=2020, le=2035),
+    month: int = Query(datetime.now().month, ge=1, le=12),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+
+    if current_user.role != "super_admin" and current_user.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this branch")
-    
-    from app.models import Staff, Patient, DailyEntry, InventoryItem, Invoice
-    
-    # Calculate date range for the month
+
+    from app.models import DailyEntry, InventoryItem, Patient, Staff
+
     start_date = datetime(year, month, 1)
-    if month == 12:
-        end_date = datetime(year + 1, 1, 1) - datetime.timedelta(days=1)
-    else:
-        end_date = datetime(year, month + 1, 1) - datetime.timedelta(days=1)
-    
-    # Total staff
-    total_staff = db.query(Staff).filter(
-        and_(
-            Staff.branch_id == branch_id,
-            Staff.is_active == True
-        )
-    ).count()
-    
-    # Total patients
-    total_patients = db.query(Patient).filter(
-        and_(
-            Patient.branch_id == branch_id,
-            Patient.is_active == True
-        )
-    ).count()
-    
-    # Monthly revenue
+    end_date = datetime(year + 1, 1, 1) - timedelta(days=1) if month == 12 else datetime(year, month + 1, 1) - timedelta(days=1)
+
+    total_staff = db.query(Staff).filter(Staff.branch_id == branch_id, Staff.is_active.is_(True)).count()
+    total_patients = db.query(Patient).filter(Patient.branch_id == branch_id, Patient.is_active.is_(True)).count()
     daily_entries = db.query(DailyEntry).filter(
-        and_(
-            DailyEntry.branch_id == branch_id,
-            DailyEntry.entry_date >= start_date,
-            DailyEntry.entry_date <= end_date
-        )
+        DailyEntry.branch_id == branch_id,
+        DailyEntry.entry_date >= start_date,
+        DailyEntry.entry_date <= end_date,
     ).all()
-    
-    monthly_revenue = sum(float(entry.total_amount) for entry in daily_entries)
-    
-    # Total appointments (based on daily entries)
+
+    monthly_revenue = float(sum(float(entry.total_amount) for entry in daily_entries))
     total_appointments = len(daily_entries)
-    
-    # Pending payments
-    pending_payments = sum(
-        float(entry.total_amount - entry.amount_paid) 
-        for entry in daily_entries 
-        if entry.payment_status != 'paid'
+    pending_payments = float(
+        sum(float(entry.total_amount) - float(entry.amount_paid or 0) for entry in daily_entries if entry.payment_status != "paid")
     )
-    
-    # Inventory value
+
     inventory_items = db.query(InventoryItem).filter(
-        and_(
-            InventoryItem.branch_id == branch_id,
-            InventoryItem.is_active == True
-        )
+        InventoryItem.branch_id == branch_id,
+        InventoryItem.is_active.is_(True),
     ).all()
-    
-    inventory_value = sum(
-        float(item.current_stock * item.purchase_price) 
-        for item in inventory_items
-    )
-    
-    # Active services (unique test names performed in the month)
-    active_services = len(set(entry.test_names for entry in daily_entries if entry.test_names))
-    
+    inventory_value = float(sum(float(item.current_stock or 0) * float(item.purchase_price or 0) for item in inventory_items))
+    active_services = len({entry.test_names for entry in daily_entries if entry.test_names})
+
     return BranchStatistics(
         branch_id=branch.id,
         branch_name=branch.name,
@@ -442,78 +719,5 @@ def get_branch_statistics(
         total_appointments=total_appointments,
         pending_payments=pending_payments,
         inventory_value=inventory_value,
-        active_services=active_services
+        active_services=active_services,
     )
-
-@router.get("/branches/cities")
-def get_branch_cities(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get list of cities with branches"""
-    
-    if current_user.role == 'super_admin':
-        cities = db.query(Branch.city).distinct().filter(Branch.is_active == True).all()
-    else:
-        cities = db.query(Branch.city).filter(
-            and_(
-                Branch.id == current_user.branch_id,
-                Branch.is_active == True
-            )
-        ).distinct().all()
-    
-    return [{"city": city[0]} for city in cities]
-
-@router.get("/branches/states")
-def get_branch_states(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get list of states with branches"""
-    
-    if current_user.role == 'super_admin':
-        states = db.query(Branch.state).distinct().filter(Branch.is_active == True).all()
-    else:
-        states = db.query(Branch.state).filter(
-            and_(
-                Branch.id == current_user.branch_id,
-                Branch.is_active == True
-            )
-        ).distinct().all()
-    
-    return [{"state": state[0]} for state in states]
-
-@router.post("/branches/{branch_id}/assign-staff")
-def assign_staff_to_branch(
-    branch_id: int,
-    user_id: int,
-    current_user: User = Depends(auth_guard.require_role(['super_admin'])),
-    db: Session = Depends(get_db)
-):
-    """Assign user to a branch (super admin only)"""
-    
-    # Check if branch exists
-    branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    if not branch:
-        raise HTTPException(status_code=404, detail="Branch not found")
-    
-    # Check if user exists
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Update user's branch
-    user.branch_id = branch_id
-    db.commit()
-    
-    # Log activity
-    auth_guard.log_activity(
-        db=db,
-        user=current_user,
-        action="assign",
-        entity_type="user",
-        entity_id=user_id,
-        description=f"Assigned user {user.username} to branch {branch.name}"
-    )
-    
-    return {"message": f"User {user.username} assigned to branch {branch.name} successfully"}

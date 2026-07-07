@@ -1,13 +1,5 @@
-from sqlalchemy import Column, Integer, String
-from sqlalchemy.orm import relationship
-from app.database import Base
+# This file is deprecated - Branch model is now in app/models/__init__.py
+# Keeping this file for backward compatibility
+from app.models import Branch
 
-class Branch(Base):
-    __tablename__ = "branches"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, nullable=False)
-    location = Column(String, nullable=False)
-
-calendar_days = relationship("CalendarDay", back_populates="branch")
-invoices = relationship("Invoice", back_populates="branch")
+__all__ = ['Branch']

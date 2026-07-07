@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface Branch {
   id: number;
@@ -15,6 +17,8 @@ interface RegistrationProps {
 }
 
 export default function Registration({ onSwitchToLogin }: RegistrationProps) {
+  const navigate = useNavigate();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -38,11 +42,25 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
   const loadBranches = async () => {
     try {
       setLoadingBranches(true);
-      const API_BASE = window.location.origin;
-      const response = await axios.get(`${API_BASE}/api/auth/branches`);
+      const API_BASE = 
+        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+          ? 'http://localhost:8000'
+          : window.location.origin;
+      const response = await axios.get(`${API_BASE}/api/branches`);
       setBranches(response.data);
     } catch (error) {
       console.error('Failed to load branches:', error);
+      // If branches endpoint fails, try to get from a public endpoint
+      try {
+        const API_BASE_FALLBACK = 
+          (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+            ? 'http://localhost:8000'
+            : window.location.origin;
+        const response = await axios.get(`${API_BASE_FALLBACK}/api/auth/branches`);
+        setBranches(response.data);
+      } catch (err) {
+        console.error('Failed to load branches from fallback:', err);
+      }
     } finally {
       setLoadingBranches(false);
     }
@@ -100,11 +118,44 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
         branch_id: formData.branchId ? parseInt(formData.branchId) : null
       };
 
-      const API_BASE = window.location.origin;
-      await axios.post(`${API_BASE}/api/auth/public-register`, registrationData);
+      const API_BASE = 
+        process.env.REACT_APP_API_BASE_URL ||
+        ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+          ? 'http://localhost:8000'
+          : window.location.origin);
       
-      toast.success('Registration successful! Please log in with your credentials.');
-      onSwitchToLogin();
+      const response = await axios.post(`${API_BASE}/api/auth/public-register`, registrationData);
+      
+      // Extract token and user data from response
+      const { access_token, user } = response.data;
+      
+      // Save token and user to localStorage
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      // Set axios default header
+      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+      
+      // Show success message
+      toast.success(`Welcome ${user.first_name}! Account created successfully.`);
+      
+      // Wait a moment for toast to show
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Redirect based on role
+      const dashboardRoutes: Record<string, string> = {
+        'patient': '/patient-portal',
+        'staff': '/dashboard',
+        'branch_admin': '/dashboard',
+        'super_admin': '/dashboard'
+      };
+      
+      const redirectPath = dashboardRoutes[user.role] || '/dashboard';
+      navigate(redirectPath);
+      
+      // Reload to ensure auth context updates
+      window.location.href = redirectPath;
+      
     } catch (error: any) {
       const errorMessage = error.response?.data?.detail || 'Registration failed. Please try again.';
       toast.error(errorMessage);

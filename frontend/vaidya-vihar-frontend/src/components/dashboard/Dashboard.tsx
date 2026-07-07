@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import Overview from './Overview'
 import PatientManagement from './PatientManagement'
-import DailyEntry from './DailyEntry'
 import StaffManagement from './StaffManagement'
 import InventoryManagement from './InventoryManagement'
 import Analytics from './Analytics'
@@ -15,12 +14,36 @@ import Accounting from './Accounting'
 import HR from './HR'
 import PatientPortal from './PatientPortal'
 import DoctorDashboard from './DoctorDashboard'
+import BranchManagement from './BranchManagement'
+import DailyOperations from './DailyOperations'
 
-type ActiveTab = 'overview' | 'patients' | 'daily-entry' | 'staff' | 'inventory' | 'analytics' | 'reports' | 'lis' | 'payments' | 'accounting' | 'hr' | 'doctor-portal' | 'patient-portal'
+type ActiveTab = 'overview' | 'patients' | 'daily-operations' | 'staff' | 'inventory' | 'analytics' | 'reports' | 'lis' | 'payments' | 'accounting' | 'hr' | 'doctor-portal' | 'patient-portal' | 'branch-management'
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
   const { user, logout } = useAuth()
+  const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
+
+  useEffect(() => {
+    if (!user?.role) return
+
+    if (user.role === 'super_admin') {
+      setActiveTab('branch-management')
+      return
+    }
+
+    if (user.role === 'patient') {
+      setActiveTab('patient-portal')
+      return
+    }
+
+    if (user.role === 'doctor') {
+      setActiveTab('doctor-portal')
+      return
+    }
+
+    // staff, branch_admin and others
+    setActiveTab('overview')
+  }, [user?.role])
 
   const renderContent = () => {
     switch (activeTab) {
@@ -28,8 +51,8 @@ export default function Dashboard() {
         return <Overview />
       case 'patients':
         return <PatientManagement />
-      case 'daily-entry':
-        return <DailyEntry />
+      case 'daily-operations':
+        return <DailyOperations />
       case 'staff':
         return <StaffManagement />
       case 'inventory':
@@ -50,18 +73,24 @@ export default function Dashboard() {
         return <DoctorDashboard doctorId={1} />
       case 'patient-portal':
         return <PatientPortal activeTab={activeTab} />
+      case 'branch-management':
+        return <BranchManagement />
       default:
         return <Overview />
     }
   }
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen overflow-hidden" style={{
+      background: 'linear-gradient(135deg, #fafbff 0%, #f0f4ff 50%, #e8efff 100%)'
+    }}>
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header user={user} onLogout={logout} />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
-          {renderContent()}
+        <main className="flex-1 overflow-x-hidden overflow-y-auto p-8">
+          <div className="max-w-[1600px] mx-auto">
+            {renderContent()}
+          </div>
         </main>
       </div>
     </div>
