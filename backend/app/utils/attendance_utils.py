@@ -65,7 +65,7 @@ def stamp_image_with_gps(
 ) -> Path:
     image = Image.open(image_path).convert("RGBA")
     draw = ImageDraw.Draw(image, "RGBA")
-    font = _load_font(16)
+    font = _load_font(18)
 
     # Convert incoming UTC/naive timestamps to local wall time for human-readable image stamps.
     if clock_time.tzinfo is None:
@@ -102,22 +102,45 @@ def stamp_image_with_gps(
         max_width = max(max_width, right - left)
         line_height = max(line_height, bottom - top)
 
-    padding_x = 12
-    padding_y = 10
-    gap = 6
+    # Padding around the text inside the overlay box
+    padding_x = 15
+    padding_y = 12
+    gap = 5
+    
+    # Calculate box dimensions to fit text snugly
     box_width = max_width + (padding_x * 2)
     box_height = (line_height * len(lines)) + (gap * (len(lines) - 1)) + (padding_y * 2)
 
-    # Position stamp at bottom-right corner with safe edge padding
-    x2 = image.width - 12
-    y2 = image.height - 12
-    x1 = max(12, x2 - box_width)
-    y1 = max(12, y2 - box_height)
+    # Position stamp at bottom-right corner with 15px from edges
+    edge_offset = 15
+    x2 = image.width - edge_offset
+    y2 = image.height - edge_offset
+    x1 = x2 - box_width
+    y1 = y2 - box_height
+    
+    # Ensure box doesn't go off the left/top edges
+    if x1 < edge_offset:
+        x1 = edge_offset
+        x2 = x1 + box_width
+    if y1 < edge_offset:
+        y1 = edge_offset
+        y2 = y1 + box_height
 
-    # Draw semi-transparent black background box
-    draw.rectangle((x1, y1, x2, y2), fill=(0, 0, 0, 165))
+    # Draw semi-transparent rounded rectangle background (0.6 opacity ≈ 153 in RGBA)
+    # Using rectangle with rounded corners via multiple draws or just rectangle with rounded effect
+    corner_radius = 8
+    try:
+        # Try to use rounded_rectangle if available (Pillow >= 8.2.0)
+        draw.rounded_rectangle(
+            [(x1, y1), (x2, y2)],
+            radius=corner_radius,
+            fill=(0, 0, 0, 153)  # Semi-transparent black (60% opacity)
+        )
+    except AttributeError:
+        # Fallback for older Pillow versions: just use regular rectangle
+        draw.rectangle([(x1, y1), (x2, y2)], fill=(0, 0, 0, 153))
 
-    # Draw text lines
+    # Draw text lines with white color
     text_x = x1 + padding_x
     text_y = y1 + padding_y
     for line in lines:
