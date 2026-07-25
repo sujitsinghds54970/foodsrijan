@@ -97,7 +97,10 @@ def _normalize_role(role: Optional[str]) -> str:
 
 
 def _require_staff(current_user: User) -> None:
-    if _normalize_role(current_user.role) != "staff":
+    normalized_role = _normalize_role(current_user.role)
+    # Accept any staff-type role (not super_admin, branch_admin, branch_director, or doctor)
+    non_staff_roles = ['super_admin', 'branch_admin', 'branch_director', 'doctor']
+    if normalized_role in non_staff_roles:
         raise HTTPException(status_code=403, detail="Only staff users can access this endpoint")
 
 

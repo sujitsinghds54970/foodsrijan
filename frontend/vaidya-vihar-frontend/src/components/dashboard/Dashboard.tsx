@@ -98,10 +98,38 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
   const normalizedLocationPath = useMemo(() => normalizePath(location.pathname), [location.pathname])
 
+  // List of staff roles (not just 'staff', but also receptionist, technician, etc.)
+  const isStaffRole = (role: string | undefined) => {
+    const normalizedRole = (role || '').trim().toLowerCase()
+    return normalizedRole !== 'super_admin' && 
+           normalizedRole !== 'branch_admin' && 
+           normalizedRole !== 'branch_director' &&
+           normalizedRole !== 'doctor'
+  }
+
   // Log every location pathname change
   useEffect(() => {
     console.log('[DASHBOARD] Location pathname changed:', location.pathname)
   }, [location.pathname])
+
+  // Initial redirect based on user role
+  useEffect(() => {
+    if (isLoading || !user) return
+    
+    const userRole = (user.role || '').trim().toLowerCase()
+    console.log('[DASHBOARD] Checking role for redirect:', { role: userRole })
+    
+    if (userRole === 'super_admin' && !location.pathname.includes('/ceo')) {
+      console.log('[DASHBOARD] Redirecting super_admin to /ceo')
+      navigate('/ceo', { replace: true })
+    } else if ((userRole === 'branch_admin' || userRole === 'branch_director') && !location.pathname.includes('/branch/dashboard')) {
+      console.log('[DASHBOARD] Redirecting branch admin/director to /branch/dashboard')
+      navigate('/branch/dashboard', { replace: true })
+    } else if (isStaffRole(userRole) && !location.pathname.includes('/staff/profile')) {
+      console.log('[DASHBOARD] Redirecting staff to /staff/profile')
+      navigate('/staff/profile', { replace: true })
+    }
+  }, [isLoading, user, navigate, location.pathname])
 
   // IMPORTANT: Sync activeTab with current route pathname (NO redirects here!)
   useEffect(() => {
@@ -149,7 +177,7 @@ export default function Dashboard() {
 
     switch (activeTab) {
       case 'overview':
-        if (normalizedRole === 'staff') return <MyProfileTab />
+        if (isStaffRole(normalizedRole)) return <MyProfileTab />
         return <Overview />
       case 'patients':
         return <PatientManagement />
@@ -194,7 +222,7 @@ export default function Dashboard() {
       case 'ceo':
         return normalizedRole === 'super_admin' ? <CeoDashboard /> : <Overview />
       default:
-        if (normalizedRole === 'staff') return <MyProfileTab />
+        if (isStaffRole(normalizedRole)) return <MyProfileTab />
         return <Overview />
     }
   }

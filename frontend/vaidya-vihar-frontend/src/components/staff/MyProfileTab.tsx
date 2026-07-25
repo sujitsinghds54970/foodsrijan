@@ -9,6 +9,12 @@ import StaffIDCard from './StaffIDCard'
 import { getApiErrorMessage, resolveStaffMediaUrl, staffSelfApi } from './api'
 import { StaffSelfProfile } from './types'
 
+const isStaffRole = (role?: string): boolean => {
+  if (!role) return false
+  const staffRoles = ['staff', 'receptionist', 'technician', 'doctor', 'nurse']
+  return staffRoles.includes(role.toLowerCase())
+}
+
 export default function MyProfileTab() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -128,7 +134,7 @@ export default function MyProfileTab() {
     }
   }, [profile, user?.username])
 
-  if ((user?.role || '').toLowerCase() !== 'staff') {
+  if (!isStaffRole(user?.role)) {
     return <div className="rounded-2xl bg-white p-8 shadow-sm dark:bg-slate-900 dark:text-slate-100">This page is only available for staff users.</div>
   }
 

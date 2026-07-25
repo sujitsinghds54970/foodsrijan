@@ -14,6 +14,12 @@ const formatDateTime = (value?: string | null): string => {
   return parsed.toLocaleString()
 }
 
+const isStaffRole = (role?: string): boolean => {
+  if (!role) return false
+  const staffRoles = ['staff', 'receptionist', 'technician', 'doctor', 'nurse']
+  return staffRoles.includes(role.toLowerCase())
+}
+
 const currentMonthToken = () => {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -80,7 +86,7 @@ export default function StaffDashboard() {
   }
 
   useEffect(() => {
-    if ((user?.role || '').toLowerCase() !== 'staff') return
+    if (!isStaffRole(user?.role)) return
     loadAll()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.role])
@@ -199,7 +205,7 @@ export default function StaffDashboard() {
     }
   }
 
-  if ((user?.role || '').toLowerCase() !== 'staff') {
+  if (!isStaffRole(user?.role)) {
     return (
       <div className="rounded-2xl bg-white p-8 shadow-sm">
         <h2 className="text-2xl font-bold text-slate-900">Staff Self-Service</h2>

@@ -13,10 +13,19 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   const { user } = useAuth()
   const role = (user?.role || '').trim().toLowerCase()
   const [unreadNotifications, setUnreadNotifications] = useState(0)
-  const canAccessDailyOps = role === 'staff' ? Boolean((user as any)?.can_access_daily_ops) : false
+
+  // Helper to detect staff roles (not super_admin, branch_admin, branch_director, or doctor)
+  const isStaffRole = () => {
+    return role !== 'super_admin' && 
+           role !== 'branch_admin' && 
+           role !== 'branch_director' &&
+           role !== 'doctor'
+  }
+
+  const canAccessDailyOps = isStaffRole() ? Boolean((user as any)?.can_access_daily_ops) : false
 
   useEffect(() => {
-    if (role !== 'staff') {
+    if (!isStaffRole()) {
       setUnreadNotifications(0)
       return
     }
@@ -31,7 +40,7 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     }
 
     void loadUnread()
-  }, [activeTab, role])
+  }, [activeTab])
 
   const staffMenuItems = [
     { id: 'staff-profile', label: 'My Profile', icon: '🪪', gradient: 'from-blue-600 to-purple-600' },
@@ -62,7 +71,8 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     { id: 'patient-portal', label: 'Patient Portal', icon: '🏥', gradient: 'from-rose-500 to-pink-500' },
   ]
 
-  const menuItems = role === 'staff' ? staffMenuItems : role === 'doctor' ? doctorMenuItems : defaultMenuItems
+  // Determine which menu to show: prioritize based on role
+  const menuItems = isStaffRole() ? staffMenuItems : role === 'doctor' ? doctorMenuItems : defaultMenuItems
 
   const handleMenuClick = (tabId: string) => {
     if (tabId === activeTab) return
