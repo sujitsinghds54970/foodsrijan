@@ -12,33 +12,47 @@ from PIL import Image, ImageDraw, ImageFont
 
 def reverse_geocode_address(latitude: Optional[float], longitude: Optional[float]) -> Optional[str]:
     if latitude is None or longitude is None:
+        print(f"⚠️ [REVERSE_GEOCODE] Missing coordinates: lat={latitude}, lng={longitude}")
         return None
 
-    query = urllib.parse.urlencode(
-        {
-            "format": "jsonv2",
-            "lat": f"{latitude}",
-            "lon": f"{longitude}",
-            "zoom": "16",
-            "addressdetails": "1",
-        }
-    )
-    url = f"https://nominatim.openstreetmap.org/reverse?{query}"
-
-    request = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "VaidyaViharAttendance/1.0 (support@vaidyavihar.local)",
-            "Accept": "application/json",
-        },
-    )
-
     try:
-        with urllib.request.urlopen(request, timeout=4) as response:
+        query = urllib.parse.urlencode(
+            {
+                "format": "jsonv2",
+                "lat": f"{latitude}",
+                "lon": f"{longitude}",
+                "zoom": "16",
+                "addressdetails": "1",
+            }
+        )
+        url = f"https://nominatim.openstreetmap.org/reverse?{query}"
+        print(f"🌍 [REVERSE_GEOCODE] Querying: {url}")
+
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "VaidyaViharAttendance/1.0 (support@vaidyavihar.local)",
+                "Accept": "application/json",
+            },
+        )
+
+        with urllib.request.urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
             display_name = (payload.get("display_name") or "").strip()
-            return display_name or None
-    except Exception:
+            if display_name:
+                print(f"✅ [REVERSE_GEOCODE] Address found: {display_name}")
+                return display_name
+            else:
+                print(f"⚠️ [REVERSE_GEOCODE] Empty response from nominatim")
+                return None
+    except urllib.error.URLError as e:
+        print(f"❌ [REVERSE_GEOCODE] Network error: {e}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"❌ [REVERSE_GEOCODE] JSON decode error: {e}")
+        return None
+    except Exception as e:
+        print(f"❌ [REVERSE_GEOCODE] Unexpected error: {e}")
         return None
 
 

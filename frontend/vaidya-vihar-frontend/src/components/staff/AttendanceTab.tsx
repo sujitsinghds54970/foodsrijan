@@ -127,19 +127,40 @@ export default function AttendanceTab(_: AttendanceTabProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month])
 
-  const requestClock = (action: 'in' | 'out') => {
+  const getLocation = (): Promise<{ lat: number; lng: number }> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Geolocation is not supported by this browser."))
+        return
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          })
+        },
+        (error) => {
+          console.warn("⚠️ Geolocation error:", error.message)
+          reject(error)
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      )
+    })
+  }
+
+  const requestClock = async (action: 'in' | 'out') => {
     setClockAction(action)
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({ lat: position.coords.latitude, lng: position.coords.longitude })
-        setShowClockModal(true)
-      },
-      () => {
-        setLocation({})
-        setShowClockModal(true)
-      },
-      { enableHighAccuracy: true, timeout: 7000 },
-    )
+    try {
+      const coords = await getLocation()
+      setLocation({ lat: coords.lat, lng: coords.lng })
+      console.log("✅ Location obtained:", coords)
+    } catch (error) {
+      console.warn("⚠️ Could not obtain location:", error)
+      setLocation({})
+    } finally {
+      setShowClockModal(true)
+    }
   }
 
   const submitClock = async (payload: { selfie?: File; workMode: 'onsite' | 'work_from_home'; wfhReason?: string }) => {
