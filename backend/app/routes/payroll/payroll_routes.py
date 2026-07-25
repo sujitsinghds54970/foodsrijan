@@ -93,13 +93,20 @@ def _role(user: User) -> str:
     return (user.role or "").strip().lower()
 
 
+def _is_staff_role(role: str) -> bool:
+    """Check if role is a staff-type role (not admin/director/doctor)"""
+    role_normalized = (role or "").strip().lower()
+    non_staff_roles = {'super_admin', 'branch_admin', 'branch_director', 'admin', 'doctor'}
+    return role_normalized not in non_staff_roles
+
+
 def _require_director_or_admin(user: User) -> None:
     if _role(user) not in {"branch_director", "super_admin", "branch_admin", "admin"}:
         raise HTTPException(status_code=403, detail="Director/Admin privileges required")
 
 
 def _require_staff(user: User) -> None:
-    if _role(user) != "staff":
+    if not _is_staff_role(user.role):
         raise HTTPException(status_code=403, detail="Only staff users can access this endpoint")
 
 
