@@ -2,7 +2,7 @@
 Branch Bank Details Model
 Stores bank account and UPI information for each branch
 """
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, JSON, DECIMAL
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -22,6 +22,9 @@ class BranchBankDetails(Base):
     
     # UPI Details (Critical for QR payments)
     upi_id = Column(String(100), nullable=False, index=True)
+
+    # Live balance snapshot for approval checks
+    current_balance = Column(DECIMAL(14, 2), nullable=False, default=0)
     
     # Soundbox/Payment Device Configuration (Flexible JSON)
     # Stores any payment confirmation device config like:

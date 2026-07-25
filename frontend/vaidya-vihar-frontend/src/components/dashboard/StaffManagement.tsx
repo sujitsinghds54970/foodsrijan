@@ -1,235 +1,548 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import axios from 'axios'
+import toast from 'react-hot-toast'
+import { useAuth } from '../../contexts/AuthContext'
 
-interface Staff {
+interface StaffMember {
   id: number
   employee_id: string
+  branch_id: number
+  user_id: number
+  department: string
+  position: string
+  date_of_joining: string
+  salary: number
+  date_of_birth: string
+  qualification?: string | null
+  experience_years: number
+  total_leaves: number
+  leaves_taken: number
+  performance_rating: number
+  is_active: boolean
+  created_at: string
   first_name: string
   last_name: string
-  phone: string
+  username: string
   email: string
+  phone: string
   role: string
-  department: string
-  salary: number
-  joining_date: string
-  is_active: boolean
+  branch_name: string
+  branch_location: string
 }
 
-export default function StaffManagement() {
-  const [staff, setStaff] = useState<Staff[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [showAddModal, setShowAddModal] = useState(false)
+interface AttendanceRecord {
+  id: number
+  staff_id: number
+  attendance_date: string
+  check_in_time?: string | null
+  check_out_time?: string | null
+  status: string
+  late_minutes: number
+  overtime_minutes: number
+  notes?: string | null
+  approved_by?: number | null
+  created_at: string
+  employee_id: string
+  staff_name: string
+  department: string
+}
 
-  useEffect(() => {
-    // Mock data - in real app, fetch from API
-    const mockStaff: Staff[] = [
-      {
-        id: 1,
-        employee_id: 'EMP001',
-        first_name: 'Amit',
-        last_name: 'Singh',
-        phone: '+91 9876543210',
-        email: 'amit.singh@clinic.com',
-        role: 'Receptionist',
-        department: 'Front Desk',
-        salary: 25000,
-        joining_date: '2023-06-15',
-        is_active: true
-      },
-      {
-        id: 2,
-        employee_id: 'EMP002',
-        first_name: 'Dr. Priya',
-        last_name: 'Patel',
-        phone: '+91 9876543211',
-        email: 'priya.patel@clinic.com',
-        role: 'Doctor',
-        department: 'Pathology',
-        salary: 75000,
-        joining_date: '2023-03-01',
-        is_active: true
-      }
-    ]
-    setStaff(mockStaff)
-    setLoading(false)
+interface SalaryRecord {
+  id: number
+  staff_id: number
+  month: number
+  year: number
+  base_salary: number
+  bonus: number
+  deductions: number
+  gross_salary: number
+  net_salary: number
+  payment_date?: string | null
+  payment_status: string
+  payment_mode?: string | null
+  created_at: string
+  employee_id: string
+  staff_name: string
+  department: string
+}
+
+type StaffView = 'directory' | 'attendance' | 'payroll'
+
+export default function StaffManagement() {
+  const { user, token } = useAuth()
+  const [staff, setStaff] = useState<StaffMember[]>([])
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
+  const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>([])
+  const [departments, setDepartments] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+  const [attendanceLoading, setAttendanceLoading] = useState(false)
+  const [salaryLoading, setSalaryLoading] = useState(false)
+  const [activeView, setActiveView] = useState<StaffView>('directory')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [departmentFilter, setDepartmentFilter] = useState('all')
+  const [selectedStaffId, setSelectedStaffId] = useState<number | 'all'>('all')
+  const today = new Date()
+  const [payrollMonth, setPayrollMonth] = useState(today.getMonth() + 1)
+  const [payrollYear, setPayrollYear] = useState(today.getFullYear())
+
+  const API_BASE = (process as any).env.REACT_APP_API_BASE_URL ||
+    ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://127.0.0.1:8000'
+      : window.location.origin)
+
+  const requestConfig = useMemo(() => ({
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  }), [token])
+
+  const getErrorMessage = useCallback((err: unknown, fallback: string) => {
+    const errorObj = err as any
+    return errorObj?.response?.data?.detail || errorObj?.message || fallback
   }, [])
 
-  const filteredStaff = staff.filter(employee =>
-    employee.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    employee.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    employee.employee_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    employee.role.toLowerCase().includes(searchTerm.toLowerCase())
+  const fetchStaff = useCallback(async () => {
+    if (!token) return
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      params.set('limit', '200')
+      if (searchTerm.trim()) params.set('search', searchTerm.trim())
+      if (departmentFilter !== 'all') params.set('department', departmentFilter)
+
+      const response = await axios.get(`${API_BASE}/api/staff?${params.toString()}`, requestConfig)
+      const rows = Array.isArray(response.data) ? response.data : (response.data?.items || [])
+      setStaff(rows)
+      if (selectedStaffId !== 'all' && !rows.some((item: StaffMember) => item.id === selectedStaffId)) {
+        setSelectedStaffId('all')
+      }
+    } catch (err) {
+      console.error('Failed to load staff directory', err)
+      toast.error(getErrorMessage(err, 'Failed to load staff directory'))
+    } finally {
+      setLoading(false)
+    }
+  }, [API_BASE, requestConfig, token, searchTerm, departmentFilter, selectedStaffId, getErrorMessage])
+
+  const fetchDepartments = useCallback(async () => {
+    if (!token) return
+    try {
+      const response = await axios.get(`${API_BASE}/api/staff/departments`, requestConfig)
+      const rows = Array.isArray(response.data) ? response.data : []
+      setDepartments(rows.map((item: { department: string }) => item.department).filter(Boolean))
+    } catch {
+      setDepartments([])
+    }
+  }, [API_BASE, requestConfig, token])
+
+  const fetchAttendance = useCallback(async () => {
+    if (!token) return
+    setAttendanceLoading(true)
+    try {
+      const params = new URLSearchParams()
+      params.set('limit', '100')
+      if (selectedStaffId !== 'all') params.set('staff_id', String(selectedStaffId))
+      const response = await axios.get(`${API_BASE}/api/staff/attendance/?${params.toString()}`, requestConfig)
+      setAttendance(Array.isArray(response.data) ? response.data : [])
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to load attendance records'))
+    } finally {
+      setAttendanceLoading(false)
+    }
+  }, [API_BASE, requestConfig, token, selectedStaffId, getErrorMessage])
+
+  const fetchSalaryRecords = useCallback(async () => {
+    if (!token) return
+    setSalaryLoading(true)
+    try {
+      const params = new URLSearchParams()
+      params.set('limit', '100')
+      params.set('month', String(payrollMonth))
+      params.set('year', String(payrollYear))
+      if (selectedStaffId !== 'all') params.set('staff_id', String(selectedStaffId))
+      const response = await axios.get(`${API_BASE}/api/staff/salary/?${params.toString()}`, requestConfig)
+      setSalaryRecords(Array.isArray(response.data) ? response.data : [])
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to load payroll records'))
+    } finally {
+      setSalaryLoading(false)
+    }
+  }, [API_BASE, requestConfig, token, payrollMonth, payrollYear, selectedStaffId, getErrorMessage])
+
+  useEffect(() => {
+    void fetchStaff()
+  }, [fetchStaff])
+
+  useEffect(() => {
+    void fetchDepartments()
+  }, [fetchDepartments])
+
+  useEffect(() => {
+    if (activeView === 'attendance') {
+      void fetchAttendance()
+    }
+  }, [activeView, fetchAttendance])
+
+  useEffect(() => {
+    if (activeView === 'payroll') {
+      void fetchSalaryRecords()
+    }
+  }, [activeView, fetchSalaryRecords])
+
+  const markSalaryPaid = async (salaryId: number) => {
+    try {
+      await axios.put(`${API_BASE}/api/staff/salary/${salaryId}/mark-paid`, {}, requestConfig)
+      toast.success('Salary marked as paid')
+      void fetchSalaryRecords()
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to update salary status'))
+    }
+  }
+
+  const totalMonthlyCost = useMemo(
+    () => staff.reduce((sum, employee) => sum + Number(employee.salary || 0), 0),
+    [staff]
   )
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
-  }
+  const activeStaffCount = useMemo(
+    () => staff.filter(employee => employee.is_active).length,
+    [staff]
+  )
+
+  const selectedStaffName = useMemo(() => {
+    if (selectedStaffId === 'all') return 'All Staff'
+    const member = staff.find(item => item.id === selectedStaffId)
+    return member ? `${member.first_name} ${member.last_name}` : 'Selected Staff'
+  }, [selectedStaffId, staff])
+
+  if (!user) return null
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Staff Management</h1>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
-        >
-          Add New Staff
-        </button>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-              </div>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Staff</p>
-              <p className="text-2xl font-semibold text-gray-900">{staff.length}</p>
-            </div>
+      <div className="premium-card p-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-3xl font-black gradient-text">Staff Operations</h1>
+            <p className="text-slate-600 mt-2">Live staff directory, attendance tracking, and payroll visibility</p>
           </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
-                </svg>
-              </div>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Monthly Salary Cost</p>
-              <p className="text-2xl font-semibold text-gray-900">
-                ₹{staff.reduce((sum, emp) => sum + emp.salary, 0).toLocaleString()}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
-                <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
-                </svg>
-              </div>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Active Doctors</p>
-              <p className="text-2xl font-semibold text-gray-900">
-                {staff.filter(emp => emp.role === 'Doctor').length}
-              </p>
-            </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => setActiveView('directory')}
+              className={`px-5 py-2 rounded-xl font-bold transition ${activeView === 'directory' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+            >
+              Directory
+            </button>
+            <button
+              onClick={() => setActiveView('attendance')}
+              className={`px-5 py-2 rounded-xl font-bold transition ${activeView === 'attendance' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+            >
+              Attendance
+            </button>
+            <button
+              onClick={() => setActiveView('payroll')}
+              className={`px-5 py-2 rounded-xl font-bold transition ${activeView === 'payroll' ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+            >
+              Payroll
+            </button>
+            <button
+              onClick={() => {
+                void fetchStaff()
+                if (activeView === 'attendance') void fetchAttendance()
+                if (activeView === 'payroll') void fetchSalaryRecords()
+              }}
+              className="px-5 py-2 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-700 transition"
+            >
+              Refresh
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Search and Filters */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <div className="flex items-center space-x-4">
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="Search staff by name, ID, or role..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-          <button className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700">
-            Filter
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="premium-card p-6 bg-gradient-to-br from-blue-50 to-cyan-50">
+          <p className="text-xs uppercase tracking-wider text-blue-600 font-bold mb-2">Total Staff</p>
+          <p className="text-3xl font-black text-slate-900">{staff.length}</p>
+        </div>
+        <div className="premium-card p-6 bg-gradient-to-br from-emerald-50 to-teal-50">
+          <p className="text-xs uppercase tracking-wider text-emerald-600 font-bold mb-2">Active Staff</p>
+          <p className="text-3xl font-black text-slate-900">{activeStaffCount}</p>
+        </div>
+        <div className="premium-card p-6 bg-gradient-to-br from-violet-50 to-fuchsia-50">
+          <p className="text-xs uppercase tracking-wider text-violet-600 font-bold mb-2">Departments</p>
+          <p className="text-3xl font-black text-slate-900">{departments.length}</p>
+        </div>
+        <div className="premium-card p-6 bg-gradient-to-br from-amber-50 to-orange-50">
+          <p className="text-xs uppercase tracking-wider text-amber-700 font-bold mb-2">Monthly Salary Cost</p>
+          <p className="text-3xl font-black text-slate-900">INR {totalMonthlyCost.toLocaleString()}</p>
+        </div>
+      </div>
+
+      <div className="premium-card p-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <input
+            type="text"
+            placeholder="Search by name, username, employee ID"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 focus:outline-none"
+          />
+          <select
+            value={departmentFilter}
+            onChange={e => setDepartmentFilter(e.target.value)}
+            className="px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 focus:outline-none"
+          >
+            <option value="all">All Departments</option>
+            {departments.map(department => (
+              <option key={department} value={department}>{department}</option>
+            ))}
+          </select>
+          <select
+            value={selectedStaffId}
+            onChange={e => setSelectedStaffId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            className="px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 focus:outline-none"
+          >
+            <option value="all">All Staff</option>
+            {staff.map(member => (
+              <option key={member.id} value={member.id}>{member.employee_id} - {member.first_name} {member.last_name}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => {
+              void fetchStaff()
+              if (activeView === 'attendance') void fetchAttendance()
+              if (activeView === 'payroll') void fetchSalaryRecords()
+            }}
+            className="px-4 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition"
+          >
+            Apply Filters
           </button>
         </div>
       </div>
 
-      {/* Staff Table */}
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Staff Members ({filteredStaff.length})
-          </h2>
+      {activeView === 'directory' && (
+        <div className="premium-card overflow-hidden">
+          <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-black text-slate-900">Staff Directory</h2>
+              <p className="text-sm text-slate-500 mt-1">Operational roster for branch staff and admins</p>
+            </div>
+            <span className="text-sm font-bold text-slate-500">{staff.length} records</span>
+          </div>
+
+          {loading ? (
+            <div className="p-10 text-center text-slate-500">Loading staff directory...</div>
+          ) : staff.length === 0 ? (
+            <div className="p-10 text-center text-slate-500">No staff records found for the current filters.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Employee ID</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Role</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Department</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Position</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Salary</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {staff.map(member => (
+                    <tr key={member.id} className="border-t border-slate-200 hover:bg-slate-50">
+                      <td className="px-4 py-4 text-sm font-bold text-slate-900">{member.employee_id}</td>
+                      <td className="px-4 py-4">
+                        <div className="font-semibold text-slate-900">{member.first_name} {member.last_name}</div>
+                        <div className="text-xs text-slate-500">{member.email}</div>
+                        <div className="text-xs text-slate-500">{member.phone}</div>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{member.role}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{member.department}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{member.position}</td>
+                      <td className="px-4 py-4 text-sm font-semibold text-slate-900">INR {Number(member.salary || 0).toLocaleString()}</td>
+                      <td className="px-4 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${member.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {member.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-sm">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedStaffId(member.id)
+                              setActiveView('attendance')
+                            }}
+                            className="px-3 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100"
+                          >
+                            Attendance
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedStaffId(member.id)
+                              setActiveView('payroll')
+                            }}
+                            className="px-3 py-1 rounded-lg bg-violet-50 text-violet-700 font-semibold hover:bg-violet-100"
+                          >
+                            Payroll
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Employee ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Role
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Department
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Salary
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredStaff.map((employee) => (
-                <tr key={employee.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {employee.employee_id}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {employee.first_name} {employee.last_name}
-                    </div>
-                    <div className="text-sm text-gray-500">{employee.email}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {employee.role}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {employee.department}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ₹{employee.salary.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      employee.is_active
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {employee.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button className="text-blue-600 hover:text-blue-900 mr-3">View</button>
-                    <button className="text-green-600 hover:text-green-900 mr-3">Edit</button>
-                    <button className="text-purple-600 hover:text-purple-900 mr-3">Attendance</button>
-                    <button className="text-red-600 hover:text-red-900">Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      )}
+
+      {activeView === 'attendance' && (
+        <div className="premium-card overflow-hidden">
+          <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-black text-slate-900">Attendance Tracker</h2>
+              <p className="text-sm text-slate-500 mt-1">Showing records for {selectedStaffName}</p>
+            </div>
+            <button
+              onClick={() => void fetchAttendance()}
+              className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700"
+            >
+              Refresh Attendance
+            </button>
+          </div>
+
+          {attendanceLoading ? (
+            <div className="p-10 text-center text-slate-500">Loading attendance records...</div>
+          ) : attendance.length === 0 ? (
+            <div className="p-10 text-center text-slate-500">No attendance records found.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Employee</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Check In</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Check Out</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Late</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Overtime</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendance.map(record => (
+                    <tr key={record.id} className="border-t border-slate-200 hover:bg-slate-50">
+                      <td className="px-4 py-4">
+                        <div className="font-semibold text-slate-900">{record.staff_name}</div>
+                        <div className="text-xs text-slate-500">{record.employee_id} • {record.department}</div>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{new Date(record.attendance_date).toLocaleDateString()}</td>
+                      <td className="px-4 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${record.status === 'present' ? 'bg-emerald-100 text-emerald-700' : record.status === 'late' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
+                          {record.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{record.check_in_time ? new Date(record.check_in_time).toLocaleTimeString() : '-'}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{record.check_out_time ? new Date(record.check_out_time).toLocaleTimeString() : '-'}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{record.late_minutes} min</td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{record.overtime_minutes} min</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {activeView === 'payroll' && (
+        <div className="premium-card overflow-hidden">
+          <div className="px-6 py-5 border-b border-slate-200 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-xl font-black text-slate-900">Payroll Monitor</h2>
+              <p className="text-sm text-slate-500 mt-1">Showing records for {selectedStaffName}</p>
+            </div>
+            <div className="flex gap-3">
+              <select
+                value={payrollMonth}
+                onChange={e => setPayrollMonth(Number(e.target.value))}
+                className="px-4 py-2 rounded-xl border-2 border-slate-200 focus:border-violet-500 focus:outline-none"
+              >
+                {Array.from({ length: 12 }, (_, index) => index + 1).map(month => (
+                  <option key={month} value={month}>{month.toString().padStart(2, '0')}</option>
+                ))}
+              </select>
+              <select
+                value={payrollYear}
+                onChange={e => setPayrollYear(Number(e.target.value))}
+                className="px-4 py-2 rounded-xl border-2 border-slate-200 focus:border-violet-500 focus:outline-none"
+              >
+                {Array.from({ length: 5 }, (_, index) => today.getFullYear() - 2 + index).map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => void fetchSalaryRecords()}
+                className="px-4 py-2 rounded-xl bg-violet-600 text-white font-bold hover:bg-violet-700"
+              >
+                Refresh Payroll
+              </button>
+            </div>
+          </div>
+
+          {salaryLoading ? (
+            <div className="p-10 text-center text-slate-500">Loading payroll records...</div>
+          ) : salaryRecords.length === 0 ? (
+            <div className="p-10 text-center text-slate-500">No payroll records found for the selected month.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Employee</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Base</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Bonus</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Deductions</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Net Salary</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salaryRecords.map(record => (
+                    <tr key={record.id} className="border-t border-slate-200 hover:bg-slate-50">
+                      <td className="px-4 py-4">
+                        <div className="font-semibold text-slate-900">{record.staff_name}</div>
+                        <div className="text-xs text-slate-500">{record.employee_id} • {record.department}</div>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-slate-700">INR {Number(record.base_salary || 0).toLocaleString()}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700">INR {Number(record.bonus || 0).toLocaleString()}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700">INR {Number(record.deductions || 0).toLocaleString()}</td>
+                      <td className="px-4 py-4 text-sm font-bold text-slate-900">INR {Number(record.net_salary || 0).toLocaleString()}</td>
+                      <td className="px-4 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${record.payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {record.payment_status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        {record.payment_status !== 'paid' ? (
+                          <button
+                            onClick={() => void markSalaryPaid(record.id)}
+                            className="px-3 py-1 rounded-lg bg-violet-600 text-white font-semibold hover:bg-violet-700"
+                          >
+                            Mark Paid
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-500">Paid {record.payment_date ? new Date(record.payment_date).toLocaleDateString() : ''}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

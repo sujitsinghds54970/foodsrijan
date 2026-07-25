@@ -4,7 +4,7 @@ Manage bank account and UPI information for branches
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from app.database import get_db
 from app.models.branch_bank_details import BranchBankDetails
@@ -15,12 +15,27 @@ from app.schemas.branch_bank_details import (
     BranchBankDetailsUpdate,
     BranchBankDetailsResponse
 )
-from app.utils.auth_system import get_current_user, require_branch_admin
+from app.utils.auth_system import get_current_user
 
 router = APIRouter()
 
 
-@router.get("/api/branches/{branch_id}/bank-details", response_model=BranchBankDetailsResponse)
+def _mask_soundbox_config(soundbox_config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(soundbox_config, dict):
+        return {}
+
+    provider = soundbox_config.get("provider")
+    device_id = str(soundbox_config.get("device_id") or "")
+    masked_device_id = f"***{device_id[-4:]}" if device_id else ""
+
+    return {
+        "provider": provider,
+        "device_id": masked_device_id,
+        "webhook_configured": bool(soundbox_config.get("webhook")),
+    }
+
+
+@router.get("/{branch_id}/bank-details", response_model=Dict[str, Any])
 async def get_branch_bank_details(
     branch_id: int,
     db: Session = Depends(get_db),
@@ -49,20 +64,37 @@ async def get_branch_bank_details(
     ).first()
     
     if not bank_details:
-        raise HTTPException(
-            status_code=404,
-            detail="Bank details not configured for this branch. Please add them in Bank Settings."
-        )
-    
-    return bank_details
+        return {}
+
+    if current_user.role == 'super_admin':
+        return {
+            "id": bank_details.id,
+            "branch_id": bank_details.branch_id,
+            "account_holder_name": bank_details.account_holder_name,
+            "account_number": bank_details.account_number,
+            "ifsc_code": bank_details.ifsc_code,
+            "bank_name": bank_details.bank_name,
+            "upi_id": bank_details.upi_id,
+            "soundbox_config": bank_details.soundbox_config,
+            "is_active": bank_details.is_active,
+            "created_at": bank_details.created_at,
+            "updated_at": bank_details.updated_at,
+        }
+
+    return {
+        "branch_id": bank_details.branch_id,
+        "upi_id": bank_details.upi_id,
+        "soundbox_config": _mask_soundbox_config(bank_details.soundbox_config),
+        "is_active": bank_details.is_active,
+    }
 
 
-@router.post("/api/branches/{branch_id}/bank-details", response_model=BranchBankDetailsResponse)
+@router.post("/{branch_id}/bank-details", response_model=BranchBankDetailsResponse)
 async def create_or_update_branch_bank_details(
     branch_id: int,
     details: BranchBankDetailsCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Create or update bank details for a branch.
@@ -73,11 +105,11 @@ async def create_or_update_branch_bank_details(
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
     
-    # Access control: Super Admin or Branch Admin of this specific branch
-    if current_user.role != 'super_admin' and current_user.branch_id != branch_id:
+    # Strict access control: Super Admin only
+    if current_user.role != 'super_admin':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. You can only modify your own branch's bank details."
+            detail="Only super admin can modify bank details."
         )
     
     # Check if bank details already exist
@@ -106,12 +138,12 @@ async def create_or_update_branch_bank_details(
         return new_details
 
 
-@router.put("/api/branches/{branch_id}/bank-details", response_model=BranchBankDetailsResponse)
+@router.put("/{branch_id}/bank-details", response_model=BranchBankDetailsResponse)
 async def update_branch_bank_details(
     branch_id: int,
     details: BranchBankDetailsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Update existing bank details for a branch.
@@ -122,11 +154,11 @@ async def update_branch_bank_details(
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
     
-    # Access control
-    if current_user.role != 'super_admin' and current_user.branch_id != branch_id:
+    # Strict access control
+    if current_user.role != 'super_admin':
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. You can only modify your own branch's bank details."
+            detail="Only super admin can modify bank details."
         )
     
     # Get existing details
@@ -148,11 +180,11 @@ async def update_branch_bank_details(
     return bank_details
 
 
-@router.delete("/api/branches/{branch_id}/bank-details", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{branch_id}/bank-details", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_branch_bank_details(
     branch_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Soft delete (deactivate) bank details for a branch.

@@ -9,7 +9,8 @@ from datetime import datetime
 # Import your existing routers and components
 from app.routes.auth_routes import router as auth_router
 from app.routes.patient_management import router as patient_router
-from app.routes.staff_management import router as staff_router
+from app.routes.staff_api import leave_router as staff_leave_router
+from app.routes.staff_api import staff_router as staff_api_router
 from app.routes.inventory_management import router as inventory_router
 from app.routes.export_routes import router as export_router
 from app.routes.analytics import router as analytics_router
@@ -37,7 +38,12 @@ app.add_middleware(
         "http://localhost:51394",
         "http://127.0.0.1:3000",
         "http://localhost:3000",
+        "http://0.0.0.0:3000",
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://0.0.0.0:5173",
     ],
+    allow_origin_regex=r"https?://(localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0)(:\\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,7 +53,8 @@ app.add_middleware(
 # Include EXISTING routers
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(patient_router, prefix="/api/patients", tags=["Patients"])
-app.include_router(staff_router, prefix="/api/staff", tags=["Staff"])
+app.include_router(staff_api_router, prefix="/api", tags=["Staff"])
+app.include_router(staff_leave_router, prefix="/api", tags=["Staff Leave"])
 app.include_router(inventory_router, prefix="/api/inventory", tags=["Inventory"])
 app.include_router(export_router, prefix="/api/export", tags=["Export"])
 app.include_router(analytics_router, prefix="/api/analytics", tags=["Analytics"])

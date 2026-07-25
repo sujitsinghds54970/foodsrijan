@@ -25,9 +25,11 @@ fi
 echo "🔧 Activating virtual environment..."
 source .venv/bin/activate
 
+PYTHON_BIN="$(command -v python)"
+
 # Install/upgrade all required packages from requirements.txt
 echo "📦 Installing/updating dependencies from requirements.txt..."
-pip install -q -r requirements.txt 2>&1 | grep -v "Requirement already satisfied" || true
+"$PYTHON_BIN" -m pip install -q -r requirements.txt 2>&1 | grep -v "Requirement already satisfied" || true
 echo "✅ Dependencies installed successfully"
 
 # Set environment variables
@@ -46,7 +48,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Start uvicorn with auto-reload and proper error handling
-python -m uvicorn app.main:app \
+"$PYTHON_BIN" -m uvicorn app.main:app \
     --host 0.0.0.0 \
     --port 8000 \
     --reload \

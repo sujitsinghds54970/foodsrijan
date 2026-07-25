@@ -1,10 +1,56 @@
 from app.models.doctor import Doctor
+from app.models.doctor_portal import CMECourse, DoctorAuditLog, DoctorMessage, DoctorReferralLog, LoyaltyReward, Order, PatientSearchLog, TestPanel
+from app.models.referring_doctor import ReferringDoctor, ReferralLog, DoctorShareLink
+from app.models.branch_bank_details import BranchBankDetails
+from app.models.inventory import (
+    InventoryItemV2,
+    InventoryEquipment,
+    EquipmentServiceLog,
+    InventoryConsumptionHistory,
+    InventoryStockAudit,
+    InventoryStockMovement as InventoryStockMovementV2,
+    Supplier,
+)
+from app.models.finance import BranchAccount, FinanceExpense, FinanceInvoice, FinanceTransaction
+from app.models.analytics import DailyAnalyticsSnapshot
+from app.models.payroll import (
+    AdvanceRequest,
+    AdvanceStatus,
+    EarningHead,
+    PayrollDispute,
+    PayrollDisputeStatus,
+    PayrollLock,
+    PayrollRun,
+    PayrollRunStatus,
+    PayrollTransaction,
+    ReimbursementClaim,
+    ReimbursementStatus,
+    SalaryGrade,
+    StaffSalaryConfig,
+    StaffTaxDeclaration,
+)
+from app.models.patient import PatientProfile, FamilyMember
+from app.models.patient_b2c import (
+    DigitalConsent,
+    FollowUpReminder,
+    HealthScore,
+    HealthGoal,
+    HealthTrend,
+    LoyaltyReward,
+    PatientB2CAppointment,
+    PatientB2CAuditLog,
+    Referral,
+    ReportSummary,
+    TestCatalog,
+)
+from app.models.patient_phase4 import EmergencyAlert, PatientVaultDocument, SecondOpinionRequest, WearableSync
 from app.models.payment import Invoice, InvoiceItem, Payment
 from app.models.lab_result import LabResult
 from app.models.appointment import Appointment
 from app.models.calendar_day import CalendarDay
 from app.models.release_day import ReleaseDay
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Float, DECIMAL
+from app.models.ceo import CeoAuditLog, CeoBreakGlassGrant, CeoSecurityProfile, CeoWebAuthnCredential
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Float, DECIMAL, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -25,6 +71,12 @@ class Branch(Base):
     branch_code = Column(String(20), unique=True, nullable=False)
     opening_hours = Column(String(500), nullable=True)
     facilities = Column(Text, nullable=True)
+    director_photo_url = Column(Text, nullable=True)
+    director_age = Column(String(50), nullable=True)
+    director_credentials_username = Column(String(100), nullable=True)
+    director_credentials_password = Column(String(255), nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     established_date = Column(DateTime, default=func.now())
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
@@ -40,6 +92,7 @@ class Branch(Base):
     calendar_days = relationship("CalendarDay", back_populates="branch")
     assets = relationship("Asset", back_populates="branch")
     bank_details = relationship("BranchBankDetails", back_populates="branch", uselist=False)
+    branch_accounts = relationship("BranchAccount", back_populates="branch")
 
 class User(Base):
     __tablename__ = "users"
@@ -89,6 +142,7 @@ class Patient(Base):
     allergies = Column(Text, nullable=True)
     chronic_conditions = Column(Text, nullable=True)
     current_medications = Column(Text, nullable=True)
+    tags = Column(JSON, nullable=False, default=list)
     
     # Registration Details
     registration_date = Column(DateTime, default=func.now())

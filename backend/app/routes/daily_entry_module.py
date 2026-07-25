@@ -5,7 +5,8 @@ Branch-scoped daily patient entries and expenses management
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_, extract
-from typing import List, Optional
+from sqlalchemy import text
+from typing import Any, Dict, List, Optional
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 import os
@@ -14,14 +15,21 @@ from pathlib import Path
 
 from app.database import get_db
 from app.models.daily_entry_module import DailyEntryModule, DailyExpense
-from app.models import User
+from app.models.inventory import InventoryConsumptionHistory, InventoryItemV2 as InventoryItem
+from app.models.branch_bank_details import BranchBankDetails
+from app.models import User, Branch
+from app.models.doctor import Doctor, DoctorBranch
+from app.models.staff import StaffProfile
 from app.schemas.daily_entry_module import (
     DailyEntryCreate, DailyEntryUpdate, DailyEntryResponse,
     DailyExpenseCreate, DailyExpenseUpdate, DailyExpenseResponse,
     DailyStatsResponse
 )
-from app.utils.auth_system import get_current_user, require_branch_admin
+from app.utils.auth_system import get_current_user
+from app.utils.schema_compat import ensure_staff_daily_ops_column
 from app.services.qrcode_service import generate_qr_code
+from app.services.finance_integration import ensure_daily_entry_invoice, ensure_daily_entry_revenue
+from app.services.patient_portal_notify import notify_on_daily_entry_completion
 from fastapi.responses import FileResponse, StreamingResponse
 import csv
 import io
@@ -32,14 +40,185 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-router = APIRouter()
-
 # Upload directory for PDFs
 UPLOAD_DIR = Path("uploads/daily_entry_reports")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def generate_patient_id(db: Session, branch_id: int) -> str:
+def _normalize_is_paid(entries: List[DailyEntryModule]) -> List[DailyEntryModule]:
+    for entry in entries:
+        entry.is_paid = bool(entry.is_paid)
+    return entries
+
+
+def _ensure_daily_entry_age_column(db: Session) -> None:
+    try:
+        cols = db.execute(text("PRAGMA table_info(daily_entries_module)")).fetchall()
+        col_names = {row[1] for row in cols}
+        if "age" not in col_names:
+            db.execute(text("ALTER TABLE daily_entries_module ADD COLUMN age INTEGER"))
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"[CREATE ENTRY] Failed ensuring age column: {exc}")
+
+
+def _ensure_daily_entry_upi_id_column(db: Session) -> None:
+    # Keep create flow resilient for DBs that predate upi_id column.
+    try:
+        cols = db.execute(text("PRAGMA table_info(daily_entries_module)")).fetchall()
+        col_names = {row[1] for row in cols}
+        if "upi_id" not in col_names:
+            db.execute(text("ALTER TABLE daily_entries_module ADD COLUMN upi_id VARCHAR(100)"))
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"[CREATE ENTRY] Failed ensuring upi_id column: {exc}")
+
+
+def _ensure_daily_entry_consumed_items_column(db: Session) -> None:
+    try:
+        cols = db.execute(text("PRAGMA table_info(daily_entries_module)")).fetchall()
+        col_names = {row[1] for row in cols}
+        if "consumed_inventory_items" not in col_names:
+            db.execute(text("ALTER TABLE daily_entries_module ADD COLUMN consumed_inventory_items JSON"))
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"[CREATE ENTRY] Failed ensuring consumed_inventory_items column: {exc}")
+
+
+def _ensure_daily_entry_schema(db: Session = Depends(get_db)) -> None:
+    _ensure_daily_entry_age_column(db)
+    _ensure_daily_entry_upi_id_column(db)
+    _ensure_daily_entry_consumed_items_column(db)
+
+
+def _get_doctor_white_label_for_branch(branch_id: int, db: Session) -> Dict[str, str]:
+    assignment = (
+        db.query(DoctorBranch)
+        .filter(DoctorBranch.branch_id == branch_id, DoctorBranch.is_active.is_(True))
+        .order_by(DoctorBranch.is_primary.desc(), DoctorBranch.assigned_date.desc())
+        .first()
+    )
+    if not assignment:
+        return {}
+
+    doctor = db.query(Doctor).filter(Doctor.id == assignment.doctor_id, Doctor.is_active.is_(True)).first()
+    if not doctor or not isinstance(doctor.report_preferences, dict):
+        return {}
+
+    white_label = doctor.report_preferences.get("white_label")
+    if not isinstance(white_label, dict):
+        return {}
+
+    return {
+        "clinic_name": (white_label.get("clinic_name") or "").strip(),
+        "clinic_address": (white_label.get("clinic_address") or "").strip(),
+        "logo_url": (white_label.get("logo_url") or "").strip(),
+    }
+
+
+def _resolve_branch_report_branding(branch_id: int, db: Session) -> Dict[str, str]:
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    branch_name = (branch.name or "").strip() if branch else ""
+    branch_address = (branch.address or "").strip() if branch else ""
+    branch_logo = (branch.director_photo_url or "").strip() if branch else ""
+
+    doctor_branding = _get_doctor_white_label_for_branch(branch_id, db)
+
+    clinic_name = doctor_branding.get("clinic_name") or branch_name or "Vaidya Vihar Diagnostic"
+    clinic_address = doctor_branding.get("clinic_address") or branch_address
+    logo_url = doctor_branding.get("logo_url") or branch_logo
+
+    return {
+        "clinic_name": clinic_name,
+        "clinic_address": clinic_address,
+        "logo_url": logo_url,
+    }
+
+
+def _test_requires_xray_consumption(test_name: Optional[str]) -> bool:
+    if not test_name:
+        return False
+    normalized = test_name.lower()
+    keywords = ["x-ray", "xray", "x ray", "radiograph"]
+    return any(word in normalized for word in keywords)
+
+
+def _append_consumed_item(entry: DailyEntryModule, payload: Dict[str, Any]) -> None:
+    existing = entry.consumed_inventory_items or []
+    if not isinstance(existing, list):
+        existing = []
+    existing.append(payload)
+    entry.consumed_inventory_items = existing
+
+
+def _consume_xray_inventory_if_needed(db: Session, entry: DailyEntryModule, current_user: User) -> None:
+    if not _test_requires_xray_consumption(entry.test_name):
+        return
+
+    existing_consumption = (
+        db.query(InventoryConsumptionHistory)
+        .filter(
+            InventoryConsumptionHistory.daily_entry_id == entry.id,
+            InventoryConsumptionHistory.notes.ilike("%auto_xray%"),
+        )
+        .first()
+    )
+    if existing_consumption:
+        return
+
+    film_item = (
+        db.query(InventoryItem)
+        .filter(
+            InventoryItem.branch_id == entry.branch_id,
+            InventoryItem.department == "X-Ray",
+            InventoryItem.is_active == True,
+            InventoryItem.item_name.ilike("%film%"),
+        )
+        .order_by(InventoryItem.expiry_date.asc().nullsfirst(), InventoryItem.id.asc())
+        .first()
+    )
+
+    if not film_item:
+        return
+
+    current_qty = float(film_item.current_qty)
+    if current_qty < 1:
+        return
+
+    film_item.current_qty = current_qty - 1
+
+    db.add(
+        InventoryConsumptionHistory(
+            branch_id=entry.branch_id,
+            inventory_item_id=film_item.id,
+            daily_entry_id=entry.id,
+            patient_identifier=entry.auto_patient_id,
+            test_name=entry.test_name,
+            quantity=1,
+            notes="auto_xray_consumption",
+            created_by=current_user.id,
+        )
+    )
+
+    _append_consumed_item(
+        entry,
+        {
+            "inventory_item_id": film_item.id,
+            "item_name": film_item.item_name,
+            "quantity": 1,
+            "source": "auto_xray_consumption",
+            "at": datetime.now().isoformat(),
+        },
+    )
+
+
+router = APIRouter(dependencies=[Depends(_ensure_daily_entry_schema)])
+
+
+def generate_patient_id(db: Session, branch_id: int, attempt_offset: int = 0) -> str:
     """
     Generate auto_patient_id in format PAT-YYYYMMDD-XXX
     Uses MAX query to avoid race conditions and duplicate IDs
@@ -48,13 +227,11 @@ def generate_patient_id(db: Session, branch_id: int) -> str:
     date_str = today.strftime("%Y%m%d")
     prefix = f"PAT-{date_str}"
     
-    # Query for the highest sequence number for today's date
-    # This is more reliable than COUNT as it handles deletions
+    # Query for the highest sequence number for today's date.
+    # auto_patient_id has a global unique constraint, so sequence allocation
+    # must also be global (not branch-scoped) to avoid collisions.
     result = db.query(DailyEntryModule.auto_patient_id).filter(
-        and_(
-            DailyEntryModule.branch_id == branch_id,
-            DailyEntryModule.auto_patient_id.like(f"{prefix}-%")
-        )
+        DailyEntryModule.auto_patient_id.like(f"{prefix}-%")
     ).order_by(DailyEntryModule.auto_patient_id.desc()).first()
     
     if result and result[0]:
@@ -62,13 +239,13 @@ def generate_patient_id(db: Session, branch_id: int) -> str:
         last_id = result[0]
         try:
             last_sequence = int(last_id.split('-')[-1])
-            sequence = str(last_sequence + 1).zfill(3)
+            sequence = str(last_sequence + 1 + attempt_offset).zfill(3)
         except (ValueError, IndexError):
             # Fallback if parsing fails
             sequence = "001"
     else:
         # No entries for today yet
-        sequence = "001"
+        sequence = str(1 + attempt_offset).zfill(3)
     
     return f"{prefix}-{sequence}"
 
@@ -124,6 +301,35 @@ def get_user_branch_id(current_user: User) -> int:
     return current_user.branch_id
 
 
+def require_daily_ops_actor(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    """Authorize Daily Operations using role permissions and per-staff toggle."""
+    if current_user.role in ['super_admin', 'branch_admin', 'branch_director']:
+        return current_user
+
+    if current_user.role != 'staff':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+
+    if not current_user.branch_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Branch access required")
+
+    ensure_staff_daily_ops_column(db)
+    staff_profile = (
+        db.query(StaffProfile)
+        .filter(StaffProfile.user_id == current_user.id, StaffProfile.branch_id == current_user.branch_id)
+        .first()
+    )
+    if not staff_profile or not staff_profile.can_access_daily_ops:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Daily Operations access disabled by director",
+        )
+
+    return current_user
+
+
 # ==================== DAILY ENTRY ENDPOINTS ====================
 
 # Specific routes MUST come before parameterized routes
@@ -132,7 +338,7 @@ async def get_daily_entries_grid(
     date: Optional[date] = Query(None, description="Filter by specific date (default: today)"),
     branch_id: Optional[int] = Query(None, description="Filter by branch ID"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """
     Get daily entries for grid display - filtered by date and branch.
@@ -156,7 +362,7 @@ async def get_daily_entries_grid(
     
     # Order by most recent first
     entries = query.order_by(DailyEntryModule.auto_entry_datetime.desc()).all()
-    return entries
+    return _normalize_is_paid(entries)
 
 
 @router.get("/api/daily-entries", response_model=List[DailyEntryResponse])
@@ -167,7 +373,7 @@ async def get_daily_entries(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """
     Get all daily entries for the authenticated user's branch with filters.
@@ -197,14 +403,14 @@ async def get_daily_entries(
         query = query.filter(func.date(DailyEntryModule.auto_entry_datetime) <= end_date)
     
     entries = query.order_by(DailyEntryModule.auto_entry_datetime.desc()).all()
-    return entries
+    return _normalize_is_paid(entries)
 
 
 @router.post("/api/daily-entries", response_model=DailyEntryResponse, status_code=status.HTTP_201_CREATED)
 async def create_daily_entry(
     entry: DailyEntryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """Create a new daily entry for the authenticated user's branch"""
     from sqlalchemy.exc import IntegrityError
@@ -224,7 +430,7 @@ async def create_daily_entry(
     for attempt in range(max_retries):
         try:
             # Generate auto_patient_id inside transaction
-            auto_patient_id = generate_patient_id(db, branch_id)
+            auto_patient_id = generate_patient_id(db, branch_id, attempt)
             print(f"[CREATE ENTRY] Attempt {attempt + 1}: Generated Patient ID: {auto_patient_id}")
             
             # Calculate total amount
@@ -233,12 +439,24 @@ async def create_daily_entry(
             
             # Determine status based on report_pdf_url
             status_value = "Pending"
+            entry_payload = entry.dict(exclude_unset=True)
+            resolved_is_paid = bool(entry_payload.get('is_paid', False))
+
+            branch_upi = (
+                db.query(BranchBankDetails.upi_id)
+                .filter(
+                    BranchBankDetails.branch_id == branch_id,
+                    BranchBankDetails.is_active == True,
+                )
+                .scalar()
+            )
             
             db_entry = DailyEntryModule(
                 branch_id=branch_id,
                 auto_patient_id=auto_patient_id,
                 auto_entry_datetime=parse_entry_datetime(entry.auto_entry_datetime),
                 patient_name=entry.patient_name,
+                age=entry.age,
                 mobile=entry.mobile,
                 address=entry.address,
                 referred_doctor=entry.referred_doctor,
@@ -247,7 +465,8 @@ async def create_daily_entry(
                 tax_percent=entry.tax_percent,
                 total_amount=total_amount,
                 payment_method=entry.payment_method,
-                is_paid=entry.is_paid,
+                upi_id=branch_upi,
+                is_paid=resolved_is_paid,
                 remarks=entry.remarks,
                 status=status_value,
                 created_by=current_user.id
@@ -256,6 +475,10 @@ async def create_daily_entry(
             db.add(db_entry)
             db.commit()
             db.refresh(db_entry)
+
+            ensure_daily_entry_invoice(db, entry=db_entry, created_by=current_user.id)
+            ensure_daily_entry_revenue(db, entry=db_entry, created_by=current_user.id)
+            db.commit()
             
             print(f"[CREATE ENTRY] Success! Entry ID: {db_entry.id}, Patient ID: {db_entry.auto_patient_id}")
             return db_entry
@@ -263,21 +486,69 @@ async def create_daily_entry(
         except IntegrityError as e:
             db.rollback()
             print(f"[CREATE ENTRY] IntegrityError on attempt {attempt + 1}: {str(e)}")
+            import traceback
+            traceback.print_exc()
             
             if attempt < max_retries - 1:
                 # Retry with a new ID
                 print(f"[CREATE ENTRY] Retrying with new ID...")
                 continue
             else:
-                # Max retries exceeded
-                print(f"[CREATE ENTRY ERROR] Max retries exceeded for IntegrityError")
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to generate unique patient ID after multiple attempts"
-                )
+                # Final fallback path to avoid production 500 on repeated collisions.
+                # Keep a deterministic prefix while adding a short uniqueness suffix.
+                try:
+                    fallback_auto_patient_id = f"PAT-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+                    print(f"[CREATE ENTRY] Using fallback patient ID: {fallback_auto_patient_id}")
+
+                    total_amount = calculate_total_amount(entry.fee_amount, entry.tax_percent)
+                    status_value = "Pending"
+                    branch_upi = (
+                        db.query(BranchBankDetails.upi_id)
+                        .filter(
+                            BranchBankDetails.branch_id == branch_id,
+                            BranchBankDetails.is_active == True,
+                        )
+                        .scalar()
+                    )
+
+                    db_entry = DailyEntryModule(
+                        branch_id=branch_id,
+                        auto_patient_id=fallback_auto_patient_id,
+                        auto_entry_datetime=parse_entry_datetime(entry.auto_entry_datetime),
+                        patient_name=entry.patient_name,
+                        age=entry.age,
+                        mobile=entry.mobile,
+                        address=entry.address,
+                        referred_doctor=entry.referred_doctor,
+                        test_name=entry.test_name,
+                        fee_amount=entry.fee_amount,
+                        tax_percent=entry.tax_percent,
+                        total_amount=total_amount,
+                        payment_method=entry.payment_method,
+                        upi_id=branch_upi,
+                        is_paid=resolved_is_paid,
+                        remarks=entry.remarks,
+                        status=status_value,
+                        created_by=current_user.id,
+                    )
+
+                    db.add(db_entry)
+                    db.commit()
+                    db.refresh(db_entry)
+                    print(f"[CREATE ENTRY] Fallback success! Entry ID: {db_entry.id}, Patient ID: {db_entry.auto_patient_id}")
+                    return db_entry
+                except Exception as fallback_error:
+                    print(f"[CREATE ENTRY ERROR] Fallback failed: {fallback_error}")
+                    traceback.print_exc()
+                    db.rollback()
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to generate unique patient ID after multiple attempts"
+                    )
                 
         except Exception as e:
             print(f"[CREATE ENTRY ERROR] {type(e).__name__}: {str(e)}")
+            print(e)
             import traceback
             traceback.print_exc()
             db.rollback()
@@ -298,10 +569,11 @@ async def update_daily_entry(
     entry_id: int,
     entry: DailyEntryUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """Update a daily entry (branch-scoped)"""
     db_entry = db.query(DailyEntryModule).filter(DailyEntryModule.id == entry_id).first()
+    previous_status = db_entry.status if db_entry else None
     
     if not db_entry:
         raise HTTPException(status_code=404, detail="Entry not found")
@@ -321,6 +593,13 @@ async def update_daily_entry(
 
     if 'auto_entry_datetime' in update_data:
         update_data['auto_entry_datetime'] = parse_entry_datetime(update_data.get('auto_entry_datetime'))
+
+    if 'payment_method' in update_data:
+        payment_method = update_data.get('payment_method')
+        if payment_method in ('Cash', 'UPI'):
+            update_data['is_paid'] = True
+        elif payment_method == 'Hold':
+            update_data['is_paid'] = False
     
     # Update status based on report_pdf_url
     if 'report_pdf_url' in update_data:
@@ -328,6 +607,13 @@ async def update_daily_entry(
     
     for key, value in update_data.items():
         setattr(db_entry, key, value)
+
+    if bool(db_entry.is_paid):
+        ensure_daily_entry_invoice(db, entry=db_entry, created_by=current_user.id)
+        ensure_daily_entry_revenue(db, entry=db_entry, created_by=current_user.id)
+
+    if previous_status != "Completed" and db_entry.status == "Completed":
+        notify_on_daily_entry_completion(db, db_entry)
     
     db.commit()
     db.refresh(db_entry)
@@ -339,7 +625,7 @@ async def update_daily_entry(
 async def delete_daily_entry(
     entry_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """Delete a daily entry (branch-scoped)"""
     db_entry = db.query(DailyEntryModule).filter(DailyEntryModule.id == entry_id).first()
@@ -362,7 +648,7 @@ async def upload_report_pdf(
     entry_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """Upload PDF report for a daily entry"""
     db_entry = db.query(DailyEntryModule).filter(DailyEntryModule.id == entry_id).first()
@@ -389,8 +675,12 @@ async def upload_report_pdf(
         buffer.write(content)
     
     # Update entry with file URL
+    previous_status = db_entry.status
     db_entry.report_pdf_url = f"/uploads/daily_entry_reports/{unique_filename}"
     db_entry.status = "Completed"
+    _consume_xray_inventory_if_needed(db, db_entry, current_user)
+    if previous_status != "Completed":
+        notify_on_daily_entry_completion(db, db_entry)
     db.commit()
     
     return {
@@ -400,11 +690,43 @@ async def upload_report_pdf(
     }
 
 
+@router.post("/api/daily-entries/complete")
+async def complete_daily_entry(
+    entry_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_daily_ops_actor),
+):
+    """
+    Mark a daily entry as completed and auto-consume X-Ray film when test name matches.
+    """
+    db_entry = db.query(DailyEntryModule).filter(DailyEntryModule.id == entry_id).first()
+    if not db_entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+
+    if current_user.role != 'super_admin' and db_entry.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=403, detail="Access denied to this entry")
+
+    previous_status = db_entry.status
+    db_entry.status = "Completed"
+    _consume_xray_inventory_if_needed(db, db_entry, current_user)
+    if previous_status != "Completed":
+        notify_on_daily_entry_completion(db, db_entry)
+    db.commit()
+    db.refresh(db_entry)
+
+    return {
+        "message": "Daily entry marked as completed",
+        "entry_id": db_entry.id,
+        "status": db_entry.status,
+        "consumed_inventory_items": db_entry.consumed_inventory_items or [],
+    }
+
+
 @router.get("/api/daily-entries/{entry_id}/qr-code")
 async def get_entry_qr_code(
     entry_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """Generate QR code for a daily entry's patient ID"""
     db_entry = db.query(DailyEntryModule).filter(DailyEntryModule.id == entry_id).first()
@@ -433,7 +755,7 @@ async def get_daily_expenses(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """Get all daily expenses for the authenticated user's branch"""
     query = db.query(DailyExpense)
@@ -458,9 +780,12 @@ async def get_daily_expenses(
 async def create_daily_expense(
     expense: DailyExpenseCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """Create a new daily expense for the authenticated user's branch"""
+    if current_user.role == 'staff':
+        raise HTTPException(status_code=403, detail="Staff cannot create expenses")
+
     branch_id = get_user_branch_id(current_user)
     
     db_expense = DailyExpense(
@@ -484,9 +809,12 @@ async def update_daily_expense(
     expense_id: int,
     expense: DailyExpenseUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """Update a daily expense (branch-scoped)"""
+    if current_user.role == 'staff':
+        raise HTTPException(status_code=403, detail="Staff cannot edit expenses")
+
     db_expense = db.query(DailyExpense).filter(DailyExpense.id == expense_id).first()
     
     if not db_expense:
@@ -510,9 +838,12 @@ async def update_daily_expense(
 async def delete_daily_expense(
     expense_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """Delete a daily expense (branch-scoped)"""
+    if current_user.role == 'staff':
+        raise HTTPException(status_code=403, detail="Staff cannot delete expenses")
+
     db_expense = db.query(DailyExpense).filter(DailyExpense.id == expense_id).first()
     
     if not db_expense:
@@ -534,7 +865,7 @@ async def delete_daily_expense(
 async def get_daily_stats(
     date_filter: Optional[date] = Query(None, description="Date for stats (default: today)"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """Get daily statistics for the authenticated user's branch"""
     branch_id = get_user_branch_id(current_user)
@@ -620,9 +951,12 @@ async def export_daily_entries(
     period: str = Query(..., regex="^(daily|monthly|yearly)$"),
     date_filter: Optional[date] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_branch_admin)
+    current_user: User = Depends(require_daily_ops_actor)
 ):
     """Export daily entries as CSV or PDF"""
+    if current_user.role == 'staff':
+        raise HTTPException(status_code=403, detail="Staff cannot export daily operations reports")
+
     branch_id = get_user_branch_id(current_user)
     target_date = date_filter or datetime.now().date()
     
@@ -649,7 +983,7 @@ async def export_daily_entries(
     if type == "csv":
         return export_to_csv(entries, filename_suffix)
     else:
-        return export_to_pdf(entries, filename_suffix, period)
+        return export_to_pdf(entries, filename_suffix, period, branch_id, db)
 
 
 def export_to_csv(entries: List[DailyEntryModule], filename_suffix: str):
@@ -693,12 +1027,13 @@ def export_to_csv(entries: List[DailyEntryModule], filename_suffix: str):
     )
 
 
-def export_to_pdf(entries: List[DailyEntryModule], filename_suffix: str, period: str):
+def export_to_pdf(entries: List[DailyEntryModule], filename_suffix: str, period: str, branch_id: int, db: Session):
     """Export entries to PDF"""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
     elements = []
     styles = getSampleStyleSheet()
+    branding = _resolve_branch_report_branding(branch_id, db)
     
     # Title
     title_style = ParagraphStyle(
@@ -710,8 +1045,22 @@ def export_to_pdf(entries: List[DailyEntryModule], filename_suffix: str, period:
         alignment=TA_CENTER
     )
     
-    title_text = f"Daily Entries Report - {period.capitalize()}"
+    clinic_name_text = branding.get('clinic_name') or 'Vaidya Vihar Diagnostic'
+    clinic_address_text = branding.get('clinic_address') or ''
+    title_text = f"{clinic_name_text}<br/>Daily Entries Report - {period.capitalize()}"
     elements.append(Paragraph(title_text, title_style))
+
+    if clinic_address_text:
+        subtitle_style = ParagraphStyle(
+            'ClinicSubtitle',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#4a5568'),
+            alignment=TA_CENTER,
+            spaceAfter=12,
+        )
+        elements.append(Paragraph(clinic_address_text, subtitle_style))
+
     elements.append(Spacer(1, 0.2 * inch))
     
     # Summary statistics
@@ -719,6 +1068,7 @@ def export_to_pdf(entries: List[DailyEntryModule], filename_suffix: str, period:
     patient_count = len(entries)
     
     summary_data = [
+        ['Clinic:', clinic_name_text],
         ['Total Patients:', str(patient_count)],
         ['Total Revenue:', f'₹{total_revenue:,.2f}'],
         ['Period:', filename_suffix]

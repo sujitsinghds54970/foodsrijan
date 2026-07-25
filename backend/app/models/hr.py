@@ -8,11 +8,50 @@ Leave management and HR module:
 - Staff attendance
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Boolean, ForeignKey, Text, Enum as SQLEnum, DECIMAL, JSON
+from sqlalchemy.types import TypeDecorator
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
 import enum
+
+
+class CompatEnum(TypeDecorator):
+    impl = String
+    cache_ok = True
+
+    def __init__(self, enum_cls, length: int = 50):
+        super().__init__()
+        self.enum_cls = enum_cls
+        self.impl = String(length)
+
+    def _coerce(self, value):
+        if value is None:
+            return None
+        if isinstance(value, self.enum_cls):
+            return value
+
+        text_value = str(value).strip()
+        if not text_value:
+            return None
+
+        candidates = [text_value, text_value.lower(), text_value.upper()]
+        for candidate in candidates:
+            try:
+                return self.enum_cls(candidate)
+            except ValueError:
+                pass
+        for member in self.enum_cls:
+            if member.name == text_value or member.name.lower() == text_value.lower():
+                return member
+        raise ValueError(f"Invalid value '{value}' for enum {self.enum_cls.__name__}")
+
+    def process_bind_param(self, value, dialect):
+        coerced = self._coerce(value)
+        return coerced.value if coerced is not None else None
+
+    def process_result_value(self, value, dialect):
+        return self._coerce(value)
 
 
 class LeaveType(str, enum.Enum):
@@ -53,7 +92,7 @@ class LeavePolicy(Base):
     __tablename__ = "leave_policies"
 
     id = Column(Integer, primary_key=True, index=True)
-    leave_type = Column(SQLEnum(LeaveType), nullable=False, unique=True)
+    leave_type = Column(CompatEnum(LeaveType), nullable=False, unique=True)
     
     # Allowance
     annual_quota = Column(Integer, default=0)  # Days per year
@@ -91,7 +130,7 @@ class LeaveBalance(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    leave_type = Column(SQLEnum(LeaveType), nullable=False)
+    leave_type = Column(CompatEnum(LeaveType), nullable=False)
     
     # Balance
     total_quota = Column(Integer, default=0)
@@ -118,7 +157,7 @@ class LeaveRequest(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    leave_type = Column(SQLEnum(LeaveType), nullable=False)
+    leave_type = Column(CompatEnum(LeaveType), nullable=False)
     
     # Dates
     start_date = Column(DateTime, nullable=False)
@@ -137,7 +176,7 @@ class LeaveRequest(Base):
     document_path = Column(String, nullable=True)
     
     # Status
-    status = Column(SQLEnum(LeaveStatus), default=LeaveStatus.PENDING)
+    status = Column(CompatEnum(LeaveStatus), default=LeaveStatus.PENDING)
     
     # Approval
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -195,7 +234,7 @@ class Attendance(Base):
     attendance_date = Column(DateTime, nullable=False)
     
     # Status
-    status = Column(SQLEnum(AttendanceStatus), default=AttendanceStatus.ABSENT)
+    status = Column(CompatEnum(AttendanceStatus), default=AttendanceStatus.ABSENT)
     
     # Check-in/Check-out
     check_in = Column(DateTime, nullable=True)
@@ -251,7 +290,7 @@ class AttendanceRegularization(Base):
     reason = Column(Text, nullable=True)
     
     # Status
-    status = Column(SQLEnum(LeaveStatus), default=LeaveStatus.PENDING)
+    status = Column(CompatEnum(LeaveStatus), default=LeaveStatus.PENDING)
     
     # Approval
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -378,4 +417,370 @@ class LeaveApprovalWorkflow(Base):
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class DirectorStaffStatus(str, enum.Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+
+
+class DirectorAttendanceType(str, enum.Enum):
+    PRESENT = "present"
+    ABSENT = "absent"
+    LEAVE = "leave"
+    HOLIDAY = "holiday"
+
+
+class StaffAttendanceStatus(str, enum.Enum):
+    PRESENT = "present"
+    LATE = "late"
+    ABSENT = "absent"
+    APPROVED_LEAVE = "approved_leave"
+    WORK_FROM_HOME = "work_from_home"
+
+
+class AttendanceDisputeStatus(str, enum.Enum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+
+
+class LinkedDeviceType(str, enum.Enum):
+    BIOMETRIC = "biometric"
+    RFID = "rfid"
+    MOBILE = "mobile"
+
+
+class StaffTaskPriority(str, enum.Enum):
+    LOW = "Low"
+    MEDIUM = "Medium"
+    HIGH = "High"
+    URGENT = "Urgent"
+
+
+class StaffTaskStatus(str, enum.Enum):
+    PENDING = "Pending"
+    IN_PROGRESS = "In Progress"
+    COMPLETED = "Completed"
+    OVERDUE = "Overdue"
+    CANCELLED = "Cancelled"
+
+
+class DirectorProfile(Base):
+    __tablename__ = "director_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    photo_path = Column(String, nullable=True)
+    designation = Column(String, nullable=True)
+    mobile = Column(String, nullable=True)
+    address = Column(Text, nullable=True)
+    date_of_joining = Column(DateTime, nullable=True)
+    specialization = Column(String, nullable=True)
+    emergency_contact = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
+    branch = relationship("Branch", foreign_keys=[branch_id])
+
+
+class StaffProfile(Base):
+    __tablename__ = "staff_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    staff_id = Column(String(30), nullable=False, unique=True)
+    photo_path = Column(String, nullable=True)
+    department = Column(String, nullable=True)
+    specialization = Column(String, nullable=True)
+    shift_timings = Column(String, nullable=True)
+    reporting_manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    date_of_joining = Column(DateTime, nullable=True)
+    address = Column(Text, nullable=True)
+    emergency_contact = Column(String, nullable=True)
+    can_access_daily_ops = Column(Boolean, nullable=False, default=False)
+    status = Column(CompatEnum(DirectorStaffStatus), default=DirectorStaffStatus.ACTIVE, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
+    branch = relationship("Branch", foreign_keys=[branch_id])
+    manager = relationship("User", foreign_keys=[reporting_manager_id])
+    attendance_disputes = relationship("AttendanceDispute", back_populates="staff_profile")
+    linked_devices = relationship("LinkedDevice", back_populates="staff_profile")
+
+
+class StaffSalaryDetail(Base):
+    __tablename__ = "staff_salary_details"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False, unique=True)
+    basic = Column(DECIMAL(12, 2), default=0)
+    hra = Column(DECIMAL(12, 2), default=0)
+    allowances = Column(DECIMAL(12, 2), default=0)
+    deductions = Column(DECIMAL(12, 2), default=0)
+    net_pay = Column(DECIMAL(12, 2), default=0)
+    bank_name = Column(String, nullable=True)
+    account_number = Column(String, nullable=True)
+    ifsc_code = Column(String, nullable=True)
+    upi_id = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    staff_profile = relationship("StaffProfile")
+
+
+class StaffSalaryRecord(Base):
+    __tablename__ = "staff_salary_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    month = Column(Integer, nullable=False)
+    year = Column(Integer, nullable=False)
+    basic_salary = Column(DECIMAL(12, 2), default=0)
+    hra = Column(DECIMAL(12, 2), default=0)
+    allowances = Column(DECIMAL(12, 2), default=0)
+    deductions = Column(DECIMAL(12, 2), default=0)
+    net_pay = Column(DECIMAL(12, 2), default=0)
+    generated_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    generated_at = Column(DateTime, default=datetime.utcnow)
+
+    staff_profile = relationship("StaffProfile")
+    branch = relationship("Branch", foreign_keys=[branch_id])
+    generator = relationship("User", foreign_keys=[generated_by])
+
+
+class StaffAttendanceLog(Base):
+    __tablename__ = "staff_attendance_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    date = Column(Date, nullable=True)
+    attendance_date = Column(DateTime, nullable=False)
+    attendance_type = Column(CompatEnum(DirectorAttendanceType), default=DirectorAttendanceType.PRESENT, nullable=False)
+    status = Column(CompatEnum(StaffAttendanceStatus), default=StaffAttendanceStatus.PRESENT, nullable=False)
+    clock_in_time = Column(DateTime, nullable=True)
+    clock_out_time = Column(DateTime, nullable=True)
+    location_lat = Column(Float, nullable=True)
+    location_lng = Column(Float, nullable=True)
+    selfie_url = Column(String, nullable=True)
+    clock_in_latitude = Column(String, nullable=True)
+    clock_in_longitude = Column(String, nullable=True)
+    clock_out_latitude = Column(String, nullable=True)
+    clock_out_longitude = Column(String, nullable=True)
+    clock_in_photo_path = Column(String, nullable=True)
+    clock_out_photo_path = Column(String, nullable=True)
+    work_mode = Column(String(30), nullable=False, default="onsite")
+    wfh_reason = Column(Text, nullable=True)
+    task = Column(Text, nullable=True)
+    task_status = Column(String(40), nullable=False, default="Pending")
+    staff_note = Column(Text, nullable=True)
+    attachments = Column(JSON, nullable=True)
+    hr_remark = Column(Text, nullable=True)
+    dispute_resolved = Column(Boolean, nullable=False, default=False)
+    is_remote = Column(Boolean, nullable=False, default=False)
+    distance_from_branch_meters = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    staff_profile = relationship("StaffProfile")
+    branch = relationship("Branch")
+
+
+class StaffLeaveRequest(Base):
+    __tablename__ = "staff_leave_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    leave_type = Column(String, nullable=False)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=False)
+    start_time = Column(DateTime, nullable=True)
+    end_time = Column(DateTime, nullable=True)
+    total_days = Column(Float, default=0)
+    duration_days = Column(Float, default=0)
+    duration_hours = Column(Float, default=0)
+    reason = Column(Text, nullable=True)
+    attachments = Column(String, nullable=True)
+    status = Column(CompatEnum(LeaveStatus), default=LeaveStatus.PENDING, nullable=False)
+    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approval_date = Column(DateTime, nullable=True)
+    reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    review_comment = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    staff_profile = relationship("StaffProfile")
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    approver = relationship("User", foreign_keys=[approved_by])
+    branch = relationship("Branch")
+
+
+class AttendanceDispute(Base):
+    __tablename__ = "attendance_disputes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    attendance_date = Column(Date, nullable=False)
+    reason = Column(Text, nullable=False)
+    status = Column(SQLEnum(AttendanceDisputeStatus), default=AttendanceDisputeStatus.OPEN, nullable=False)
+    resolution_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    staff_profile = relationship("StaffProfile", back_populates="attendance_disputes")
+
+
+class LinkedDevice(Base):
+    __tablename__ = "linked_devices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    device_id = Column(String(120), nullable=False)
+    device_type = Column(SQLEnum(LinkedDeviceType), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    last_sync = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    staff_profile = relationship("StaffProfile", back_populates="linked_devices")
+
+
+class StaffPerformanceNote(Base):
+    __tablename__ = "staff_performance_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    director_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    note = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    staff_profile = relationship("StaffProfile")
+    director = relationship("User", foreign_keys=[director_user_id])
+
+
+class StaffTask(Base):
+    __tablename__ = "staff_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    assigned_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
+    task_name = Column(String(255), nullable=False)
+    title = Column(String(255), nullable=True)
+    description = Column(Text, nullable=True)
+    deadline = Column(DateTime, nullable=True)
+    due_date = Column(DateTime, nullable=True)
+    status = Column(String(40), nullable=False, default="Pending")
+    priority = Column(String(20), nullable=False, default="Medium")
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    staff_profile = relationship("StaffProfile")
+    branch = relationship("Branch", foreign_keys=[branch_id])
+    assigned_by_user = relationship("User", foreign_keys=[assigned_by])
+    assigned_to_user = relationship("User", foreign_keys=[assigned_to])
+    comments = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan")
+    attachments = relationship("TaskAttachment", back_populates="task", cascade="all, delete-orphan")
+
+
+class TaskComment(Base):
+    __tablename__ = "task_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("staff_tasks.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    task = relationship("StaffTask", back_populates="comments")
+    user = relationship("User", foreign_keys=[user_id])
+
+
+class TaskAttachment(Base):
+    __tablename__ = "task_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("staff_tasks.id"), nullable=False)
+    file_url = Column(String, nullable=False)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    task = relationship("StaffTask", back_populates="attachments")
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+
+
+class StaffNotification(Base):
+    __tablename__ = "staff_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    message = Column(Text, nullable=False)
+    link = Column(String, nullable=True)
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    staff_profile = relationship("StaffProfile")
+    branch = relationship("Branch", foreign_keys=[branch_id])
+
+
+class StaffDocument(Base):
+    __tablename__ = "staff_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    file_name = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    document_type = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    staff_profile = relationship("StaffProfile")
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+
+
+class StaffWeeklyRoster(Base):
+    __tablename__ = "staff_weekly_rosters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    week_start_date = Column(DateTime, nullable=False)
+    week_end_date = Column(DateTime, nullable=False)
+    schedule_json = Column(Text, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    staff_profile = relationship("StaffProfile")
+    branch = relationship("Branch", foreign_keys=[branch_id])
+    creator = relationship("User", foreign_keys=[created_by])
+
+
+class DirectorNotification(Base):
+    __tablename__ = "director_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    director_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    director = relationship("User", foreign_keys=[director_user_id])
+    branch = relationship("Branch")
 

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../contexts/AuthContext'
+import BankPaymentSettings from '../branch-director/BankPaymentSettings'
+import BranchDirectorOverviewDashboard from '../overview/BranchDirectorOverviewDashboard'
 
 interface Branch {
   id: number
@@ -106,7 +108,7 @@ export default function BranchManagement() {
   const [newBranchCredentials, setNewBranchCredentials] = useState<BranchAdminCredentials | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null)
-  const [branchDetailTab, setBranchDetailTab] = useState<'overview' | 'assets' | 'analytics' | 'settings' | 'activity'>('overview')
+  const [branchDetailTab, setBranchDetailTab] = useState<'overview' | 'assets' | 'analytics' | 'settings' | 'activity' | 'bank-payment'>('overview')
   // Assets UI state
   const [assets, setAssets] = useState<Asset[]>([])
   const [assetsLoading, setAssetsLoading] = useState(false)
@@ -120,7 +122,7 @@ export default function BranchManagement() {
   const API_BASE =
     process.env.REACT_APP_API_BASE_URL ||
     ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-      ? 'http://localhost:8000'
+      ? 'http://127.0.0.1:8000'
       : window.location.origin)
 
   const isSuperAdmin = user?.role === 'super_admin'
@@ -456,7 +458,7 @@ export default function BranchManagement() {
     }
   }
 
-  const onViewBranch = async (branch: Branch, tab: 'overview' | 'assets' | 'analytics' | 'settings' | 'activity' = 'overview') => {
+  const onViewBranch = async (branch: Branch, tab: 'overview' | 'assets' | 'analytics' | 'settings' | 'activity' | 'bank-payment' = 'overview') => {
     setBranchDetailTab(tab)
     setError('')
     setNewBranchCredentials(null)
@@ -961,52 +963,36 @@ export default function BranchManagement() {
           </div>
           <div className="premium-card p-6">
             <div className="flex flex-wrap gap-3">
-              {['overview', 'assets', 'analytics', 'settings', 'activity'].map((tab) => (
+              {[
+                'overview',
+                'assets',
+                'analytics',
+                'settings',
+                'activity',
+                ...(isSuperAdmin ? ['bank-payment'] : []),
+              ].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setBranchDetailTab(tab as any)}
                   className={`px-4 py-3 rounded-2xl font-bold text-sm ${branchDetailTab === tab ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
                 >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tab === 'bank-payment' ? 'Bank & Payment Settings' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </button>
               ))}
             </div>
           </div>
+          {isSuperAdmin && branchDetailTab === 'bank-payment' && (
+            <BankPaymentSettings
+              branchId={selectedBranch.id}
+              apiBase={API_BASE}
+              requestConfig={requestConfig}
+            />
+          )}
           {branchDetailTab === 'overview' && (
-            <div className="space-y-6">
-              <div className="premium-card p-8 grid gap-6 md:grid-cols-3">
-                <div className="rounded-3xl bg-slate-50 p-6 shadow-sm">
-                  <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3">Address</p>
-                  <p className="text-sm text-slate-700">{selectedBranch.address}</p>
-                </div>
-                <div className="rounded-3xl bg-slate-50 p-6 shadow-sm">
-                  <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3">Contact</p>
-                  <p className="text-sm text-slate-700">{selectedBranch.phone}</p>
-                  {selectedBranch.email && <p className="text-sm text-slate-700 mt-2">{selectedBranch.email}</p>}
-                </div>
-                <div className="rounded-3xl bg-slate-50 p-6 shadow-sm">
-                  <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3">Facilities</p>
-                  <p className="text-sm text-slate-700">{selectedBranch.facilities || 'No facilities listed'}</p>
-                </div>
-              </div>
-              <div className="grid gap-6 md:grid-cols-3">
-                <div className="rounded-3xl bg-gradient-to-br from-slate-950 to-slate-900 p-6 text-white shadow-2xl">
-                  <p className="text-xs uppercase tracking-widest text-slate-300 font-bold mb-3">Revenue</p>
-                  <p className="text-3xl font-black">₹{Number(selectedBranch.monthly_revenue || 0).toLocaleString()}</p>
-                  <p className="text-sm text-slate-300 mt-2">This month</p>
-                </div>
-                <div className="rounded-3xl bg-slate-50 p-6 shadow-sm">
-                  <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3">Staff Count</p>
-                  <p className="text-3xl font-black text-slate-900">{selectedBranch.total_staff ?? 0}</p>
-                  <p className="text-sm text-slate-500 mt-2">Active staff members</p>
-                </div>
-                <div className="rounded-3xl bg-slate-50 p-6 shadow-sm">
-                  <p className="text-xs uppercase tracking-widest text-slate-400 font-bold mb-3">Patient Volume</p>
-                  <p className="text-3xl font-black text-slate-900">{selectedBranch.total_patients ?? 0}</p>
-                  <p className="text-sm text-slate-500 mt-2">Active patient count</p>
-                </div>
-              </div>
-            </div>
+            <BranchDirectorOverviewDashboard
+              branchId={selectedBranch.id}
+              showBackButton={false}
+            />
           )}
           {branchDetailTab === 'assets' && (
             <div className="space-y-6">

@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import Optional, List
 import bcrypt
 import os
@@ -15,7 +16,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from passlib.context import CryptContext
 
 from app.database import get_db
-from app.models import User, Branch, ActivityLog
+from app.models import User, ActivityLog
 
 # Configure logging
 logging.basicConfig(
@@ -41,10 +42,21 @@ security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class TokenData:
-    def __init__(self, username: str = None, branch_id: int = None, role: str = None):
+    def __init__(
+        self,
+        username: str = None,
+        branch_id: int = None,
+        role: str = None,
+        token_type: str = None,
+        scope: str = None,
+        user_id: int = None,
+    ):
         self.username = username
         self.branch_id = branch_id
         self.role = role
+        self.token_type = token_type
+        self.scope = scope
+        self.user_id = user_id
 
 class AuthGuard:
     def __init__(self, allowed_roles: Optional[List[str]] = None):
@@ -115,6 +127,9 @@ class AuthGuard:
             username: str = payload.get("sub")
             branch_id: int = payload.get("branch_id")
             role: str = payload.get("role")
+            token_type: str = payload.get("token_type") or payload.get("type") or "access"
+            scope: str = payload.get("scope")
+            user_id: int = payload.get("user_id")
             
             if username is None:
                 raise HTTPException(
@@ -123,7 +138,14 @@ class AuthGuard:
                     headers={"WWW-Authenticate": "Bearer"},
                 )
             
-            return TokenData(username=username, branch_id=branch_id, role=role)
+            return TokenData(
+                username=username,
+                branch_id=branch_id,
+                role=role,
+                token_type=token_type,
+                scope=scope,
+                user_id=user_id,
+            )
             
         except JWTError:
             raise HTTPException(
@@ -156,6 +178,11 @@ class AuthGuard:
                 detail="Inactive user",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+
+        # Preserve token context for downstream route-level authorization checks.
+        setattr(user, "_token_type", token_data.token_type)
+        setattr(user, "_token_scope", token_data.scope)
+        setattr(user, "_token_user_id", token_data.user_id)
 
         return user
 
@@ -211,38 +238,53 @@ def authenticate_user(db: Session, username: str, password: str):
     Authenticate user with username and password.
     Implements OWASP authentication best practices with detailed logging.
     """
-    logger.info(f"Authentication attempt for username: {username}")
+    identifier = (username or "").strip()
+    logger.info(f"Authentication attempt for identifier: {identifier}")
+    print(f"[AUTH DEBUG] received identifier={identifier!r}")
     
     try:
         # Query user with timeout protection
-        user = db.query(User).filter(User.username == username).first()
+        user = db.query(User).filter(
+            or_(
+                User.username == identifier,
+                User.email == identifier,
+            )
+        ).first()
+        if user:
+            print(
+                "[AUTH DEBUG] fetched user="
+                f"id={user.id}, username={user.username!r}, role={user.role!r}, is_active={user.is_active}"
+            )
+        else:
+            print("[AUTH DEBUG] fetched user=None")
         
         if not user:
-            logger.warning(f"Authentication failed: User '{username}' not found")
+            logger.warning(f"Authentication failed: User '{identifier}' not found")
             # Use constant-time comparison to prevent timing attacks
             # Hash a dummy password to maintain consistent timing
             AuthGuard().hash_password("dummy_password_for_timing")
             return False
         
-        logger.info(f"User '{username}' found (ID: {user.id}, Role: {user.role})")
+        logger.info(f"User '{identifier}' found (ID: {user.id}, Role: {user.role})")
         
         # Check if user is active before password verification
         if not user.is_active:
-            logger.warning(f"Authentication failed: User '{username}' is inactive")
+            logger.warning(f"Authentication failed: User '{identifier}' is inactive")
             return False
         
         # Verify password with detailed logging
         password_valid = AuthGuard().verify_password(password, user.hashed_password)
+        print(f"[AUTH DEBUG] password verification result={password_valid}")
         
         if not password_valid:
-            logger.warning(f"Authentication failed: Invalid password for user '{username}'")
+            logger.warning(f"Authentication failed: Invalid password for user '{identifier}'")
             return False
         
-        logger.info(f"Authentication successful for user '{username}' (Role: {user.role})")
+        logger.info(f"Authentication successful for user '{identifier}' (Role: {user.role})")
         return user
         
     except Exception as e:
-        logger.error(f"Authentication error for user '{username}': {str(e)}")
+        logger.error(f"Authentication error for user '{identifier}': {str(e)}")
         return False
 
 def create_user_token(user: User):
@@ -294,9 +336,9 @@ require_role = auth_guard.require_role
 # Role-based dependencies
 require_super_admin = auth_guard.require_role(['super_admin'])
 require_branch_admin = auth_guard.require_role(['super_admin', 'branch_admin'])
-require_staff = auth_guard.require_role(['super_admin', 'branch_admin', 'staff'])
+require_staff = auth_guard.require_role(['super_admin', 'branch_admin', 'branch_director', 'staff'])
 require_patient = auth_guard.require_role(['patient'])
-require_all_users = auth_guard.require_role(['super_admin', 'branch_admin', 'staff', 'patient'])
+require_all_users = auth_guard.require_role(['super_admin', 'branch_admin', 'branch_director', 'staff', 'patient'])
 
 # Branch access dependency
 require_branch_access = auth_guard.require_branch_access

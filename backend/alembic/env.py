@@ -30,9 +30,38 @@ from app.models.lis import (
 )
 from app.models.payment import Payment, Refund
 from app.models.accounting import ExpenseEntry, ExpenseCategory, Transaction, Account
-from app.models.hr import LeaveRequest, EmployeeProfile, Attendance
+from app.models.hr import (
+    LeaveRequest,
+    EmployeeProfile,
+    Attendance,
+    DirectorProfile,
+    StaffProfile,
+    StaffSalaryDetail,
+    StaffAttendanceLog,
+    StaffLeaveRequest,
+    StaffPerformanceNote,
+    StaffTask,
+    StaffNotification,
+    StaffDocument,
+    DirectorNotification,
+)
 from app.models.patient_portal import PatientAppointment, PatientPrescription, PatientPortalUser
+from app.models.patient import PatientProfile, FamilyMember
 from app.models.doctor import Doctor, DoctorBranch, ReportDistribution, DoctorNotification, DoctorSchedule
+from app.models.finance import BranchAccount, FinanceExpense, FinanceInvoice, FinanceTransaction
+from app.models.analytics import DailyAnalyticsSnapshot
+from app.models.payroll import (
+    AdvanceRequest,
+    EarningHead,
+    PayrollDispute,
+    PayrollLock,
+    PayrollRun,
+    PayrollTransaction,
+    ReimbursementClaim,
+    SalaryGrade,
+    StaffSalaryConfig,
+    StaffTaxDeclaration,
+)
 
 target_metadata = Base.metadata
 

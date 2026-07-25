@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -8,7 +8,6 @@ from datetime import datetime
 # Import your existing routers and components
 from app.routes.auth_routes import router as auth_router
 from app.routes.patient_management import router as patient_router
-from app.routes.staff_management import router as staff_router
 from app.routes.inventory_management import router as inventory_router
 from app.routes.export_routes import router as export_router
 from app.routes.analytics import router as analytics_router
@@ -28,13 +27,29 @@ from app.routes.hr_routes import router as hr_router
 from app.routes.lis_routes import router as lis_router
 from app.routes.patient_portal_routes import router as patient_portal_router
 from app.routes.doctor_portal_routes import router as doctor_portal_router
+from app.routes.doctor_portal_api import router as doctor_portal_api_router
 from app.routes.ai_routes import router as ai_router
-from app.routes.doctor_management import router as doctor_mgmt_router
+from app.routes.doctors import router as doctors_router
 from app.routes.report_distribution import router as report_dist_router
 from app.routes.dailyentry_demo import router as dailyentry_demo_router
 from app.routes.daily_entry_module import router as daily_entry_module_router
+from app.routes.inventory import router as inventory_v2_router
 from app.routes.branch_bank_details import router as branch_bank_router
 from app.routes.file_serving import router as file_serving_router
+from app.routes.director_staff_routes import router as director_staff_router
+from app.routes.director import director_profile_router
+from app.routes.staff_api import leave_router as staff_leave_router
+from app.routes.staff_api import staff_router as staff_api_router
+from app.routes.accounts import router as accounts_router
+from app.routes.patient_portal import router as patient_portal_v2_router
+from app.routes.patient_b2c_phase1 import router as patient_b2c_phase1_router
+from app.routes.patient.phase4 import router as patient_phase4_router
+from app.routes.overview import router as overview_router
+from app.routes.staff_self_service import router as staff_self_service_router
+from app.routes.payroll import router as payroll_router
+from app.routes.tasks import router as tasks_router
+from app.routes.ceo import router as ceo_router
+from app.utils.auth_system import require_role
 
 # Create FastAPI app
 app = FastAPI(
@@ -47,12 +62,25 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://0.0.0.0",
+        "https://localhost",
+        "https://127.0.0.1",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://0.0.0.0:3000",
         "http://localhost:8000",
         "http://127.0.0.1:8000",
-        "*"  # Fallback to allow all
+        "http://0.0.0.0:8000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://0.0.0.0:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+        "http://0.0.0.0:4173",
     ],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -66,7 +94,11 @@ app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 # to ensure /api/daily-entries/grid is matched before /api/daily-entries/{entry_id}
 app.include_router(daily_entry_module_router, tags=["Daily Entry Module"])
 app.include_router(patient_router, prefix="/api", tags=["Patients"])
-app.include_router(staff_router, prefix="/api/staff", tags=["Staff"])
+# Register staff self-service routes before generic /api/staff/{staff_profile_id} routes.
+# This prevents 'me' from being treated as a dynamic path parameter.
+app.include_router(staff_self_service_router, prefix="/api", tags=["Staff Self Service"])
+app.include_router(staff_api_router, prefix="/api", tags=["Staff"])
+app.include_router(staff_leave_router, prefix="/api", tags=["Staff Leave"])
 app.include_router(inventory_router, prefix="/api/inventory", tags=["Inventory"])
 app.include_router(export_router, prefix="/api/export", tags=["Export"])
 app.include_router(analytics_router, prefix="", tags=["Analytics"])
@@ -85,13 +117,25 @@ app.include_router(accounting_router, prefix="/api/accounting", tags=["Accountin
 app.include_router(hr_router, prefix="/api/hr", tags=["HR & Payroll"])
 app.include_router(lis_router, prefix="/api/lis", tags=["LIS"])
 app.include_router(patient_portal_router, prefix="/api/patient-portal", tags=["Patient Portal"])
-app.include_router(doctor_portal_router, prefix="/api/doctor-portal", tags=["Doctor Portal"])
+app.include_router(doctor_portal_router, prefix="/api/doctor-portal", tags=["Doctor Portal"], dependencies=[Depends(require_role(["doctor"]))])
+app.include_router(doctor_portal_api_router, prefix="/api/doctor", tags=["Doctor Portal API"])
 app.include_router(ai_router, prefix="/api/ai", tags=["AI Features"])
-app.include_router(doctor_mgmt_router, prefix="/api/doctors", tags=["Doctor Management"])
+app.include_router(doctors_router, tags=["Doctor Management CRM"])
 app.include_router(report_dist_router, prefix="/api/reports", tags=["Report Distribution"])
 app.include_router(dailyentry_demo_router, tags=["Daily Entry Demo"])
-app.include_router(branch_bank_router, tags=["Branch Bank Details"])
+app.include_router(branch_bank_router, prefix="/api/branches", tags=["Branch Bank Details"])
 app.include_router(file_serving_router, prefix="/api", tags=["File Serving"])
+app.include_router(director_staff_router, prefix="/api/director", tags=["Director & Staff Management"])
+app.include_router(director_profile_router, prefix="/api/director-v2", tags=["Director Management V2"])
+app.include_router(inventory_v2_router, tags=["Inventory V2"])
+app.include_router(accounts_router, tags=["Accounts & Finance"])
+app.include_router(patient_b2c_phase1_router, tags=["Patient B2C Phase 1"])
+app.include_router(patient_phase4_router, tags=["Patient Phase 4"])
+app.include_router(patient_portal_v2_router, tags=["Patient Portal V2"])
+app.include_router(overview_router, prefix="/api/overview", tags=["Overview Dashboard"])
+app.include_router(payroll_router, prefix="/api", tags=["Payroll Management"])
+app.include_router(tasks_router, prefix="/api", tags=["Task Management"])
+app.include_router(ceo_router, prefix="/api", tags=["CEO Security"])
 
 @app.get("/")
 async def root():

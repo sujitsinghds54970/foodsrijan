@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
 
 interface Branch {
   id: number;
@@ -18,7 +17,6 @@ interface RegistrationProps {
 
 export default function Registration({ onSwitchToLogin }: RegistrationProps) {
   const navigate = useNavigate();
-  const { login } = useAuth();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -44,7 +42,7 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
       setLoadingBranches(true);
       const API_BASE = 
         (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-          ? 'http://localhost:8000'
+          ? 'http://127.0.0.1:8000'
           : window.location.origin;
       const response = await axios.get(`${API_BASE}/api/branches`);
       setBranches(response.data);
@@ -54,7 +52,7 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
       try {
         const API_BASE_FALLBACK = 
           (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-            ? 'http://localhost:8000'
+            ? 'http://127.0.0.1:8000'
             : window.location.origin;
         const response = await axios.get(`${API_BASE_FALLBACK}/api/auth/branches`);
         setBranches(response.data);
@@ -121,7 +119,7 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
       const API_BASE = 
         process.env.REACT_APP_API_BASE_URL ||
         ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-          ? 'http://localhost:8000'
+          ? 'http://127.0.0.1:8000'
           : window.location.origin);
       
       const response = await axios.post(`${API_BASE}/api/auth/public-register`, registrationData);

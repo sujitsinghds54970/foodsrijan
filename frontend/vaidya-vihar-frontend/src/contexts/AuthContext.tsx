@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
@@ -8,6 +8,7 @@ interface User {
   email: string;
   role: string;
   branch_id?: number | null;
+  can_access_daily_ops?: boolean | null;
   first_name: string;
   last_name: string;
   phone?: string;
@@ -36,29 +37,58 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-const API_BASE = 'http://localhost:8000';
+const normalizeApiBase = (rawBase: string): string => {
+  const trimmed = (rawBase || '').trim();
+  if (!trimmed) return '';
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname === 'localhost') {
+      parsed.hostname = '127.0.0.1';
+    }
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return trimmed.replace('://localhost', '://127.0.0.1').replace(/\/$/, '');
+  }
+};
+
+const configuredApiBase = normalizeApiBase((process as any).env.REACT_APP_API_BASE_URL || '');
+const API_BASE = configuredApiBase ||
+  ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://127.0.0.1:8000'
+    : window.location.origin);
 console.log('[AUTH_DEBUG] API_BASE_FIXED', API_BASE);
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const lastNetworkToastAtRef = useRef(0);
 
   // Configure axios defaults and restore auth state on mount
   useEffect(() => {
     const initializeAuth = async () => {
       const storedToken = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
+
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          setUser(parsedUser);
+        } catch {
+          localStorage.removeItem('user');
+        }
+      }
 
       if (storedToken) {
         setToken(storedToken);
         axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
 
-        try {
-          const response = await axios.get(`${API_BASE}/api/auth/me`);
-          setUser(response.data);
-          localStorage.setItem('user', JSON.stringify(response.data));
-        } catch (err) {
-          logout();
+        if (!storedUser) {
+          // Avoid replaying stale token-only sessions into a logout loop.
+          localStorage.removeItem('token');
+          delete axios.defaults.headers.common['Authorization'];
+          setToken(null);
         }
       }
 
@@ -85,7 +115,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     );
 
     const responseInterceptor = axios.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        lastNetworkToastAtRef.current = 0;
+        return response;
+      },
       (error) => {
         const config = error?.config || {};
         const fullUrl = `${config.baseURL || ''}${config.url || ''}`;
@@ -98,7 +131,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             message: error?.message,
             stack: error?.stack,
           });
-          toast.error('Network Error: Unable to reach backend API');
+          const now = Date.now();
+          const COOLDOWN_MS = 5000;
+          const isConnectionRefused =
+            String(error?.message || '').toLowerCase().includes('network error') &&
+            String(error?.stack || '').toLowerCase().includes('err_connection_refused');
+          if (now - lastNetworkToastAtRef.current > COOLDOWN_MS) {
+            lastNetworkToastAtRef.current = now;
+            toast.error(
+              isConnectionRefused
+                ? 'Backend is not running on 127.0.0.1:8000. Start it using ./start_backend.sh'
+                : 'Network Error: Unable to reach backend API', {
+              id: 'backend-network-error',
+            });
+          }
           return Promise.reject(error);
         }
 
@@ -131,6 +177,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
+      const normalizedUsername = (username || '').trim();
+
       // FIX: Clear any stale/expired tokens BEFORE login attempt
       delete axios.defaults.headers.common['Authorization'];
       localStorage.removeItem('token');
@@ -139,16 +187,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(null);
 
       // Log exact payload being sent (Step 3 debugging)
-      console.log('LOGIN_PAYLOAD:', { username, password });
+      console.log('LOGIN_PAYLOAD:', { username: normalizedUsername, password });
       console.log('LOGIN_PAYLOAD_LENGTHS:', { 
-        usernameLength: username.length, 
+        usernameLength: normalizedUsername.length, 
         passwordLength: password.length,
-        usernameHasSpaces: username !== username.trim(),
+        usernameHasSpaces: username !== normalizedUsername,
         passwordHasSpaces: password !== password.trim()
       });
 
       const formData = new FormData();
-      formData.append('username', username);
+      formData.append('username', normalizedUsername);
       formData.append('password', password);
 
       const loginUrl = `${API_BASE}/api/auth/login`;
@@ -194,22 +242,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           },
         });
 
-        const meResponse = await axios.get(meUrl);
-        const verifiedUser = meResponse.data;
+        const loginUser = response.data?.user;
 
-        console.log('[AUTH_DEBUG] ME_RESPONSE', {
-          status: meResponse.status,
-          data: verifiedUser,
+        console.log('[AUTH_DEBUG] LOGIN_USER', {
+          hasUser: !!loginUser,
+          role: loginUser?.role,
         });
 
-        if (!verifiedUser?.role) {
-          throw new Error('User role missing in profile response');
+        if (loginUser) {
+          setUser(loginUser);
+          localStorage.setItem('user', JSON.stringify(loginUser));
+        } else {
+          const meResponse = await axios.get(meUrl);
+          const verifiedUser = meResponse.data;
+          if (!verifiedUser?.role) {
+            throw new Error('User role missing in profile response');
+          }
+          setUser(verifiedUser);
+          localStorage.setItem('user', JSON.stringify(verifiedUser));
         }
-
-        setUser(verifiedUser);
-        localStorage.setItem('user', JSON.stringify(verifiedUser));
       } catch (meError: any) {
-        // Hard reset auth state if verification fails
         setUser(null);
         setToken(null);
         localStorage.removeItem('token');

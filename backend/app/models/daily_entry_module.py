@@ -2,7 +2,7 @@
 Daily Entry Module Models
 Branch-scoped daily patient entries and expenses
 """
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Float, DECIMAL, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Float, DECIMAL, Enum, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -32,6 +32,7 @@ class DailyEntryModule(Base):
     
     # Patient Information
     patient_name = Column(String(200), nullable=False, index=True)
+    age = Column(String(20), nullable=True)
     mobile = Column(String(15), nullable=False)
     address = Column(Text, nullable=False)
     
@@ -52,10 +53,14 @@ class DailyEntryModule(Base):
     
     # Payment Information
     payment_method = Column(String(20), nullable=False)  # Cash, UPI, QR, Card
+    upi_id = Column(String(100), nullable=True, index=True)
     is_paid = Column(Boolean, default=True)
+    paid_at = Column(DateTime, nullable=True)
+    bill_pdf_url = Column(String(500), nullable=True)
     
     # Additional Information
     remarks = Column(Text, nullable=True)
+    consumed_inventory_items = Column(JSON, nullable=True)
     
     # Audit fields
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)

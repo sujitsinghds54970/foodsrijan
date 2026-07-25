@@ -108,9 +108,9 @@ export default function Login({ onSwitchToRegistration }: LoginProps) {
             </button>
 
             <div className="rounded-2xl p-4 bg-slate-900 text-slate-200 text-sm">
-              <p className="text-xs uppercase tracking-widest text-cyan-300 mb-2">Login Credentials</p>
-              <p className="font-mono text-xs">Username: <span className="text-white">sujiterp</span></p>
-              <p className="font-mono text-xs mt-1">Password: <span className="text-white">#sujiterp54970</span></p>
+              <p className="text-xs uppercase tracking-widest text-cyan-300 mb-2">Login Help</p>
+              <p className="text-xs">Use your assigned username or email and password.</p>
+              <p className="text-xs mt-1">If login fails, verify credentials with your administrator.</p>
             </div>
 
             <div className="text-sm text-slate-600 text-center">

@@ -11,23 +11,236 @@ Payment gateway integration endpoints:
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
+from decimal import Decimal, InvalidOperation
 import uuid
 import hashlib
 import json
 import os
+from pathlib import Path
+
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
 from app.database import get_db
 from app.models.payment import (
     Payment, PaymentStatus, PaymentMode, PaymentGateway, PaymentLink, 
     Invoice, InvoiceItem, PaymentSettings
 )
+from app.models.daily_entry_module import DailyEntryModule
 from app.services.sms_service import get_sms_service
 from app.services.whatsapp_service import get_whatsapp_service
 
 router = APIRouter()
+
+
+class SoundboxWebhookPayload(BaseModel):
+    transaction_id: Optional[str] = None
+    amount: float
+    status: str
+    upi_id: Optional[str] = None
+    provider: Optional[str] = None
+    raw: Optional[dict] = None
+
+
+def _ensure_paid_at_column(db: Session) -> None:
+    # Keep webhook self-healing for existing SQLite databases where this column
+    # may not exist yet (no migration executed yet).
+    try:
+        cols = db.execute(text("PRAGMA table_info(daily_entries_module)")).fetchall()
+        col_names = {row[1] for row in cols}
+        if "paid_at" not in col_names:
+            db.execute(text("ALTER TABLE daily_entries_module ADD COLUMN paid_at DATETIME"))
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"[DIGITAL WEBHOOK] Failed ensuring paid_at column: {exc}")
+
+
+def _ensure_bill_pdf_url_column(db: Session) -> None:
+    # Add bill_pdf_url lazily for older databases until migration is applied.
+    try:
+        cols = db.execute(text("PRAGMA table_info(daily_entries_module)")).fetchall()
+        col_names = {row[1] for row in cols}
+        if "bill_pdf_url" not in col_names:
+            db.execute(text("ALTER TABLE daily_entries_module ADD COLUMN bill_pdf_url VARCHAR(500)"))
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"[DIGITAL WEBHOOK] Failed ensuring bill_pdf_url column: {exc}")
+
+
+def _ensure_daily_entry_upi_id_column(db: Session) -> None:
+    # Ensure webhook can match directly by daily entry upi_id.
+    try:
+        cols = db.execute(text("PRAGMA table_info(daily_entries_module)")).fetchall()
+        col_names = {row[1] for row in cols}
+        if "upi_id" not in col_names:
+            db.execute(text("ALTER TABLE daily_entries_module ADD COLUMN upi_id VARCHAR(100)"))
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"[DIGITAL WEBHOOK] Failed ensuring upi_id column: {exc}")
+
+
+def _amount_to_match_string(value: object) -> str:
+    # Normalize numeric-looking values to a stable string for flexible matching.
+    if value is None:
+        return ""
+    raw = str(value).strip()
+    if raw == "":
+        return ""
+    try:
+        dec = Decimal(raw)
+        normalized = format(dec.normalize(), "f")
+        return normalized.rstrip("0").rstrip(".") if "." in normalized else normalized
+    except (InvalidOperation, ValueError):
+        return raw
+
+
+AUTO_BILL_DIR = Path("uploads/auto_bills")
+AUTO_BILL_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _generate_auto_bill_pdf(entry: DailyEntryModule) -> str:
+    # Backend-side auto-billing equivalent for the old hardware soundbox flow.
+    # This saves a minimal bill PDF to server storage when payment gets confirmed.
+    filename = f"bill_{entry.auto_patient_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.pdf"
+    filepath = AUTO_BILL_DIR / filename
+
+    pdf = canvas.Canvas(str(filepath), pagesize=A4)
+    _, height = A4
+    y = height - 50
+
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(40, y, "Payment Bill")
+    y -= 30
+
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(40, y, f"Patient ID: {entry.auto_patient_id}")
+    y -= 20
+    pdf.drawString(40, y, f"Patient Name: {entry.patient_name}")
+    y -= 20
+    pdf.drawString(40, y, f"Test: {entry.test_name}")
+    y -= 20
+    pdf.drawString(40, y, f"Payment Method: {entry.payment_method}")
+    y -= 20
+    pdf.drawString(40, y, f"Amount: INR {entry.total_amount}")
+    y -= 20
+    pdf.drawString(40, y, f"Paid At: {datetime.utcnow().isoformat()}")
+    y -= 20
+    pdf.drawString(40, y, f"Entry Date: {entry.auto_entry_datetime.isoformat() if entry.auto_entry_datetime else ''}")
+
+    pdf.showPage()
+    pdf.save()
+
+    return f"/uploads/auto_bills/{filename}"
+
+
+@router.post("/webhook")
+async def soundbox_payment_webhook(payload: SoundboxWebhookPayload, db: Session = Depends(get_db)):
+    """
+    Public webhook endpoint for digital online/QR payment confirmations.
+
+    Providers (HDFC/SBI/Paytm/etc.) usually call this URL server-to-server with
+    payment confirmation payloads, so Bearer auth is intentionally not required.
+
+    Expected minimum fields:
+      - transaction_id: provider transaction reference (optional)
+      - amount: paid amount
+      - status: SUCCESS/FAILED/PENDING (SUCCESS marks paid)
+      - upi_id: merchant UPI ID that received payment (optional in matching)
+    """
+    _ensure_paid_at_column(db)
+    _ensure_bill_pdf_url_column(db)
+    _ensure_daily_entry_upi_id_column(db)
+
+    payload_dict = payload.dict()
+    print(
+        f"Searching for: amount={payload_dict.get('amount')} (type: {type(payload_dict.get('amount'))}), "
+        f"upi_id={payload_dict.get('upi_id')}"
+    )
+
+    normalized_status = (payload.status or "").strip().upper()
+    if normalized_status != "SUCCESS":
+        print(f"[DIGITAL WEBHOOK] Non-success status received: {payload.status}")
+        return {"message": "Webhook received (non-success status)", "updated": False}
+
+    today = datetime.now()
+    today_start = datetime.combine(today.date(), time.min)
+    today_end = datetime.combine(today.date(), time.max)
+
+    base_query = db.query(DailyEntryModule).filter(
+        DailyEntryModule.auto_entry_datetime >= today_start,
+        DailyEntryModule.auto_entry_datetime <= today_end,
+        DailyEntryModule.payment_method == 'UPI',
+        DailyEntryModule.is_paid == False,
+    )
+
+    if payload.upi_id:
+        base_query = base_query.filter(DailyEntryModule.upi_id == payload.upi_id)
+
+    entries = base_query.order_by(DailyEntryModule.created_at.asc(), DailyEntryModule.id.asc()).all()
+    print(f"Found entries for today: {len(entries)}")
+
+    payload_amount_str = _amount_to_match_string(payload.amount)
+    payload_upi = (payload.upi_id or "").strip()
+
+    matched_candidates = []
+    for e in entries:
+        print(f"Candidate: id={e.id}, total={e.total_amount}, upi={e.upi_id}")
+        entry_amount_str = _amount_to_match_string(e.total_amount)
+        entry_upi = (e.upi_id or "").strip()
+
+        upi_match = (not payload_upi) or (entry_upi == payload_upi)
+        amount_match = entry_amount_str == payload_amount_str
+
+        if upi_match and amount_match and (e.is_paid is False):
+            matched_candidates.append(e)
+
+    matched_entry = sorted(
+        matched_candidates,
+        key=lambda row: (row.created_at or datetime.max, row.id)
+    )[0] if matched_candidates else None
+
+    if not matched_entry:
+        print(
+            "[DIGITAL WEBHOOK] No matching entry found for manual verification: "
+            f"transaction_id={payload.transaction_id}, amount={payload.amount}, upi_id={payload.upi_id}"
+        )
+        return {"message": "Payment webhook received (no matching entry found)", "updated": False}
+
+    try:
+        matched_entry.is_paid = True
+        matched_entry.status = 'Completed'
+
+        auto_bill_path = _generate_auto_bill_pdf(matched_entry)
+        previous_remarks = (matched_entry.remarks or "").strip()
+        webhook_note = f"digital_webhook_confirmed txn={payload.transaction_id or 'N/A'} bill={auto_bill_path}"
+        matched_entry.remarks = f"{previous_remarks} | {webhook_note}".strip(" |")
+
+        db.execute(
+            text("UPDATE daily_entries_module SET paid_at = :paid_at, bill_pdf_url = :bill_pdf_url WHERE id = :entry_id"),
+            {
+                "paid_at": datetime.utcnow().isoformat(),
+                "bill_pdf_url": auto_bill_path,
+                "entry_id": matched_entry.id,
+            },
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Webhook processing failed: {exc}")
+
+    return {
+        "message": "Payment confirmed and auto-bill generated",
+        "updated": True,
+        "entry_id": matched_entry.id,
+        "transaction_id": payload.transaction_id,
+    }
 
 
 # Pydantic Schemas

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -17,6 +17,7 @@ import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import 'react-datepicker/dist/react-datepicker.css'
 import { useAuth } from '../../contexts/AuthContext'
+import { useNavigate } from 'react-router-dom'
 
 interface DailyEntry {
   id: number
@@ -24,6 +25,7 @@ interface DailyEntry {
   auto_patient_id: string
   auto_entry_datetime: string
   patient_name: string
+  age?: string | number | null
   mobile: string
   address: string
   referred_doctor?: string
@@ -63,6 +65,7 @@ interface BranchInfo {
   phone?: string
   email?: string
   address?: string
+  logo_url?: string | null
 }
 
 type ExportPeriod = 'daily' | 'monthly' | 'yearly'
@@ -70,9 +73,59 @@ type ExportFormat = 'csv' | 'pdf'
 
 const columnHelper = createColumnHelper<DailyEntry>()
 
+interface EditableCellInputProps {
+  initialValue: string | number
+  onCommit: (value: string) => void
+  type?: 'text' | 'number'
+  className?: string
+}
+
+function EditableCellInput({ initialValue, onCommit, type = 'text', className }: EditableCellInputProps) {
+  const [localValue, setLocalValue] = useState(String(initialValue ?? ''))
+  const inputRef = useRef<HTMLInputElement>(null)
+  const isFocusedRef = useRef(false)
+
+  useEffect(() => {
+    if (!isFocusedRef.current) {
+      setLocalValue(String(initialValue ?? ''))
+    }
+  }, [initialValue])
+
+  const commitIfChanged = useCallback(() => {
+    if (String(initialValue ?? '') !== localValue) {
+      onCommit(localValue)
+    }
+  }, [initialValue, localValue, onCommit])
+
+  return (
+    <input
+      ref={inputRef}
+      type={type}
+      value={localValue}
+      onChange={e => setLocalValue(e.target.value)}
+      onFocus={() => {
+        isFocusedRef.current = true
+      }}
+      onBlur={() => {
+        isFocusedRef.current = false
+        commitIfChanged()
+      }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          e.currentTarget.blur()
+        }
+      }}
+      className={className || 'w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500'}
+    />
+  )
+}
+
 export default function DailyOperations() {
   const { user, token } = useAuth()
+  const navigate = useNavigate()
   const [entries, setEntries] = useState<DailyEntry[]>([])
+  const [isAdding, setIsAdding] = useState(false)
   const [stats, setStats] = useState<DailyStats | null>(null)
   const [loading, setLoading] = useState(false)
   const [sorting, setSorting] = useState<SortingState>([])
@@ -92,6 +145,9 @@ export default function DailyOperations() {
   const [uploadingEntryId, setUploadingEntryId] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const restoreScrollYRef = useRef<number | null>(null)
+  const restoreContainerScrollTopRef = useRef<number | null>(null)
+  const autoRefreshInFlightRef = useRef(false)
 
   const [deleteConfirmEntry, setDeleteConfirmEntry] = useState<DailyEntry | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -101,48 +157,132 @@ export default function DailyOperations() {
 
   const [upiQREntry, setUpiQREntry] = useState<DailyEntry | null>(null)
   const [branchBankDetails, setBranchBankDetails] = useState<any>(null)
+  const [upiQRCodeValue, setUpiQRCodeValue] = useState('')
+  const [upiAvailabilityByBranch, setUpiAvailabilityByBranch] = useState<Record<number, boolean>>({})
+  const upiAvailabilityRef = useRef<Record<number, boolean>>({})
+  const [upiLookupLoading, setUpiLookupLoading] = useState(false)
   const upiFetchInProgressRef = useRef(false)
-  const upiWarningLockRef = useRef(false)
+  const upiWarningShownRef = useRef(false)
 
   const [billEntry, setBillEntry] = useState<DailyEntry | null>(null)
   const [branchDetailsById, setBranchDetailsById] = useState<Record<number, BranchInfo>>({})
 
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [openActionsMenuId, setOpenActionsMenuId] = useState<number | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(40)
 
   const [isExportModalOpen, setIsExportModalOpen] = useState(false)
   const [exportPeriod, setExportPeriod] = useState<ExportPeriod>('daily')
   const [exportFormat, setExportFormat] = useState<ExportFormat>('csv')
   const [isExporting, setIsExporting] = useState(false)
 
+  const filtersRef = useRef({
+    patientNameFilter: '',
+    referredDoctorFilter: '',
+    testNameFilter: '',
+    startDate: null as Date | null,
+    endDate: null as Date | null,
+  })
+
   const API_BASE = (process as any).env.REACT_APP_API_BASE_URL ||
     ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-      ? 'http://localhost:8000'
+      ? 'http://127.0.0.1:8000'
       : window.location.origin)
 
-  const requestConfig = {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  }
+  const normalizedRole = (user?.role || '').trim().toLowerCase()
+  const isStaff = normalizedRole === 'staff'
+  const isDirector = normalizedRole === 'branch_director'
+  const isAdminOrDirector = normalizedRole === 'super_admin' || normalizedRole === 'branch_admin' || isDirector
 
-  const parseNumber = (value: unknown, fallback = 0) => {
+  const requestConfig = useMemo(() => ({
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  }), [token])
+
+  useEffect(() => {
+    if (!user) return
+    if (isStaff && !Boolean((user as any)?.can_access_daily_ops)) {
+      navigate('/staff/profile', { replace: true })
+    }
+  }, [isStaff, navigate, user])
+
+  const parseNumber = useCallback((value: unknown, fallback = 0) => {
     const n = Number(value)
     return Number.isFinite(n) ? n : fallback
-  }
+  }, [])
 
-  const calculateTotal = (entry: Partial<DailyEntry>) => {
+  const resolveInvoiceMediaUrl = useCallback((path?: string | null) => {
+    if (!path) return ''
+    const raw = path.trim()
+    if (!raw) return ''
+
+    if (raw.startsWith('data:') || raw.startsWith('blob:')) {
+      return raw
+    }
+
+    if (/^https?:\/\//i.test(raw)) {
+      return raw
+    }
+
+    if (raw.startsWith('/')) {
+      return `${API_BASE}${raw}`
+    }
+
+    return `${API_BASE}/api/files/${raw}`
+  }, [API_BASE])
+
+  const getErrorMessage = useCallback((err: unknown, fallback: string) => {
+    const errorObj = err as any
+    const detail = errorObj?.response?.data?.detail ?? errorObj?.response?.data?.message ?? errorObj?.message
+
+    if (Array.isArray(detail)) {
+      const combined = detail
+        .map((item: any) => {
+          if (typeof item === 'string') return item
+          if (item && typeof item.msg === 'string') return item.msg
+          try {
+            return JSON.stringify(item)
+          } catch {
+            return ''
+          }
+        })
+        .filter(Boolean)
+        .join(' | ')
+      return combined || fallback
+    }
+
+    if (detail && typeof detail === 'object') {
+      if (typeof detail.msg === 'string') return detail.msg
+      try {
+        return JSON.stringify(detail)
+      } catch {
+        return fallback
+      }
+    }
+
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail
+    }
+
+    return fallback
+  }, [])
+
+  const calculateTotal = useCallback((entry: Partial<DailyEntry>) => {
     const fee = parseNumber(entry.fee_amount, 0)
     const tax = parseNumber(entry.tax_percent, 0)
     return fee + (fee * tax) / 100
-  }
+  }, [parseNumber])
 
   const showSingleUPIWarning = () => {
-    if (upiWarningLockRef.current) return
-    upiWarningLockRef.current = true
-    toast.error('UPI ID not configured. Please add UPI ID in Branch Settings.', { id: 'upi-config-warning' })
-    window.setTimeout(() => {
-      upiWarningLockRef.current = false
-    }, 2000)
+    if (upiWarningShownRef.current) return
+    upiWarningShownRef.current = true
+    toast.error('UPI ID not configured. Please contact admin.', { id: 'upi-config-warning' })
   }
+
+  const hasValidUPI = useCallback((branchId?: number | null) => {
+    if (!branchId) return false
+    return !!upiAvailabilityByBranch[branchId]
+  }, [upiAvailabilityByBranch])
 
   const fetchBranchDetails = useCallback(async (branchId: number): Promise<BranchInfo | null> => {
     if (!branchId) return null
@@ -156,33 +296,91 @@ export default function DailyOperations() {
         address: res.data.address,
         phone: res.data.phone,
         email: res.data.email,
+        logo_url: res.data.logo_url || res.data.branch_logo_url || null,
       }
       setBranchDetailsById(prev => ({ ...prev, [branchId]: branchInfo }))
       return branchInfo
     } catch {
       return null
     }
-  }, [API_BASE, branchDetailsById, token])
+  }, [API_BASE, branchDetailsById, requestConfig])
 
-  const fetchEntries = useCallback(async () => {
+  useEffect(() => {
+    filtersRef.current = {
+      patientNameFilter,
+      referredDoctorFilter,
+      testNameFilter,
+      startDate,
+      endDate,
+    }
+  }, [patientNameFilter, referredDoctorFilter, testNameFilter, startDate, endDate])
+
+  const fetchEntries = useCallback(async (options?: { background?: boolean; preserveScroll?: boolean }) => {
     if (!token) return
-    setLoading(true)
+    const isBackground = !!options?.background
+    if (!isBackground) {
+      setLoading(true)
+    }
+
+    if (options?.preserveScroll) {
+      restoreScrollYRef.current = window.scrollY
+      restoreContainerScrollTopRef.current = scrollContainerRef.current?.scrollTop ?? null
+    }
+
     try {
       const params = new URLSearchParams()
-      if (patientNameFilter) params.append('patient_name', patientNameFilter)
-      if (referredDoctorFilter) params.append('referred_doctor', referredDoctorFilter)
-      if (testNameFilter) params.append('test_name', testNameFilter)
-      if (startDate) params.append('start_date', startDate.toISOString().split('T')[0])
-      if (endDate) params.append('end_date', endDate.toISOString().split('T')[0])
+      const activeFilters = filtersRef.current
+      if (activeFilters.patientNameFilter) params.append('patient_name', activeFilters.patientNameFilter)
+      if (activeFilters.referredDoctorFilter) params.append('referred_doctor', activeFilters.referredDoctorFilter)
+      if (activeFilters.testNameFilter) params.append('test_name', activeFilters.testNameFilter)
+      if (activeFilters.startDate) params.append('start_date', activeFilters.startDate.toISOString().split('T')[0])
+      if (activeFilters.endDate) params.append('end_date', activeFilters.endDate.toISOString().split('T')[0])
 
       const res = await axios.get(`${API_BASE}/api/daily-entries?${params.toString()}`, requestConfig)
-      setEntries(res.data || [])
+      const data = Array.isArray(res.data) ? res.data : []
+      const sortedData = [...data].sort((a, b) => {
+        const timeA = new Date(a.created_at).getTime()
+        const timeB = new Date(b.created_at).getTime()
+        return timeA - timeB
+      })
+      setEntries(sortedData)
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to fetch entries')
+      const statusCode = Number(err?.response?.status || 0)
+      const detail = String(err?.response?.data?.detail || '').toLowerCase()
+      const needsGuardRedirect = isStaff && (statusCode === 403 || detail.includes('disabled by director') || detail.includes('insufficient permissions'))
+      if (needsGuardRedirect) {
+        navigate('/staff/profile', { replace: true })
+        return
+      }
+      toast.error(getErrorMessage(err, 'Failed to fetch entries'))
     } finally {
-      setLoading(false)
+      if (!isBackground) {
+        setLoading(false)
+      }
     }
-  }, [token, patientNameFilter, referredDoctorFilter, testNameFilter, startDate, endDate, API_BASE])
+  }, [token, API_BASE, requestConfig, getErrorMessage, isStaff, navigate])
+
+  useLayoutEffect(() => {
+    if (restoreScrollYRef.current === null && restoreContainerScrollTopRef.current === null) return
+
+    const nextWindowY = restoreScrollYRef.current
+    const nextContainerTop = restoreContainerScrollTopRef.current
+
+    const timeoutId = window.setTimeout(() => {
+      if (nextWindowY !== null) {
+        window.scrollTo(0, nextWindowY)
+      }
+      if (nextContainerTop !== null && scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = nextContainerTop
+      }
+      restoreScrollYRef.current = null
+      restoreContainerScrollTopRef.current = null
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [entries])
 
   const fetchStats = useCallback(async () => {
     if (!token) return
@@ -192,12 +390,81 @@ export default function DailyOperations() {
     } catch {
       // Keep dashboard resilient even if stats API fails.
     }
-  }, [token, API_BASE])
+  }, [token, API_BASE, requestConfig])
 
   useEffect(() => {
+    if (!token) return
     fetchEntries()
     fetchStats()
-  }, [fetchEntries, fetchStats])
+  }, [token, fetchEntries, fetchStats])
+
+  useEffect(() => {
+    if (!token) return
+
+    const intervalId = window.setInterval(() => {
+      const activeElement = document.activeElement as HTMLElement | null
+      const isEditingInsideTable = !!(activeElement && scrollContainerRef.current?.contains(activeElement))
+      if (isEditingInsideTable) return
+      if (autoRefreshInFlightRef.current) return
+      autoRefreshInFlightRef.current = true
+      void fetchEntries({ background: true, preserveScroll: true }).finally(() => {
+        autoRefreshInFlightRef.current = false
+      })
+    }, 4000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [token, fetchEntries])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [patientNameFilter, referredDoctorFilter, testNameFilter, startDate, endDate])
+
+  useEffect(() => {
+    upiAvailabilityRef.current = upiAvailabilityByBranch
+  }, [upiAvailabilityByBranch])
+
+  useEffect(() => {
+    if (!token || entries.length === 0) return
+
+    const uniqueBranchIds = Array.from(new Set(entries.map(entry => entry.branch_id).filter(Boolean)))
+    const branchIdsToFetch = uniqueBranchIds.filter(branchId => upiAvailabilityRef.current[branchId] === undefined)
+
+    if (branchIdsToFetch.length === 0) return
+
+    let cancelled = false
+
+    const fetchUPIAvailability = async () => {
+      const checks = await Promise.all(
+        branchIdsToFetch.map(async (branchId) => {
+          try {
+            const res = await axios.get(`${API_BASE}/api/branches/${branchId}/bank-details`, requestConfig)
+            const upiId = String(res.data?.upi_id || '').trim()
+            return { branchId, hasUpi: upiId.length > 0 }
+          } catch {
+            return { branchId, hasUpi: false }
+          }
+        })
+      )
+
+      if (cancelled) return
+
+      setUpiAvailabilityByBranch(prev => {
+        const next = { ...prev }
+        checks.forEach(({ branchId, hasUpi }) => {
+          next[branchId] = hasUpi
+        })
+        return next
+      })
+    }
+
+    fetchUPIAvailability()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token, entries, API_BASE, requestConfig])
 
   const updateEntryField = useCallback(async (
     rowId: number,
@@ -208,9 +475,11 @@ export default function DailyOperations() {
     const originalEntry = entries.find(e => e.id === rowId)
     if (!originalEntry) return
 
-    const normalizedValue = field === 'fee_amount' || field === 'tax_percent'
-      ? parseNumber(value, 0)
-      : value
+    const normalizedValue = field === 'age'
+      ? (value === '' ? null : String(value))
+      : field === 'fee_amount' || field === 'tax_percent'
+        ? parseNumber(value, 0)
+        : value
 
     const optimisticEntries = entries.map(entry => {
       if (entry.id !== rowId) return entry
@@ -236,61 +505,126 @@ export default function DailyOperations() {
       setLastSaved(new Date())
       fetchStats()
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to save entry', { id: `entry-save-${rowId}` })
+      toast.error(getErrorMessage(err, 'Failed to save entry'), { id: `entry-save-${rowId}` })
       fetchEntries()
     }
-  }, [entries, API_BASE, token])
+  }, [entries, API_BASE, requestConfig, calculateTotal, fetchEntries, fetchStats, parseNumber, getErrorMessage])
 
-  const showUPIQR = useCallback(async (entry: DailyEntry) => {
+  const handleUPIQR = useCallback(async (entry: DailyEntry, options?: { manual?: boolean }) => {
+    const isManualAction = !!options?.manual
+    if (upiLookupLoading) return
     if (upiFetchInProgressRef.current) return
+    setUpiLookupLoading(true)
     upiFetchInProgressRef.current = true
 
     try {
       const res = await axios.get(`${API_BASE}/api/branches/${entry.branch_id}/bank-details`, requestConfig)
-      if (!res.data?.upi_id) {
-        showSingleUPIWarning()
+      const details = res.data || {}
+      const upiId = String(details.upi_id || '').trim()
+
+      if (!upiId) {
+        if (isManualAction) showSingleUPIWarning()
         return
       }
-      await fetchBranchDetails(entry.branch_id)
-      setBranchBankDetails(res.data)
+
+      const branchInfo = await fetchBranchDetails(entry.branch_id)
+      const branchName = branchInfo?.name || 'Branch'
+      const amount = parseNumber(entry.total_amount, calculateTotal(entry)).toFixed(2)
+      const deepLink = `upi://pay?pa=${upiId}&pn=${branchName}&am=${amount}&cu=INR`
+
+      setUpiQRCodeValue(deepLink)
+      setBranchBankDetails({ ...details, branch_name: branchName })
       setUpiQREntry(entry)
     } catch {
-      showSingleUPIWarning()
+      if (isManualAction) showSingleUPIWarning()
       return
     } finally {
+      setUpiLookupLoading(false)
       upiFetchInProgressRef.current = false
     }
-  }, [API_BASE, token, fetchBranchDetails])
+  }, [API_BASE, requestConfig, fetchBranchDetails, upiLookupLoading, calculateTotal, parseNumber])
 
-  const handlePaymentMethodChange = async (entry: DailyEntry, method: string) => {
-    await updateEntryField(entry.id, 'payment_method', method)
-    if (method === 'UPI' || method === 'QR') {
-      showUPIQR({ ...entry, payment_method: method })
+  const handlePaymentMethodChange = useCallback(async (entry: DailyEntry, method: string) => {
+    if (method === 'UPI' && !hasValidUPI(entry.branch_id)) {
+      return
     }
-  }
+    await updateEntryField(entry.id, 'payment_method', method)
+  }, [hasValidUPI, updateEntryField])
 
-  const addNewEntry = async () => {
+  const handleAddEntry = async () => {
+    if (isAdding) return
+    setIsAdding(true)
     try {
       await axios.post(
         `${API_BASE}/api/daily-entries`,
         {
           patient_name: 'New Patient',
+          age: null,
           mobile: '0000000000',
           address: 'Address',
           test_name: 'Test Name',
           fee_amount: 100,
           tax_percent: 0,
-          payment_method: 'Cash',
-          is_paid: true,
+          payment_method: 'Hold',
+          is_paid: false,
           auto_entry_datetime: new Date().toLocaleString(),
         },
         requestConfig
       )
       toast.success('New entry added')
-      fetchEntries()
-      fetchStats()
+      restoreScrollYRef.current = window.scrollY
+      restoreContainerScrollTopRef.current = scrollContainerRef.current?.scrollTop ?? null
+      void fetchEntries({ preserveScroll: true })
+      void fetchStats()
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to add entry')
+      toast.error(getErrorMessage(err, 'Failed to add entry'))
+    } finally {
+      setIsAdding(false)
+    }
+  }
+
+  const scrollTableLeft = () => {
+    scrollContainerRef.current?.scrollBy({ left: -200, behavior: 'smooth' })
+  }
+
+  const scrollTableRight = () => {
+    scrollContainerRef.current?.scrollBy({ left: 200, behavior: 'smooth' })
+  }
+
+  const scrollToTop = () => {
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const scrollToBottom = () => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+  }
+
+  const handleTableKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+
+    const activeElement = document.activeElement as HTMLElement | null
+    if (!activeElement) return
+
+    const currentCell = activeElement.closest('td[data-row-index][data-col-index]') as HTMLTableCellElement | null
+    if (!currentCell) return
+
+    const rowIndex = Number(currentCell.dataset.rowIndex)
+    const colIndex = Number(currentCell.dataset.colIndex)
+    const nextRowIndex = event.key === 'ArrowUp' ? rowIndex - 1 : rowIndex + 1
+    if (nextRowIndex < 0) return
+
+    const selector = `td[data-row-index="${nextRowIndex}"][data-col-index="${colIndex}"]`
+    const nextCell = currentCell.closest('table')?.querySelector(selector) as HTMLTableCellElement | null
+    if (!nextCell) return
+
+    event.preventDefault()
+    const target = nextCell.querySelector('input, select, textarea, button, [tabindex]') as HTMLElement | null
+    if (target) {
+      target.focus()
+    } else {
+      nextCell.focus()
     }
   }
 
@@ -304,7 +638,7 @@ export default function DailyOperations() {
       fetchEntries()
       fetchStats()
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to delete entry')
+      toast.error(getErrorMessage(err, 'Failed to delete entry'))
     } finally {
       setIsDeleting(false)
     }
@@ -329,7 +663,7 @@ export default function DailyOperations() {
       fetchEntries()
       setUploadingEntryId(null)
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to upload report')
+      toast.error(getErrorMessage(err, 'Failed to upload report'))
     }
   }
 
@@ -349,7 +683,7 @@ export default function DailyOperations() {
       fetchEntries()
       setPdfViewerEntry(null)
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to delete PDF')
+      toast.error(getErrorMessage(err, 'Failed to delete PDF'))
     }
   }
 
@@ -392,7 +726,7 @@ export default function DailyOperations() {
       setExpenseForm({ expense_item: '', cost: '', description: '' })
       fetchStats()
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to add expense')
+      toast.error(getErrorMessage(err, 'Failed to add expense'))
     }
   }
 
@@ -404,29 +738,35 @@ export default function DailyOperations() {
     setEndDate(null)
   }
 
-  const scrollToTop = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+  const openBillModal = useCallback(async (entry: DailyEntry) => {
+    if (entry.is_paid) {
+      await fetchBranchDetails(entry.branch_id)
+      setBillEntry(entry)
+      return
     }
-  }
 
-  const scrollToBottom = () => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({ top: scrollContainerRef.current.scrollHeight, behavior: 'smooth' })
+    if (entry.payment_method === 'UPI') {
+      toast.error('UPI payment pending. Please wait for confirmation.')
+      return
     }
-  }
 
-  const openBillModal = async (entry: DailyEntry) => {
+    if (entry.payment_method === 'Cash') {
+      await updateEntryField(entry.id, 'is_paid', true, { silentSuccess: true })
+      await fetchBranchDetails(entry.branch_id)
+      setBillEntry({ ...entry, is_paid: true })
+      return
+    }
+
     await fetchBranchDetails(entry.branch_id)
     setBillEntry(entry)
-  }
+  }, [fetchBranchDetails, updateEntryField])
 
   const handlePrintBill = () => {
     window.print()
   }
 
   const handleDownloadBillPDF = async () => {
-    const billElement = document.getElementById('bill-invoice-content')
+    const billElement = document.getElementById('invoice-capture')
     if (!billElement) return
 
     try {
@@ -434,13 +774,14 @@ export default function DailyOperations() {
         scale: 2,
         useCORS: true,
         logging: false,
+        backgroundColor: '#ffffff',
       })
 
       const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF('p', 'mm', 'a4')
-      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdf = new jsPDF('p', 'mm', 'a5')
+      const pdfWidth = pdf.internal.pageSize.getWidth() - 10
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
+      pdf.addImage(imgData, 'PNG', 5, 5, pdfWidth, pdfHeight)
       pdf.save(`Invoice_${billEntry?.auto_patient_id || 'bill'}.pdf`)
       toast.success('Invoice downloaded successfully')
     } catch {
@@ -716,21 +1057,45 @@ export default function DailyOperations() {
     columnHelper.display({
       id: 'row_number',
       header: 'Sr.No',
-      size: 38,
-      minSize: 38,
-      cell: info => <span className="font-bold text-slate-600">{info.row.index + 1}</span>,
+      size: 40,
+      minSize: 40,
+      cell: info => <span className="font-bold text-slate-600">{(currentPage - 1) * pageSize + info.row.index + 1}</span>,
     }),
     columnHelper.accessor('auto_patient_id', {
       header: 'Patient ID',
+      size: 135,
+      minSize: 135,
+      cell: info => <span className="font-mono text-xs">{String(info.getValue() || '')}</span>,
+    }),
+    columnHelper.accessor('patient_name', {
+      header: 'Patient Name',
       size: 130,
       minSize: 130,
-      cell: info => <span className="font-mono text-xs">{info.getValue()}</span>,
+      cell: info => (
+        <EditableCellInput
+          initialValue={String(info.getValue() || '')}
+          onCommit={value => updateEntryField(info.row.original.id, 'patient_name', value)}
+        />
+      ),
+    }),
+    columnHelper.accessor('age', {
+      header: 'Age/Gender',
+      size: 80,
+      minSize: 80,
+      cell: info => (
+        <EditableCellInput
+          initialValue={info.getValue() ?? ''}
+          onCommit={value => updateEntryField(info.row.original.id, 'age', value)}
+          type="text"
+          className="w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500"
+        />
+      ),
     }),
     columnHelper.display({
       id: 'actions',
       header: 'Actions',
-      size: 48,
-      minSize: 48,
+      size: 50,
+      minSize: 50,
       cell: info => (
         <div className="relative">
           <button
@@ -784,7 +1149,7 @@ export default function DailyOperations() {
               <li>
                 <button
                   onClick={() => {
-                    showUPIQR(info.row.original)
+                    handleUPIQR(info.row.original, { manual: true })
                     setOpenActionsMenuId(null)
                   }}
                   className="w-full px-3 py-2 text-left text-xs hover:bg-slate-100"
@@ -819,55 +1184,36 @@ export default function DailyOperations() {
         </div>
       ),
     }),
-    columnHelper.accessor('patient_name', {
-      header: 'Patient Name',
-      size: 120,
-      minSize: 120,
-      cell: info => (
-        <input
-          type="text"
-          defaultValue={info.getValue()}
-          onBlur={e => updateEntryField(info.row.original.id, 'patient_name', e.target.value)}
-          className="w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500"
-        />
-      ),
-    }),
     columnHelper.accessor('mobile', {
       header: 'Mobile',
-      size: 105,
-      minSize: 105,
+      size: 100,
+      minSize: 100,
       cell: info => (
-        <input
-          type="text"
-          defaultValue={info.getValue()}
-          onBlur={e => updateEntryField(info.row.original.id, 'mobile', e.target.value)}
-          className="w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500"
+        <EditableCellInput
+          initialValue={String(info.getValue() || '')}
+          onCommit={value => updateEntryField(info.row.original.id, 'mobile', value)}
         />
       ),
     }),
     columnHelper.accessor('auto_entry_datetime', {
       header: 'Date & Time',
-      size: 130,
-      minSize: 130,
+      size: 135,
+      minSize: 135,
       cell: info => (
-        <input
-          type="text"
-          defaultValue={new Date(info.getValue()).toLocaleString()}
-          onBlur={e => updateEntryField(info.row.original.id, 'auto_entry_datetime', e.target.value)}
-          className="w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500"
+        <EditableCellInput
+          initialValue={new Date(info.getValue()).toLocaleString()}
+          onCommit={value => updateEntryField(info.row.original.id, 'auto_entry_datetime', value)}
         />
       ),
     }),
     columnHelper.accessor('address', {
       header: 'Address',
-      size: 130,
-      minSize: 130,
+      size: 100,
+      minSize: 100,
       cell: info => (
-        <input
-          type="text"
-          defaultValue={info.getValue()}
-          onBlur={e => updateEntryField(info.row.original.id, 'address', e.target.value)}
-          className="w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500"
+        <EditableCellInput
+          initialValue={String(info.getValue() || '')}
+          onCommit={value => updateEntryField(info.row.original.id, 'address', value)}
         />
       ),
     }),
@@ -876,62 +1222,57 @@ export default function DailyOperations() {
       size: 100,
       minSize: 100,
       cell: info => (
-        <input
-          type="text"
-          defaultValue={info.getValue() || ''}
-          onBlur={e => updateEntryField(info.row.original.id, 'referred_doctor', e.target.value)}
-          className="w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500"
+        <EditableCellInput
+          initialValue={String(info.getValue() || '')}
+          onCommit={value => updateEntryField(info.row.original.id, 'referred_doctor', value)}
         />
       ),
     }),
     columnHelper.accessor('test_name', {
       header: 'Test Name',
-      size: 110,
-      minSize: 110,
+      size: 100,
+      minSize: 100,
       cell: info => (
-        <input
-          type="text"
-          defaultValue={info.getValue()}
-          onBlur={e => updateEntryField(info.row.original.id, 'test_name', e.target.value)}
-          className="w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500"
+        <EditableCellInput
+          initialValue={String(info.getValue() || '')}
+          onCommit={value => updateEntryField(info.row.original.id, 'test_name', value)}
         />
       ),
     }),
     columnHelper.accessor('fee_amount', {
       header: 'Fee (INR)',
-      size: 75,
-      minSize: 75,
+      size: 65,
+      minSize: 65,
       cell: info => (
-        <input
+        <EditableCellInput
           type="number"
-          defaultValue={parseNumber(info.getValue())}
-          onBlur={e => updateEntryField(info.row.original.id, 'fee_amount', parseNumber(e.target.value, 0))}
-          className="w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500"
+          initialValue={parseNumber(info.getValue())}
+          onCommit={value => updateEntryField(info.row.original.id, 'fee_amount', parseNumber(value, 0))}
         />
       ),
     }),
     columnHelper.accessor('tax_percent', {
       header: 'Tax %',
-      size: 60,
-      minSize: 60,
+      size: 55,
+      minSize: 55,
       cell: info => (
-        <select
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          max="100"
           defaultValue={parseNumber(info.getValue(), 0)}
-          onChange={e => updateEntryField(info.row.original.id, 'tax_percent', parseNumber(e.target.value, 0))}
+          onBlur={e => updateEntryField(info.row.original.id, 'tax_percent', parseNumber(e.target.value, 0))}
           className="w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500"
-        >
-          <option value="0">0%</option>
-          <option value="5">5%</option>
-          <option value="12">12%</option>
-          <option value="18">18%</option>
-        </select>
+        />
       ),
     }),
     columnHelper.display({
       id: 'total_amount',
       header: 'Total (INR)',
-      size: 80,
-      minSize: 80,
+      size: 75,
+      minSize: 75,
+      maxSize: 75,
       meta: { editable: false },
       cell: info => {
         const row = info.row.original
@@ -941,66 +1282,104 @@ export default function DailyOperations() {
     }),
     columnHelper.accessor('payment_method', {
       header: 'Payment',
-      size: 130,
-      minSize: 130,
-      cell: info => (
-        <select
-          defaultValue={info.getValue()}
-          onChange={e => handlePaymentMethodChange(info.row.original, e.target.value)}
-          className="w-full min-w-[120px] px-1 py-1 border rounded focus:outline-none focus:border-blue-500"
-        >
-          <option value="Cash">Cash</option>
-          <option value="Card">Card</option>
-          <option value="UPI">UPI</option>
-          <option value="Online">Online</option>
-          <option value="QR">QR</option>
-        </select>
-      ),
+      size: 100,
+      minSize: 100,
+      maxSize: 100,
+      cell: info => {
+        const upiEnabled = hasValidUPI(info.row.original.branch_id)
+
+        return (
+          <div className="flex items-center">
+            <select
+              defaultValue={String(info.getValue() || 'Hold')}
+              onChange={e => handlePaymentMethodChange(info.row.original, e.target.value)}
+              className="w-full min-w-[90px] px-1 py-1 border rounded focus:outline-none focus:border-blue-500"
+            >
+              <option value="Hold">Hold</option>
+              <option value="Cash">Cash</option>
+              <option value="UPI" disabled={!upiEnabled}>UPI{!upiEnabled ? ' (Not configured)' : ''}</option>
+            </select>
+          </div>
+        )
+      },
     }),
     columnHelper.accessor('status', {
       header: 'Status',
       size: 85,
       minSize: 85,
       cell: info => {
-        const status = info.getValue()
-        const color = status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-        return <span className={`px-2 py-1 rounded-full text-xs font-bold ${color}`}>{status}</span>
+        const { payment_method, is_paid } = info.row.original
+        const isPaidState = (payment_method === 'Cash' || payment_method === 'UPI') && is_paid === true
+        const isUnpaidState = payment_method === 'Hold' && is_paid === false
+
+        if (isPaidState) {
+          return <span className="text-green-600 font-bold">Paid</span>
+        }
+
+        if (isUnpaidState) {
+          return <span className="text-red-600 font-bold">Unpaid</span>
+        }
+
+        return <span className="text-red-600 font-bold">Unpaid</span>
       },
     }),
   ], [
+    currentPage,
+    pageSize,
+    parseNumber,
     updateEntryField,
     handlePaymentMethodChange,
-    showUPIQR,
+    handleUPIQR,
+    hasValidUPI,
     openBillModal,
     openActionsMenuId,
   ])
 
+  const totalPages = Math.max(1, Math.ceil(entries.length / pageSize))
+  const paginatedEntries = useMemo(() => {
+    const start = (currentPage - 1) * pageSize
+    const end = currentPage * pageSize
+    return entries.slice(start, end)
+  }, [entries, currentPage, pageSize])
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages)
+    }
+  }, [currentPage, totalPages])
+
   const table = useReactTable({
-    data: entries,
+    data: paginatedEntries,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    meta: {
-      onCellValueChanged: updateEntryField,
-    },
   })
 
-  if (user?.role !== 'branch_admin' && user?.role !== 'super_admin') {
+  if (!isAdminOrDirector && !isStaff) {
     return (
       <div className="premium-card p-8">
         <h2 className="text-2xl font-black gradient-text">Daily Operations</h2>
-        <p className="text-slate-600 mt-3">Access restricted to Branch Admin and Super Admin only.</p>
+        <p className="text-slate-600 mt-3">Access restricted to authorized branch operations users only.</p>
       </div>
     )
   }
+
+  const canAddEntry = !isStaff
+  const canExport = !isStaff
+  const canManageExpenses = !isStaff
 
   const invoiceBranch = billEntry ? branchDetailsById[billEntry.branch_id] : undefined
   const invoiceSubtotal = billEntry ? parseNumber(billEntry.fee_amount, 0) : 0
   const invoiceTaxAmount = billEntry ? (invoiceSubtotal * parseNumber(billEntry.tax_percent, 0)) / 100 : 0
   const invoiceGrandTotal = invoiceSubtotal + invoiceTaxAmount
+  const invoiceDate = billEntry ? new Date(billEntry.auto_entry_datetime) : null
+  const invoiceDueDate = new Date()
+  invoiceDueDate.setDate(invoiceDueDate.getDate() + 7)
+  const invoiceNumber = billEntry ? `INV-${billEntry.auto_patient_id}` : 'INV-BILL'
+  const invoiceLogoUrl = resolveInvoiceMediaUrl(invoiceBranch?.logo_url)
 
   return (
     <div className="space-y-6">
@@ -1011,14 +1390,17 @@ export default function DailyOperations() {
             <p className="text-slate-600 mt-2">Manage daily patient entries, billing, payment, and exports</p>
           </div>
           <div className="flex gap-3">
+            {canAddEntry && (
+              <button
+                onClick={handleAddEntry}
+                disabled={isAdding}
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold hover:shadow-xl transition"
+              >
+                {isAdding ? 'Adding...' : 'Add New Entry'}
+              </button>
+            )}
             <button
-              onClick={addNewEntry}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold hover:shadow-xl transition"
-            >
-              Add New Entry
-            </button>
-            <button
-              onClick={fetchEntries}
+              onClick={() => { void fetchEntries() }}
               className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold hover:shadow-xl transition"
             >
               Refresh
@@ -1087,7 +1469,9 @@ export default function DailyOperations() {
         </div>
         <div className="flex gap-3 mt-4">
           <button
-            onClick={fetchEntries}
+            onClick={() => {
+              void fetchEntries()
+            }}
             className="px-6 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition"
           >
             Apply Filters
@@ -1101,76 +1485,139 @@ export default function DailyOperations() {
         </div>
       </div>
 
-      <div className="premium-card p-6">
-        <h3 className="text-xl font-black text-slate-900 mb-4">Export Data</h3>
-        <button
-          onClick={() => setIsExportModalOpen(true)}
-          className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-700 text-white font-bold hover:shadow-xl transition"
-        >
-          Open Export Data
-        </button>
-      </div>
+      {canExport && (
+        <div className="premium-card p-6">
+          <h3 className="text-xl font-black text-slate-900 mb-4">Export Data</h3>
+          <button
+            onClick={() => setIsExportModalOpen(true)}
+            className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-700 text-white font-bold hover:shadow-xl transition"
+          >
+            Open Export Data
+          </button>
+        </div>
+      )}
 
       <div className="premium-card p-6 relative">
         <h3 className="text-xl font-black text-slate-900 mb-4">Daily Entries ({entries.length} records)</h3>
-        <div ref={scrollContainerRef} className="w-full max-h-[600px] overflow-x-auto overflow-y-auto border rounded-lg relative">
-          <table className="w-full min-w-[1080px] border-collapse" style={{ minWidth: '1080px' }}>
-            <thead className="bg-slate-100 sticky top-0 z-10">
-              {table.getHeaderGroups().map(headerGroup => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map(header => (
-                    <th
-                      key={header.id}
-                      className="border border-slate-300 px-2 py-2 text-left text-xs font-bold text-slate-700 cursor-pointer hover:bg-slate-200"
-                      style={{ width: header.getSize(), minWidth: header.getSize() }}
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      {flexRender(header.column.columnDef.header, header.getContext())}
-                      {{ asc: ' ▲', desc: ' ▼' }[header.column.getIsSorted() as string] ?? null}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={table.getAllColumns().length} className="text-center py-8 text-slate-500">Loading entries...</td>
-                </tr>
-              ) : (
-                table.getRowModel().rows.map(row => (
-                  <tr key={row.id} className="hover:bg-slate-50">
-                    {row.getVisibleCells().map(cell => (
-                      <td
-                        key={cell.id}
-                        className="border border-slate-300 px-2 py-1 text-xs align-top"
-                        style={{ width: cell.column.getSize(), minWidth: cell.column.getSize() }}
+
+        <div className="relative">
+          <button
+            onClick={scrollTableLeft}
+            className="absolute left-2 top-1/2 -translate-y-1/2 z-20 bg-white shadow-lg p-2 rounded-full hover:bg-gray-100 border border-slate-200"
+            aria-label="Scroll table left"
+          >
+            ←
+          </button>
+
+          <div
+            ref={scrollContainerRef}
+            className="w-full max-h-[600px] overflow-x-auto overflow-y-auto border rounded-lg relative"
+            onKeyDown={handleTableKeyDown}
+          >
+            <table className="w-full min-w-[1080px] border-collapse" style={{ minWidth: '1080px' }}>
+              <thead className="bg-slate-100 sticky top-0 z-10">
+                {table.getHeaderGroups().map(headerGroup => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map(header => (
+                      <th
+                        key={header.id}
+                        className="border border-slate-300 px-2 py-2 text-left text-xs font-bold text-slate-700 cursor-pointer hover:bg-slate-200"
+                        style={{ width: header.getSize(), minWidth: header.getSize() }}
+                        onClick={header.column.getToggleSortingHandler()}
                       >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
+                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {{ asc: ' ▲', desc: ' ▼' }[header.column.getIsSorted() as string] ?? null}
+                      </th>
                     ))}
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ))}
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={table.getAllColumns().length} className="text-center py-8 text-slate-500">Loading entries...</td>
+                  </tr>
+                ) : (
+                  table.getRowModel().rows.map((row, rowIndex) => (
+                    <tr key={row.id} className="hover:bg-slate-50">
+                      {row.getVisibleCells().map((cell, colIndex) => (
+                        <td
+                          key={cell.id}
+                          data-row-index={rowIndex}
+                          data-col-index={colIndex}
+                          className="border border-slate-300 px-2 py-1 text-xs align-top"
+                          style={{ width: cell.column.getSize(), minWidth: cell.column.getSize() }}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
 
-          {entries.length > 10 && (
-            <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-20">
-              <button
-                onClick={scrollToTop}
-                className="p-3 bg-white text-slate-700 rounded-full shadow-lg hover:shadow-xl hover:bg-slate-50 transition border border-slate-200"
-              >
-                ↑
-              </button>
-              <button
-                onClick={scrollToBottom}
-                className="p-3 bg-white text-slate-700 rounded-full shadow-lg hover:shadow-xl hover:bg-slate-50 transition border border-slate-200"
-              >
-                ↓
-              </button>
-            </div>
-          )}
+            {entries.length > 10 && (
+              <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-20">
+                <button
+                  onClick={scrollToTop}
+                  className="p-3 bg-white text-slate-700 rounded-full shadow-lg hover:shadow-xl hover:bg-slate-50 transition border border-slate-200"
+                >
+                  ↑
+                </button>
+                <button
+                  onClick={scrollToBottom}
+                  className="p-3 bg-white text-slate-700 rounded-full shadow-lg hover:shadow-xl hover:bg-slate-50 transition border border-slate-200"
+                >
+                  ↓
+                </button>
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={scrollTableRight}
+            className="absolute right-2 top-1/2 -translate-y-1/2 z-20 bg-white shadow-lg p-2 rounded-full hover:bg-gray-100 border border-slate-200"
+            aria-label="Scroll table right"
+          >
+            →
+          </button>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-slate-700">
+            <span>Rows per page</span>
+            <select
+              value={pageSize}
+              onChange={e => {
+                setPageSize(Number(e.target.value))
+                setCurrentPage(1)
+              }}
+              className="px-2 py-1 border rounded"
+            >
+              <option value={40}>40</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 rounded border border-slate-300 text-slate-700 disabled:opacity-50"
+            >
+              {'<< Prev'}
+            </button>
+            <span className="text-sm font-semibold text-slate-700">Page {currentPage} of {totalPages}</span>
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage >= totalPages}
+              className="px-3 py-1 rounded border border-slate-300 text-slate-700 disabled:opacity-50"
+            >
+              {'Next >>'}
+            </button>
+          </div>
         </div>
 
         {lastSaved && (
@@ -1178,9 +1625,10 @@ export default function DailyOperations() {
         )}
       </div>
 
-      <div className="premium-card p-6">
-        <h3 className="text-xl font-black text-slate-900 mb-4">Add Daily Expense</h3>
-        <form onSubmit={addExpense} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {canManageExpenses && (
+        <div className="premium-card p-6">
+          <h3 className="text-xl font-black text-slate-900 mb-4">Add Daily Expense</h3>
+          <form onSubmit={addExpense} className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <input
             type="text"
             placeholder="Expense Item"
@@ -1211,8 +1659,9 @@ export default function DailyOperations() {
           >
             Add Expense
           </button>
-        </form>
-      </div>
+          </form>
+        </div>
+      )}
 
       <input
         ref={fileInputRef}
@@ -1255,13 +1704,13 @@ export default function DailyOperations() {
         </div>
       )}
 
-      {upiQREntry && branchBankDetails && (
+      {upiQREntry && branchBankDetails && upiQRCodeValue && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
             <h3 className="text-2xl font-black text-indigo-700 mb-4">UPI Payment QR</h3>
             <div className="flex justify-center mb-4 bg-white p-4 rounded-xl border">
               <QRCode
-                value={`upi://pay?pa=${branchBankDetails.upi_id}&pn=${branchBankDetails.account_holder_name || 'Diagnostic Center'}&am=${calculateTotal(upiQREntry).toFixed(2)}&cu=INR&tn=Payment for ${upiQREntry.test_name}`}
+                value={upiQRCodeValue}
                 size={240}
               />
             </div>
@@ -1269,12 +1718,14 @@ export default function DailyOperations() {
               <p><strong>Patient:</strong> {upiQREntry.patient_name}</p>
               <p><strong>Amount:</strong> INR {calculateTotal(upiQREntry).toFixed(2)}</p>
               <p><strong>Test:</strong> {upiQREntry.test_name}</p>
+              <p><strong>Branch:</strong> {branchBankDetails.branch_name || '-'}</p>
               <p><strong>UPI ID:</strong> {branchBankDetails.upi_id}</p>
             </div>
             <button
               onClick={() => {
                 setUpiQREntry(null)
                 setBranchBankDetails(null)
+                setUpiQRCodeValue('')
               }}
               className="w-full px-6 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition"
             >
@@ -1358,7 +1809,7 @@ export default function DailyOperations() {
         </div>
       )}
 
-      {isExportModalOpen && (
+      {canExport && isExportModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl">
             <h3 className="text-2xl font-black text-slate-900 mb-2">Export Data</h3>
@@ -1412,92 +1863,152 @@ export default function DailyOperations() {
 
       {billEntry && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-5xl w-full max-h-[90vh] overflow-auto shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
+          <style>{`
+            @page {
+              size: A5 portrait;
+              margin: 10mm;
+            }
+
+            @media print {
+              body * {
+                visibility: hidden;
+              }
+
+              #invoice-capture,
+              #invoice-capture * {
+                visibility: visible;
+              }
+
+              .bill-print-shell {
+                position: static !important;
+                inset: auto !important;
+                display: block !important;
+                background: #ffffff !important;
+                padding: 0 !important;
+              }
+
+              .bill-print-modal {
+                box-shadow: none !important;
+                max-height: none !important;
+                overflow: visible !important;
+                padding: 0 !important;
+                border-radius: 0 !important;
+              }
+
+              .bill-screen-heading,
+              .bill-print-actions {
+                display: none !important;
+              }
+
+              #invoice-capture {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 148mm !important;
+                max-width: 148mm !important;
+                margin: 0 !important;
+                padding: 8mm !important;
+                box-shadow: none !important;
+                border: none !important;
+              }
+            }
+          `}</style>
+          <div className="bill-print-modal bg-white rounded-3xl p-6 max-w-3xl w-full max-h-[90vh] overflow-auto shadow-2xl">
+            <div className="bill-screen-heading flex justify-between items-center mb-6">
               <h3 className="text-2xl font-black text-slate-900">Medical Invoice</h3>
               <button onClick={() => setBillEntry(null)} className="px-4 py-2 rounded-xl bg-slate-200 text-slate-700 font-bold hover:bg-slate-300">Close</button>
             </div>
 
-            <div id="bill-invoice-content" className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-              <div className="bg-gradient-to-r from-blue-700 to-blue-500 text-white p-8">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-xl bg-white/20 flex items-center justify-center text-xl font-black">+</div>
-                      <div>
-                        <h1 className="text-3xl font-black">{invoiceBranch?.name || 'Diagnostic Center'}</h1>
-                        <p className="text-blue-100 text-sm">Medical Invoice</p>
-                      </div>
+            <div className="bill-print-shell">
+              <div id="invoice-capture" className="w-full max-w-[600px] mx-auto bg-white p-6 text-slate-900 border border-slate-200 rounded-2xl shadow-sm">
+                <div className="border-b border-slate-200 pb-4">
+                  <div className="flex justify-between items-start w-full mb-6">
+                    <div className="text-left min-w-0">
+                      <p className="text-lg font-bold tracking-tight text-slate-900">{invoiceBranch?.name || 'Diagnostic Center'}</p>
+                      <p className="mt-2 text-xs leading-5 text-slate-600 whitespace-pre-line">{invoiceBranch?.address || 'Address not available'}</p>
+                      <p className="text-xs leading-5 text-slate-600">Contact: {invoiceBranch?.phone || 'Phone not available'}</p>
+                      <p className="text-xs leading-5 text-slate-600">Email: {invoiceBranch?.email || 'Email not available'}</p>
                     </div>
-                    <p className="text-sm text-blue-100 mt-4">{invoiceBranch?.address || 'Address not available'}</p>
-                    <p className="text-sm text-blue-100">{invoiceBranch?.phone || 'Phone not available'}</p>
-                    <p className="text-sm text-blue-100">{invoiceBranch?.email || 'Email not available'}</p>
+                    {invoiceLogoUrl ? (
+                      <img
+                        src={invoiceLogoUrl}
+                        alt={`${invoiceBranch?.name || 'Clinic'} logo`}
+                        className="w-16 h-16 rounded-full object-cover border border-slate-200"
+                      />
+                    ) : null}
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-blue-100">Invoice No</p>
-                    <p className="text-lg font-bold">INV-{billEntry.auto_patient_id}</p>
-                    <p className="text-sm text-blue-100 mt-2">Date</p>
-                    <p className="font-semibold">{new Date(billEntry.auto_entry_datetime).toLocaleDateString()}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <p className="text-xs font-bold uppercase text-slate-500 mb-2">Patient Info</p>
-                    <p className="font-semibold">{billEntry.patient_name}</p>
-                    <p className="text-sm text-slate-600">{billEntry.address}</p>
-                    <p className="text-sm text-slate-600">{billEntry.mobile}</p>
-                    <p className="text-sm text-slate-600">Patient ID: {billEntry.auto_patient_id}</p>
-                  </div>
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <p className="text-xs font-bold uppercase text-slate-500 mb-2">Invoice Info</p>
-                    <p className="text-sm text-slate-700">Date & Time: {new Date(billEntry.auto_entry_datetime).toLocaleString()}</p>
-                    <p className="text-sm text-slate-700">Payment Method: {billEntry.payment_method}</p>
-                    <p className="text-sm text-slate-700">Payment Status: <span className={billEntry.is_paid ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>{billEntry.is_paid ? 'PAID' : 'UNPAID'}</span></p>
+                  <div className="text-center">
+                    <h1 className="text-xl font-bold tracking-[0.24em] text-slate-900">MEDICAL INVOICE</h1>
                   </div>
                 </div>
 
-                <div className="overflow-hidden rounded-xl border border-slate-200">
-                  <table className="w-full border-collapse">
-                    <thead className="bg-blue-50 text-blue-800">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-bold">Test Name</th>
-                        <th className="px-4 py-3 text-left text-sm font-bold">Description</th>
-                        <th className="px-4 py-3 text-right text-sm font-bold">Price</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-t border-slate-200">
-                        <td className="px-4 py-3 text-sm font-semibold">{billEntry.test_name}</td>
-                        <td className="px-4 py-3 text-sm text-slate-600">Referred by {billEntry.referred_doctor || 'Self'} | Diagnostic service charge</td>
-                        <td className="px-4 py-3 text-sm text-right">INR {invoiceSubtotal.toFixed(2)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                <div className="flex justify-between items-start w-full my-4">
+                  {/* Left Column: Bill To */}
+                  <div className="text-left space-y-1">
+                    <h3 className="font-bold text-gray-800 text-lg">Bill To</h3>
+                    <p><strong>Patient Name:</strong> {billEntry.patient_name}</p>
+                    <p><strong>Mobile:</strong> {billEntry.mobile || '-'}</p>
+                    <p><strong>Address:</strong> {billEntry.address || '-'}</p>
+                    <p><strong>Patient ID:</strong> {billEntry.auto_patient_id}</p>
+                  </div>
+                  {/* Right Column: Invoice Details */}
+                  <div className="text-right space-y-1">
+                    <h3 className="font-bold text-gray-800 text-lg">Invoice Details</h3>
+                    <p><strong>Invoice #:</strong> {invoiceNumber}</p>
+                    <p><strong>Date:</strong> {invoiceDate ? invoiceDate.toLocaleDateString() : '-'}</p>
+                    <p><strong>Due Date:</strong> {invoiceDueDate.toLocaleDateString()}</p>
+                    <p><strong>Payment Method:</strong> {billEntry.payment_method || '-'}</p>
+                  </div>
                 </div>
 
-                <div className="mt-8 flex justify-end">
-                  <div className="w-full max-w-sm rounded-xl border border-slate-200 p-4 bg-slate-50">
-                    <div className="flex justify-between py-2 text-sm">
-                      <span className="text-slate-600">Subtotal</span>
-                      <span className="font-semibold">INR {invoiceSubtotal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between py-2 text-sm border-t border-slate-200">
-                      <span className="text-slate-600">Tax ({parseNumber(billEntry.tax_percent).toFixed(2)}%)</span>
-                      <span className="font-semibold">INR {invoiceTaxAmount.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between py-3 mt-2 rounded-lg px-3 bg-blue-600 text-white font-bold">
-                      <span>Grand Total</span>
-                      <span>INR {invoiceGrandTotal.toFixed(2)}</span>
-                    </div>
+                {/* Service Table */}
+                <table className="w-full border-collapse border border-gray-200 text-sm">
+                  <thead className="bg-gray-800 text-white">
+                    <tr>
+                      <th className="border p-2 text-left w-10">#</th>
+                      <th className="border p-2 text-left">Description</th>
+                      <th className="border p-2 text-center w-16">Qty</th>
+                      <th className="border p-2 text-right w-24">Unit Price</th>
+                      <th className="border p-2 text-right w-24">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-gray-200 bg-white">
+                      <td className="border p-2 text-center">1</td>
+                      <td className="border p-2">
+                        <strong>{billEntry.test_name}</strong><br />
+                        <span className="text-xs text-gray-500">Referring Doctor: {billEntry.referred_doctor || 'Self'}</span>
+                      </td>
+                      <td className="border p-2 text-center">1</td>
+                      <td className="border p-2 text-right">INR {invoiceSubtotal.toFixed(2)}</td>
+                      <td className="border p-2 text-right font-medium">INR {invoiceSubtotal.toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Summary Block (Right-Aligned) */}
+                <div className="mt-6 ml-auto w-64 space-y-2 text-right">
+                  <div className="flex justify-between border-b border-gray-300 pb-1 text-sm">
+                    <span>Subtotal</span>
+                    <span>INR {invoiceSubtotal.toFixed(2)}</span>
                   </div>
+                  <div className="flex justify-between border-b border-gray-300 pb-1 text-sm">
+                    <span>Tax ({parseNumber(billEntry.tax_percent).toFixed(2)}%)</span>
+                    <span>INR {invoiceTaxAmount.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-lg font-bold border-t-2 border-black pt-3 mt-1">
+                    <span>Total</span>
+                    <span>INR {invoiceGrandTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-200">
+                  <p className="text-[11px] leading-5 text-slate-500">Terms & Conditions: Payment is due in 7 days. Thank you for choosing us.</p>
                 </div>
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="bill-print-actions flex gap-3 mt-6">
               <button onClick={handlePrintBill} className="flex-1 px-6 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition">Print</button>
               <button onClick={handleDownloadBillPDF} className="flex-1 px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition">Download PDF</button>
               <button onClick={() => setBillEntry(null)} className="flex-1 px-6 py-3 rounded-xl bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 transition">Close</button>

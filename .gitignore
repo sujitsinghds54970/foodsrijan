@@ -73,6 +73,8 @@ env/
 *.db
 *.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
 vaidya_vihar.db
 
 # Environment

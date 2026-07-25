@@ -2,20 +2,21 @@
 Pydantic Schemas for Daily Entry Module
 """
 from pydantic import BaseModel, Field, validator
-from typing import Optional
+from typing import Any, List, Optional, Union
 from datetime import datetime
 from decimal import Decimal
 
 class DailyEntryBase(BaseModel):
     patient_name: str = Field(..., min_length=1, max_length=200)
+    age: Optional[Union[str, int]] = None
     mobile: str = Field(..., min_length=10, max_length=15)
     address: str = Field(..., min_length=1)
     referred_doctor: Optional[str] = Field(None, max_length=200)
     test_name: str = Field(..., min_length=1, max_length=500)
     fee_amount: Decimal = Field(..., gt=0)
     tax_percent: float = Field(0, ge=0, le=100)
-    payment_method: str = Field(..., pattern="^(Cash|UPI|QR|Card|Online)$")
-    is_paid: bool = True
+    payment_method: str = Field(..., pattern="^(Hold|Cash|UPI|QR|Card|Online)$")
+    is_paid: bool = False
     remarks: Optional[str] = None
 
     @validator('mobile')
@@ -26,8 +27,8 @@ class DailyEntryBase(BaseModel):
 
     @validator('tax_percent')
     def validate_tax(cls, v):
-        if v not in [0, 5, 12, 18]:
-            raise ValueError('Tax percent must be 0, 5, 12, or 18')
+        if v < 0 or v > 100:
+            raise ValueError('Tax percent must be between 0 and 100')
         return v
 
 
@@ -37,13 +38,14 @@ class DailyEntryCreate(DailyEntryBase):
 
 class DailyEntryUpdate(BaseModel):
     patient_name: Optional[str] = Field(None, min_length=1, max_length=200)
+    age: Optional[Union[str, int]] = None
     mobile: Optional[str] = Field(None, min_length=10, max_length=15)
     address: Optional[str] = None
     referred_doctor: Optional[str] = Field(None, max_length=200)
     test_name: Optional[str] = Field(None, min_length=1, max_length=500)
     fee_amount: Optional[Decimal] = Field(None, gt=0)
     tax_percent: Optional[float] = Field(None, ge=0, le=100)
-    payment_method: Optional[str] = Field(None, pattern="^(Cash|UPI|QR|Card|Online)$")
+    payment_method: Optional[str] = Field(None, pattern="^(Hold|Cash|UPI|QR|Card|Online)$")
     is_paid: Optional[bool] = None
     remarks: Optional[str] = None
     report_pdf_url: Optional[str] = None
@@ -56,8 +58,12 @@ class DailyEntryResponse(DailyEntryBase):
     auto_patient_id: str
     auto_entry_datetime: datetime
     total_amount: Decimal
+    upi_id: Optional[str] = None
+    paid_at: Optional[datetime] = None
+    bill_pdf_url: Optional[str] = None
     report_pdf_url: Optional[str]
     status: str
+    consumed_inventory_items: Optional[List[dict[str, Any]]] = None
     created_by: int
     created_at: datetime
     updated_at: datetime

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import PayrollDashboard from '../payroll/PayrollDashboard'
 
 interface HRProps {
   activeTab: string
@@ -36,7 +37,7 @@ export default function HR({ activeTab }: HRProps) {
   const [attendance, setAttendance] = useState<Attendance[]>([])
   const [holidays, setHolidays] = useState<Holiday[]>([])
   const [loading, setLoading] = useState(false)
-  const [activeView, setActiveView] = useState<'attendance' | 'leave' | 'holidays'>('attendance')
+  const [activeView, setActiveView] = useState<'attendance' | 'leave' | 'holidays' | 'payroll'>('attendance')
 
   useEffect(() => {
     if (activeTab === 'hr') {
@@ -124,6 +125,12 @@ export default function HR({ activeTab }: HRProps) {
             className={`px-4 py-2 rounded-lg ${activeView === 'holidays' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
           >
             Holidays
+          </button>
+          <button
+            onClick={() => setActiveView('payroll')}
+            className={`px-4 py-2 rounded-lg ${activeView === 'payroll' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+          >
+            Payroll
           </button>
         </div>
       </div>
@@ -283,6 +290,8 @@ export default function HR({ activeTab }: HRProps) {
           )}
         </div>
       )}
+
+      {activeView === 'payroll' && <PayrollDashboard />}
     </div>
   )
 }

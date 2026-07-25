@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { AgGridReact } from 'ag-grid-react'
 import { ColDef, GridApi, GridReadyEvent } from 'ag-grid-community'
 import 'ag-grid-community/styles/ag-grid.css'
@@ -56,10 +56,10 @@ interface DailyStats {
 export default function DailyEntryModule() {
   const { user, token } = useAuth()
   const [entries, setEntries] = useState<DailyEntry[]>([])
-  const [expenses, setExpenses] = useState<DailyExpense[]>([])
+  const [, setExpenses] = useState<DailyExpense[]>([])
   const [stats, setStats] = useState<DailyStats | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [gridApi, setGridApi] = useState<GridApi | null>(null)
+  const [, setLoading] = useState(false)
+  const [, setGridApi] = useState<GridApi | null>(null)
   
   // Filters
   const [patientNameFilter, setPatientNameFilter] = useState('')
@@ -84,12 +84,12 @@ export default function DailyEntryModule() {
   
   const API_BASE = (process as any).env.REACT_APP_API_BASE_URL || 
     ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-      ? 'http://localhost:8000'
+      ? 'http://127.0.0.1:8000'
       : window.location.origin)
 
-  const requestConfig = {
+  const requestConfig = useMemo(() => ({
     headers: token ? { Authorization: `Bearer ${token}` } : {}
-  }
+  }), [token])
 
   // Fetch entries with filters
   const fetchEntries = useCallback(async () => {
@@ -110,7 +110,7 @@ export default function DailyEntryModule() {
     } finally {
       setLoading(false)
     }
-  }, [token, patientNameFilter, referredDoctorFilter, testNameFilter, startDate, endDate, API_BASE])
+  }, [token, patientNameFilter, referredDoctorFilter, testNameFilter, startDate, endDate, API_BASE, requestConfig])
 
   // Fetch expenses
   const fetchExpenses = useCallback(async () => {
@@ -121,7 +121,7 @@ export default function DailyEntryModule() {
     } catch (err: any) {
       console.error('Failed to fetch expenses:', err)
     }
-  }, [token, API_BASE])
+  }, [token, API_BASE, requestConfig])
 
   // Fetch stats
   const fetchStats = useCallback(async () => {
@@ -132,7 +132,7 @@ export default function DailyEntryModule() {
     } catch (err: any) {
       console.error('Failed to fetch stats:', err)
     }
-  }, [token, API_BASE])
+  }, [token, API_BASE, requestConfig])
 
   useEffect(() => {
     fetchEntries()

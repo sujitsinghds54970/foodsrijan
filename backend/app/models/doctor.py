@@ -5,7 +5,7 @@ This module contains models for managing doctors across all branches
 in the city, including their patient report distribution preferences.
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, DECIMAL, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, DECIMAL, JSON, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -59,6 +59,13 @@ class Doctor(Base):
         "appointment_reminder": True,
         "urgent_alerts": True
     })
+
+    # Doctor portal profile and referral settings
+    upi_id = Column(String(120), nullable=True)
+    bank_account = Column(String(100), nullable=True)
+    ifsc = Column(String(30), nullable=True)
+    commission_percentage = Column(Float, default=0)
+    loyalty_tier = Column(String(20), default="Silver")
     
     # Report Preferences
     report_preferences = Column(JSON, default={

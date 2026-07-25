@@ -6,8 +6,8 @@
   "scripts": {
     "install-all": "cd backend && pip install -r requirements.txt && cd ../frontend/vaidya-vihar-frontend && npm install",
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
-    "start:backend": "cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
-    "start:frontend": "cd frontend/vaidya-vihar-frontend && npm start",
+    "start:backend": "cd backend && bash start_backend.sh",
+    "start:frontend": "cd frontend/vaidya-vihar-frontend && SKIP_BACKEND_ENSURE=1 npm start",
     "build": "cd frontend/vaidya-vihar-frontend && npm run build",
     "init-db": "cd backend && python3 init_database.py",
     "docker:up": "docker-compose up -d",

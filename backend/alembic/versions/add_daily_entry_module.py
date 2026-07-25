@@ -25,6 +25,7 @@ def upgrade():
         sa.Column('auto_patient_id', sa.String(length=50), nullable=False),
         sa.Column('auto_entry_datetime', sa.DateTime(), nullable=False),
         sa.Column('patient_name', sa.String(length=200), nullable=False),
+        sa.Column('age', sa.Integer(), nullable=True),
         sa.Column('mobile', sa.String(length=15), nullable=False),
         sa.Column('address', sa.Text(), nullable=False),
         sa.Column('referred_doctor', sa.String(length=200), nullable=True),

@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
-from datetime import timedelta, datetime
+from datetime import datetime
 from typing import Optional
 
 from app.database import get_db
@@ -10,14 +9,17 @@ from app.utils.auth_system import (
     auth_guard, TokenData, get_current_user
 )
 from app.models import User, Branch, ActivityLog
+from app.models.staff import StaffProfile
 from app.schemas.user import UserCreate, UserResponse, TokenResponse
 from app.utils.auth_system import auth_guard
+from app.utils.schema_compat import ensure_staff_daily_ops_column
 
 router = APIRouter()
 
+
 @router.post("/login", response_model=TokenResponse)
-def login_for_access_token(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+async def login_for_access_token(
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """User login endpoint with comprehensive error logging"""
@@ -26,20 +28,47 @@ def login_for_access_token(
     logger = logging.getLogger(__name__)
     
     try:
+        # Accept both JSON and form payloads for backwards compatibility.
+        content_type = request.headers.get("content-type", "")
+        username = None
+        password = None
+
+        if "application/json" in content_type:
+            payload = await request.json()
+            if isinstance(payload, dict):
+                username = payload.get("username")
+                password = payload.get("password")
+        else:
+            form = await request.form()
+            username = form.get("username")
+            password = form.get("password")
+
+        if not username or not password:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Both username and password are required"
+            )
+
         # DEBUG LOGGING
-        logger.info(f"🔐 LOGIN ATTEMPT - Username: {form_data.username}, Password Length: {len(form_data.password)}")
+        logger.info(f"🔐 LOGIN ATTEMPT - Username: {username}, Password Length: {len(password)}")
+        print(f"[AUTH DEBUG] route received username={username!r}")
         
         # Check if user exists
-        db_user = db.query(User).filter(User.username == form_data.username).first()
+        db_user = db.query(User).filter(User.username == username).first()
         if db_user:
             logger.info(f"✅ USER FOUND - ID: {db_user.id}, Username: {db_user.username}, Role: {db_user.role}, Active: {db_user.is_active}, Hash: {db_user.hashed_password[:20]}...")
+            print(
+                "[AUTH DEBUG] route fetched user="
+                f"id={db_user.id}, username={db_user.username!r}, role={db_user.role!r}, is_active={db_user.is_active}"
+            )
         else:
-            logger.error(f"❌ USER NOT FOUND - Username: {form_data.username}")
+            logger.error(f"❌ USER NOT FOUND - Username: {username}")
+            print("[AUTH DEBUG] route fetched user=None")
         
-        user = authenticate_user(db, form_data.username, form_data.password)
+        user = authenticate_user(db, username, password)
         
         if not user:
-            logger.error(f"❌ AUTHENTICATION FAILED - Username: {form_data.username}")
+            logger.error(f"❌ AUTHENTICATION FAILED - Username: {username}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password",
@@ -292,11 +321,21 @@ def register_user(
     )
 
 @router.get("/me")
-def get_current_user_info(current_user: User = Depends(get_current_user)):
+def get_current_user_info(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get current user information"""
     # Ensure created_at exists; if missing, fallback to now for response stability
     created_at = current_user.created_at if getattr(current_user, 'created_at', None) is not None else datetime.utcnow()
     last_login = getattr(current_user, 'last_login', None)
+
+    can_access_daily_ops = None
+    if current_user.role == "staff" and current_user.branch_id:
+        ensure_staff_daily_ops_column(db)
+        profile = (
+            db.query(StaffProfile)
+            .filter(StaffProfile.user_id == current_user.id, StaffProfile.branch_id == current_user.branch_id)
+            .first()
+        )
+        can_access_daily_ops = bool(profile.can_access_daily_ops) if profile else False
 
     return {
         "id": current_user.id,
@@ -307,6 +346,7 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
         "role": current_user.role,
         "branch_id": current_user.branch_id,
         "is_active": current_user.is_active,
+        "can_access_daily_ops": can_access_daily_ops,
         "created_at": created_at,
         "last_login": last_login,
     }
@@ -425,3 +465,5 @@ def verify_token_validity(current_user: User = Depends(get_current_user)):
             "branch_id": current_user.branch_id
         }
     }
+
+

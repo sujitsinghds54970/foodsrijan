@@ -102,7 +102,6 @@ class BranchStatistics(BaseModel):
     inventory_value: float
     active_services: int
 
-
 def _generate_branch_code(db: Session, branch_name: str) -> str:
     prefix = "".join(ch for ch in branch_name.upper() if ch.isalnum())[:3] or "BR"
     last_branch = db.query(Branch).order_by(desc(Branch.id)).first()
