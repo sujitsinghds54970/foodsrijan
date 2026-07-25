@@ -45,6 +45,12 @@ UPLOAD_DIR = Path("uploads/daily_entry_reports")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _is_staff_role(role: str) -> bool:
+    """Check if role is a staff type role (not admin or doctor)."""
+    non_staff_roles = ['super_admin', 'branch_admin', 'branch_director', 'doctor']
+    return role not in non_staff_roles
+
+
 def _normalize_is_paid(entries: List[DailyEntryModule]) -> List[DailyEntryModule]:
     for entry in entries:
         entry.is_paid = bool(entry.is_paid)
@@ -309,8 +315,8 @@ def require_daily_ops_actor(
     if current_user.role in ['super_admin', 'branch_admin', 'branch_director']:
         return current_user
 
-    if current_user.role != 'staff':
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    if not _is_staff_role(current_user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only staff users can access this endpoint")
 
     if not current_user.branch_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Branch access required")
@@ -783,7 +789,7 @@ async def create_daily_expense(
     current_user: User = Depends(require_daily_ops_actor)
 ):
     """Create a new daily expense for the authenticated user's branch"""
-    if current_user.role == 'staff':
+    if _is_staff_role(current_user.role):
         raise HTTPException(status_code=403, detail="Staff cannot create expenses")
 
     branch_id = get_user_branch_id(current_user)
@@ -812,7 +818,7 @@ async def update_daily_expense(
     current_user: User = Depends(require_daily_ops_actor)
 ):
     """Update a daily expense (branch-scoped)"""
-    if current_user.role == 'staff':
+    if _is_staff_role(current_user.role):
         raise HTTPException(status_code=403, detail="Staff cannot edit expenses")
 
     db_expense = db.query(DailyExpense).filter(DailyExpense.id == expense_id).first()
@@ -841,7 +847,7 @@ async def delete_daily_expense(
     current_user: User = Depends(require_daily_ops_actor)
 ):
     """Delete a daily expense (branch-scoped)"""
-    if current_user.role == 'staff':
+    if _is_staff_role(current_user.role):
         raise HTTPException(status_code=403, detail="Staff cannot delete expenses")
 
     db_expense = db.query(DailyExpense).filter(DailyExpense.id == expense_id).first()
@@ -954,7 +960,7 @@ async def export_daily_entries(
     current_user: User = Depends(require_daily_ops_actor)
 ):
     """Export daily entries as CSV or PDF"""
-    if current_user.role == 'staff':
+    if _is_staff_role(current_user.role):
         raise HTTPException(status_code=403, detail="Staff cannot export daily operations reports")
 
     branch_id = get_user_branch_id(current_user)

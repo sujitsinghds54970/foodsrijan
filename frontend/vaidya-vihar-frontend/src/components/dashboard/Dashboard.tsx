@@ -117,19 +117,22 @@ export default function Dashboard() {
     if (isLoading || !user) return
     
     const userRole = (user.role || '').trim().toLowerCase()
-    console.log('[DASHBOARD] Checking role for redirect:', { role: userRole })
+    console.log('[DASHBOARD] Checking role for redirect:', { role: userRole, currentPath: location.pathname })
     
-    if (userRole === 'super_admin' && !location.pathname.includes('/ceo')) {
+    // IMPORTANT: Only redirect if user is on WRONG path type for their role
+    // Don't redirect if they're already on a valid path for their role
+    
+    if (userRole === 'super_admin' && !location.pathname.startsWith('/ceo')) {
       console.log('[DASHBOARD] Redirecting super_admin to /ceo')
       navigate('/ceo', { replace: true })
-    } else if ((userRole === 'branch_admin' || userRole === 'branch_director') && !location.pathname.includes('/branch/dashboard')) {
+    } else if ((userRole === 'branch_admin' || userRole === 'branch_director') && !location.pathname.startsWith('/branch/')) {
       console.log('[DASHBOARD] Redirecting branch admin/director to /branch/dashboard')
       navigate('/branch/dashboard', { replace: true })
-    } else if (isStaffRole(userRole) && !location.pathname.includes('/staff/profile')) {
+    } else if (isStaffRole(userRole) && !location.pathname.startsWith('/staff/')) {
       console.log('[DASHBOARD] Redirecting staff to /staff/profile')
       navigate('/staff/profile', { replace: true })
     }
-  }, [isLoading, user, navigate, location.pathname])
+  }, [isLoading, user, navigate]) // REMOVED location.pathname to prevent re-redirect on tab change
 
   // IMPORTANT: Sync activeTab with current route pathname (NO redirects here!)
   useEffect(() => {

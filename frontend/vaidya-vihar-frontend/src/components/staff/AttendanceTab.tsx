@@ -41,6 +41,7 @@ export default function AttendanceTab(_: AttendanceTabProps) {
   const [branchLabel, setBranchLabel] = useState<string>('')
   const attachmentInputRef = useRef<HTMLInputElement | null>(null)
   const historyRef = useRef<HTMLDivElement | null>(null)
+  const lastErrorTimeRef = useRef<number>(0)
   const branchName = useMemo(() => {
     if ((branchLabel || '').trim()) {
       return branchLabel.trim()
@@ -116,7 +117,11 @@ export default function AttendanceTab(_: AttendanceTabProps) {
         setBranchLabel(liveBranchName)
       }
     } catch (error: any) {
-      toast.error(getApiErrorMessage(error, 'Failed to load attendance dashboard'))
+      const now = Date.now()
+      if (now - lastErrorTimeRef.current >= 5000) {
+        toast.error(getApiErrorMessage(error, 'Failed to load attendance dashboard'))
+        lastErrorTimeRef.current = now
+      }
     } finally {
       setLoading(false)
     }
