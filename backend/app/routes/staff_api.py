@@ -4,7 +4,7 @@ import secrets
 import traceback
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -53,10 +53,16 @@ def _assert_access(user: User) -> None:
         raise HTTPException(status_code=400, detail="User is not mapped to a branch")
 
 
-def _photo_url(photo_path: Optional[str]) -> Optional[str]:
+def _photo_url(photo_path: Optional[str], request: Optional[Request] = None) -> Optional[str]:
     if not photo_path:
         return None
-    return f"/api/files/{photo_path}"
+    clean_path = photo_path.lstrip("/")
+    # Build the full URL using request base URL if available
+    if request:
+        base_url = str(request.base_url).rstrip("/")
+        return f"{base_url}/api/files/{clean_path}"
+    # Fallback to localhost if no request provided
+    return f"http://localhost:8000/api/files/{clean_path}"
 
 
 def _staff_role_from_designation(designation: Optional[str]) -> str:
@@ -451,6 +457,7 @@ def upload_staff_photo(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    request: Request = None,
 ):
     _assert_access(current_user)
     branch_id = current_user.branch_id
@@ -476,7 +483,7 @@ def upload_staff_photo(
     return {
         "message": "Photo uploaded",
         "photo_path": profile.photo_path,
-        "photo_url": _photo_url(profile.photo_path),
+        "photo_url": _photo_url(profile.photo_path, request),
     }
 
 
@@ -671,6 +678,7 @@ def clock_in_staff_attendance(
     photo: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    request: Request = None,
 ):
     _assert_access(current_user)
     branch_id = current_user.branch_id
@@ -726,7 +734,7 @@ def clock_in_staff_attendance(
             "clock_in_time": row.clock_in_time,
             "clock_in_latitude": row.clock_in_latitude,
             "clock_in_longitude": row.clock_in_longitude,
-            "selfie_url": _photo_url(row.clock_in_photo_path),
+            "selfie_url": _photo_url(row.clock_in_photo_path, request),
         },
     }
 

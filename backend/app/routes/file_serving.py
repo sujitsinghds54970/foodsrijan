@@ -166,47 +166,50 @@ async def serve_file(
 
     _enforce_doctor_report_access(filename, current_user, db)
     
-    # Try multiple possible file locations
-    possible_paths = [
-        UPLOADS_DIR / filename,  # Direct in uploads/
-        DAILY_ENTRY_REPORTS_DIR / filename,  # In uploads/daily_entry_reports/
-        BASE_DIR / filename,  # Relative to backend root
-    ]
+    # Build the absolute path to the requested file
+    # Ensure we construct the absolute path correctly
+    abs_uploads_dir = UPLOADS_DIR.resolve()
+    requested_file_path = (abs_uploads_dir / filename).resolve()
     
-    file_path = None
-    for path in possible_paths:
-        print(f"🔍 [FILE_SERVING] Checking path: {path}")
-        if path.exists() and path.is_file():
-            file_path = path
-            print(f"✅ [FILE_SERVING] File found at: {file_path}")
-            break
+    # Security: Ensure the resolved path is within uploads directory (prevent directory traversal)
+    try:
+        requested_file_path.relative_to(abs_uploads_dir)
+    except ValueError:
+        print(f"❌ [FILE_SERVING] Path traversal attempt detected: {filename}")
+        raise HTTPException(status_code=400, detail="Invalid file path")
     
-    # Check if file exists
-    if not file_path:
+    # Debug log: Print exact absolute path being searched
+    print(f"🔍 Attempting to serve file from: {requested_file_path}")
+    
+    # Check if file exists at the resolved path
+    if not requested_file_path.exists() or not requested_file_path.is_file():
         print(f"❌ [FILE_SERVING] File not found: {filename}")
-        print(f"   Searched in:")
-        for path in possible_paths:
-            print(f"   - {path}")
+        print(f"   Absolute path searched: {requested_file_path}")
+        print(f"   UPLOADS_DIR: {abs_uploads_dir}")
         raise HTTPException(status_code=404, detail=f"File not found: {filename}")
     
     # Determine media type based on file extension
     media_type = "application/octet-stream"
     if filename.lower().endswith('.pdf'):
         media_type = "application/pdf"
-    elif filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-        media_type = f"image/{filename.split('.')[-1].lower()}"
+    elif filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+        ext = filename.split('.')[-1].lower()
+        media_type = f"image/{ext if ext != 'jpg' else 'jpeg'}"
     elif filename.lower().endswith('.txt'):
         media_type = "text/plain"
     
-    print(f"📤 [FILE_SERVING] Serving file: {file_path} as {media_type}")
+    print(f"✅ [FILE_SERVING] Serving file: {requested_file_path} as {media_type}")
     
-    # Return the file
+    # Return the file with CORS headers for cross-origin image requests
     return FileResponse(
-        path=str(file_path),
+        path=str(requested_file_path),
         media_type=media_type,
         filename=os.path.basename(filename),
         headers={
             "Content-Disposition": f'inline; filename="{os.path.basename(filename)}"',
-            "Cache-Control": "public, max-age=3600"
+            "Cache-Control": "public, max-age=3600",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
         }
     )

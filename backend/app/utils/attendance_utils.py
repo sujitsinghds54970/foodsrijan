@@ -73,21 +73,28 @@ def stamp_image_with_gps(
     else:
         local_clock_time = clock_time.astimezone()
 
+    # Format timestamp correctly with proper date and time format: DD/MM/YYYY HH:MM:SS
     timestamp_text = local_clock_time.strftime("%d/%m/%Y %H:%M:%S")
+    
+    # Format latitude and longitude properly with 6 decimal places
     latlng_text = (
-        f"Lat: {latitude:.6f}, Lng: {longitude:.6f}"
+        f"GPS: {latitude:.6f}°N, {longitude:.6f}°E"
         if latitude is not None and longitude is not None
-        else "Lat/Lng: unavailable"
+        else "GPS: Unavailable"
     )
-    resolved_address = (address or reverse_geocode_address(latitude, longitude) or "unavailable").strip()
-    if len(resolved_address) > 64:
-        resolved_address = f"{resolved_address[:61]}..."
+    
+    # Get address from parameter or reverse geocode, ensure it's truncated properly
+    resolved_address = (address or reverse_geocode_address(latitude, longitude) or "Location unavailable").strip()
+    if len(resolved_address) > 60:
+        resolved_address = f"{resolved_address[:57]}..."
+    
     lines = [
-        f"Date & Time: {timestamp_text}",
+        f"Time: {timestamp_text}",
         latlng_text,
-        f"Address: {resolved_address}",
+        f"Location: {resolved_address}",
     ]
 
+    # Calculate text dimensions for the overlay box
     max_width = 0
     line_height = 0
     for line in lines:
@@ -101,20 +108,23 @@ def stamp_image_with_gps(
     box_width = max_width + (padding_x * 2)
     box_height = (line_height * len(lines)) + (gap * (len(lines) - 1)) + (padding_y * 2)
 
-    # Keep a stable stamp anchor at bottom-right with safe edge padding.
+    # Position stamp at bottom-right corner with safe edge padding
     x2 = image.width - 12
     y2 = image.height - 12
     x1 = max(12, x2 - box_width)
     y1 = max(12, y2 - box_height)
 
+    # Draw semi-transparent black background box
     draw.rectangle((x1, y1, x2, y2), fill=(0, 0, 0, 165))
 
+    # Draw text lines
     text_x = x1 + padding_x
     text_y = y1 + padding_y
     for line in lines:
         draw.text((text_x, text_y), line, font=font, fill=(255, 255, 255, 255))
         text_y += line_height + gap
 
+    # Save stamped image to the same directory
     stamped_path = image_path.with_name(f"stamped_{image_path.stem}.jpg")
     stamped_path.parent.mkdir(parents=True, exist_ok=True)
     image.convert("RGB").save(stamped_path, format="JPEG", quality=92)

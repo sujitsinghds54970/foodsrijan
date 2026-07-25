@@ -501,6 +501,9 @@ export default function AttendanceTab(_: AttendanceTabProps) {
                             alt="In selfie"
                             className="w-12 h-12 rounded object-cover border border-gray-200 cursor-pointer hover:opacity-80"
                             style={{ width: '48px', height: '48px', objectFit: 'cover', border: '1px solid #e5e7eb', borderRadius: '6px', cursor: 'pointer' }}
+                            onError={(e) => {
+                              e.currentTarget.src = '/placeholder-avatar.png'
+                            }}
                             onClick={() => {
                               setPreviewLog(row)
                               setPreviewImageUrl(buildThumbUrl(row.clock_in_selfie_url || row.selfie_url, row.clock_in_time || row.date))
@@ -516,6 +519,9 @@ export default function AttendanceTab(_: AttendanceTabProps) {
                             alt="Out selfie"
                             className="w-12 h-12 rounded object-cover border border-gray-200 cursor-pointer hover:opacity-80"
                             style={{ width: '48px', height: '48px', objectFit: 'cover', border: '1px solid #e5e7eb', borderRadius: '6px', cursor: 'pointer' }}
+                            onError={(e) => {
+                              e.currentTarget.src = '/placeholder-avatar.png'
+                            }}
                             onClick={() => {
                               setPreviewLog(row)
                               setPreviewImageUrl(buildThumbUrl(row.clock_out_selfie_url || row.selfie_url, row.clock_out_time || row.date))
