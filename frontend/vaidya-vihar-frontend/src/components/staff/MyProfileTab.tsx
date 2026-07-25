@@ -51,7 +51,7 @@ export default function MyProfileTab() {
   }
 
   useEffect(() => {
-    if ((user?.role || '').toLowerCase() !== 'staff') return
+    if (!isStaffRole(user?.role)) return
     void loadProfile()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.role])
