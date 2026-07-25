@@ -207,6 +207,11 @@ export const staffApi = {
   async decideLeave(leaveRequestId: number, payload: { status: 'approved' | 'rejected' | 'cancelled'; review_comment?: string }): Promise<void> {
     await axios.put(`${API_BASE}/api/leave/${leaveRequestId}/approve`, payload)
   },
+
+  async delete(staffProfileId: number): Promise<{ message: string }> {
+    const response = await axios.delete(`${API_BASE}/api/director/staff/${staffProfileId}`)
+    return response.data
+  },
 }
 
 export const staffSelfApi = {

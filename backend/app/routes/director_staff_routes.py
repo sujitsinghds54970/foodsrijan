@@ -425,6 +425,7 @@ def list_staff(
     department: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    show_inactive: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -435,6 +436,10 @@ def list_staff(
     query = db.query(StaffProfile, User).join(User, StaffProfile.user_id == User.id).filter(
         StaffProfile.branch_id == current_user.branch_id
     )
+
+    # Filter out inactive staff unless explicitly requested
+    if not show_inactive:
+        query = query.filter(StaffProfile.is_active.is_(True))
 
     if role:
         query = query.filter(User.role == role)

@@ -81,6 +81,8 @@ export default function StaffManagement() {
   const [searchTerm, setSearchTerm] = useState('')
   const [departmentFilter, setDepartmentFilter] = useState('all')
   const [selectedStaffId, setSelectedStaffId] = useState<number | 'all'>('all')
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ isOpen: boolean; staffId?: number; staffName?: string }>({ isOpen: false })
+  const [isDeleting, setIsDeleting] = useState(false)
   const today = new Date()
   const [payrollMonth, setPayrollMonth] = useState(today.getMonth() + 1)
   const [payrollYear, setPayrollYear] = useState(today.getFullYear())
@@ -166,6 +168,22 @@ export default function StaffManagement() {
       setSalaryLoading(false)
     }
   }, [API_BASE, requestConfig, token, payrollMonth, payrollYear, selectedStaffId, getErrorMessage])
+
+  const handleDeleteStaff = useCallback(async (staffId: number) => {
+    if (!token) return
+    setIsDeleting(true)
+    try {
+      await axios.delete(`${API_BASE}/api/director/staff/${staffId}`, requestConfig)
+      toast.success('Staff member deactivated successfully')
+      // Refresh the staff list
+      await fetchStaff()
+      setDeleteConfirmModal({ isOpen: false })
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Failed to deactivate staff member'))
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [API_BASE, requestConfig, token, getErrorMessage, fetchStaff])
 
   useEffect(() => {
     void fetchStaff()
@@ -384,6 +402,13 @@ export default function StaffManagement() {
                           >
                             Payroll
                           </button>
+                          <button
+                            onClick={() => setDeleteConfirmModal({ isOpen: true, staffId: member.id, staffName: `${member.first_name} ${member.last_name}` })}
+                            className="px-3 py-1 rounded-lg bg-rose-50 text-rose-700 font-semibold hover:bg-rose-100"
+                            title="Delete staff member"
+                          >
+                            🗑️
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -541,6 +566,34 @@ export default function StaffManagement() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-slate-900 mb-2">Deactivate Staff Member</h3>
+            <p className="text-slate-600 mb-6">
+              Are you sure you want to permanently deactivate <strong>{deleteConfirmModal.staffName}</strong>? They will no longer be able to log in, and all their historical data will be archived.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setDeleteConfirmModal({ isOpen: false })}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteConfirmModal.staffId && void handleDeleteStaff(deleteConfirmModal.staffId)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700 disabled:opacity-50"
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Staff'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

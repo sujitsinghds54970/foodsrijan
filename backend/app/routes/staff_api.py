@@ -153,6 +153,7 @@ def list_staff(
             db.query(StaffProfile, User)
             .join(User, User.id == StaffProfile.user_id)
             .filter(StaffProfile.branch_id == branch_id)
+            .filter(StaffProfile.is_active.is_(True))
         )
 
         if search:
@@ -215,71 +216,118 @@ def create_staff(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_access(current_user)
-    ensure_staff_daily_ops_column(db)
-    branch_id = current_user.branch_id
+    try:
+        # Debug logging
+        print(f"\n{'='*60}")
+        print(f"CREATE_STAFF_PAYLOAD: {payload}")
+        print(f"AUTH_USER: ID={current_user.id}, Role={current_user.role}, Branch={current_user.branch_id}")
+        print(f"{'='*60}\n")
+        
+        _assert_access(current_user)
+        ensure_staff_daily_ops_column(db)
+        
+        # Validate required fields
+        if not payload.first_name or not payload.first_name.strip():
+            raise HTTPException(status_code=400, detail="Missing required field: first_name")
+        if not payload.last_name or not payload.last_name.strip():
+            raise HTTPException(status_code=400, detail="Missing required field: last_name")
+        if not payload.email or not payload.email.strip():
+            raise HTTPException(status_code=400, detail="Missing required field: email")
+        if not payload.mobile or not payload.mobile.strip():
+            raise HTTPException(status_code=400, detail="Missing required field: mobile")
+        
+        branch_id = current_user.branch_id
+        if not branch_id:
+            raise HTTPException(status_code=400, detail="Branch assignment missing for current user")
 
-    existing_email = db.query(User).filter(User.email == payload.email).first()
-    if existing_email:
-        raise HTTPException(status_code=400, detail="Email already exists")
+        # Check for duplicate email
+        existing_email = db.query(User).filter(User.email == payload.email.strip().lower()).first()
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email already exists in the system")
 
-    username = f"staff_{secrets.token_hex(4)}"
-    while db.query(User).filter(User.username == username).first():
+        # Generate unique username
         username = f"staff_{secrets.token_hex(4)}"
+        while db.query(User).filter(User.username == username).first():
+            username = f"staff_{secrets.token_hex(4)}"
 
-    raw_password = payload.temporary_password or f"VV@{secrets.token_hex(4)}"
+        # Generate secure password
+        raw_password = payload.temporary_password or f"VV@{secrets.token_hex(4)}"
+        hashed_password = hash_password(raw_password)
+        
+        print(f"Generated Username: {username}, Password Hash: {hashed_password[:20]}...")
 
-    user = User(
-        username=username,
-        email=payload.email,
-        hashed_password=hash_password(raw_password),
-        role=(payload.designation or "technician").strip().lower(),
-        branch_id=branch_id,
-        is_active=True,
-        first_name=payload.first_name,
-        last_name=payload.last_name,
-        phone=payload.mobile,
-    )
-    db.add(user)
-    db.flush()
+        # Create User record
+        user = User(
+            username=username,
+            email=payload.email.strip().lower(),
+            hashed_password=hashed_password,
+            role=(payload.designation or "technician").strip().lower(),
+            branch_id=branch_id,
+            is_active=True,
+            first_name=payload.first_name.strip(),
+            last_name=payload.last_name.strip(),
+            phone=payload.mobile.strip(),
+        )
+        db.add(user)
+        db.flush()
+        print(f"User created: ID={user.id}, Username={username}")
 
-    profile = StaffProfile(
-        user_id=user.id,
-        branch_id=branch_id,
-        created_by=current_user.id,
-        staff_id=_generate_staff_id(db, branch_id),
-        department=payload.department,
-        specialization=payload.specialization,
-        shift_timings=payload.shift_timings,
-        date_of_joining=payload.date_of_joining,
-        address=payload.address,
-        emergency_contact=payload.emergency_contact,
-        can_access_daily_ops=bool(payload.can_access_daily_ops),
-        status=StaffStatus.ACTIVE,
-        is_active=True,
-    )
-    db.add(profile)
-    db.flush()
+        # Create StaffProfile record
+        staff_id = _generate_staff_id(db, branch_id)
+        profile = StaffProfile(
+            user_id=user.id,
+            branch_id=branch_id,
+            created_by=current_user.id,
+            staff_id=staff_id,
+            department=payload.department.strip() if payload.department else None,
+            specialization=payload.specialization.strip() if payload.specialization else None,
+            shift_timings=payload.shift_timings.strip() if payload.shift_timings else None,
+            date_of_joining=payload.date_of_joining,
+            address=payload.address.strip() if payload.address else None,
+            emergency_contact=payload.emergency_contact.strip() if payload.emergency_contact else None,
+            can_access_daily_ops=bool(payload.can_access_daily_ops),
+            status=StaffStatus.ACTIVE,
+            is_active=True,
+        )
+        db.add(profile)
+        db.flush()
+        print(f"StaffProfile created: ID={profile.id}, Staff_ID={staff_id}")
 
-    salary = StaffSalaryDetail(
-        staff_profile_id=profile.id,
-        basic=0,
-        hra=0,
-        allowances=0,
-        deductions=0,
-        net_pay=0,
-    )
-    db.add(salary)
+        # Create Salary record
+        salary = StaffSalaryDetail(
+            staff_profile_id=profile.id,
+            basic=0,
+            hra=0,
+            allowances=0,
+            deductions=0,
+            net_pay=0,
+        )
+        db.add(salary)
 
-    db.commit()
-    db.refresh(profile)
+        db.commit()
+        db.refresh(profile)
+        print(f"Staff member created successfully: {profile.id}")
 
-    return {
-        "message": "Staff created successfully",
-        "temporary_password": raw_password,
-        "username": username,
-        "staff": _build_staff_row(profile, user, salary),
-    }
+        return {
+            "message": "Staff created successfully",
+            "temporary_password": raw_password,
+            "username": username,
+            "staff": _build_staff_row(profile, user, salary),
+        }
+    
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"\nERROR in CREATE_STAFF:")
+        print(f"Exception Type: {type(e).__name__}")
+        print(f"Exception Message: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        print(f"\n")
+        raise HTTPException(status_code=500, detail=f"Failed to create staff: {str(e)}")
+
 
 
 @staff_router.get("/{staff_profile_id}")

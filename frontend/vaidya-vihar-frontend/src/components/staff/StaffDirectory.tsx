@@ -13,6 +13,7 @@ interface StaffDirectoryProps {
   onCreate: (payload: StaffCreatePayload) => Promise<void>
   onBulkToggleDailyOps: (canAccess: boolean) => Promise<void>
   onSearch: (value: string) => void
+  onDelete?: (staffId: number) => Promise<void>
 }
 
 export default function StaffDirectory({
@@ -26,8 +27,11 @@ export default function StaffDirectory({
   onCreate,
   onBulkToggleDailyOps,
   onSearch,
+  onDelete,
 }: StaffDirectoryProps) {
   const [showCreate, setShowCreate] = useState(false)
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ isOpen: boolean; staffId?: number; staffName?: string }>({ isOpen: false })
+  const [isDeleting, setIsDeleting] = useState(false)
   const [form, setForm] = useState<StaffCreatePayload>({
     first_name: '',
     last_name: '',
@@ -55,6 +59,20 @@ export default function StaffDirectory({
       designation: 'staff',
     })
     setShowCreate(false)
+  }
+
+  const handleDeleteStaff = async (staffId: number) => {
+    if (!onDelete) return
+    setIsDeleting(true)
+    try {
+      await onDelete(staffId)
+      setDeleteConfirmModal({ isOpen: false })
+      toast.success('Staff member deactivated successfully')
+    } catch (err) {
+      toast.error('Failed to deactivate staff member')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   return (
@@ -127,25 +145,64 @@ export default function StaffDirectory({
               key={item.staff_profile_id}
               className={`w-full rounded-xl border p-3 text-left transition ${selectedId === item.staff_profile_id ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}
             >
-              <div className="mb-2 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(item.staff_profile_id)}
-                  onChange={() => onToggleSelect(item.staff_profile_id)}
-                />
-                <button onClick={() => onSelect(item.staff_profile_id)} className="flex-1 text-left">
-                  <p className="text-sm font-semibold text-slate-900">{item.full_name}</p>
-                  <p className="text-xs text-slate-500">{item.staff_id} • {item.username}</p>
-                </button>
-              </div>
-              <p className="text-xs text-slate-500">{item.department || 'No department'} • {item.status}</p>
-              <p className="mt-1 text-[11px] font-semibold text-slate-600">
-                Daily Ops: {item.can_access_daily_ops ? 'Allowed' : 'Blocked'}
-              </p>
+             <div className="mb-2 flex items-center justify-between gap-2">
+               <div className="flex flex-1 items-center gap-2">
+                 <input
+                   type="checkbox"
+                   checked={selectedIds.includes(item.staff_profile_id)}
+                   onChange={() => onToggleSelect(item.staff_profile_id)}
+                 />
+                 <button onClick={() => onSelect(item.staff_profile_id)} className="flex-1 text-left">
+                   <p className="text-sm font-semibold text-slate-900">{item.full_name}</p>
+                   <p className="text-xs text-slate-500">{item.staff_id} • {item.username}</p>
+                 </button>
+               </div>
+               {onDelete && (
+                 <button
+                   onClick={() => setDeleteConfirmModal({ isOpen: true, staffId: item.staff_profile_id, staffName: item.full_name })}
+                   className="text-lg hover:opacity-80"
+                   title="Delete staff member"
+                 >
+                   🗑️
+                 </button>
+               )}
+             </div>
+             <p className="text-xs text-slate-500">{item.department || 'No department'} • {item.status}</p>
+             <p className="mt-1 text-[11px] font-semibold text-slate-600">
+               Daily Ops: {item.can_access_daily_ops ? 'Allowed' : 'Blocked'}
+             </p>
             </div>
           ))
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmModal.isOpen && (
+       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+         <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+           <h3 className="text-lg font-bold text-slate-900 mb-2">Deactivate Staff Member</h3>
+           <p className="text-slate-600 mb-6">
+             Are you sure you want to permanently deactivate <strong>{deleteConfirmModal.staffName}</strong>? They will no longer be able to log in, and all their historical data will be archived.
+           </p>
+           <div className="flex gap-3 justify-end">
+             <button
+               onClick={() => setDeleteConfirmModal({ isOpen: false })}
+               disabled={isDeleting}
+               className="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 disabled:opacity-50"
+             >
+               Cancel
+             </button>
+             <button
+               onClick={() => deleteConfirmModal.staffId && void handleDeleteStaff(deleteConfirmModal.staffId)}
+               disabled={isDeleting}
+               className="px-4 py-2 rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700 disabled:opacity-50"
+             >
+               {isDeleting ? 'Deleting...' : 'Delete Staff'}
+             </button>
+           </div>
+         </div>
+       </div>
+      )}
     </div>
   )
 }

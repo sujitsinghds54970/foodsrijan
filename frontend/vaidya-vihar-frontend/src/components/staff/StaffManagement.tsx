@@ -26,13 +26,15 @@ export default function StaffManagement() {
     setLoading(true)
     try {
       const rows = await staffApi.list(searchText)
-      setItems(rows)
-      setSelectedIds((prev) => prev.filter((id) => rows.some((row) => row.staff_profile_id === id)))
-      if (!selectedId && rows.length > 0) {
-        setSelectedId(rows[0].staff_profile_id)
+      // Filter out inactive staff (extra safety - should already be filtered by backend)
+      const activeRows = rows.filter(row => row.status === 'active')
+      setItems(activeRows)
+      setSelectedIds((prev) => prev.filter((id) => activeRows.some((row) => row.staff_profile_id === id)))
+      if (!selectedId && activeRows.length > 0) {
+        setSelectedId(activeRows[0].staff_profile_id)
       }
-      if (selectedId && !rows.find((x) => x.staff_profile_id === selectedId)) {
-        setSelectedId(rows[0]?.staff_profile_id || null)
+      if (selectedId && !activeRows.find((x) => x.staff_profile_id === selectedId)) {
+        setSelectedId(activeRows[0]?.staff_profile_id || null)
       }
     } catch (error: any) {
       toast.error(getApiErrorMessage(error, 'Failed to load staff directory'))
@@ -88,6 +90,22 @@ export default function StaffManagement() {
       ))
     } catch (error: any) {
       toast.error(getApiErrorMessage(error, 'Failed to update Daily Operations access'))
+    }
+  }
+
+  const handleDeleteStaff = async (staffId: number) => {
+    try {
+      await staffApi.delete(staffId)
+      toast.success('Staff member deactivated successfully')
+      // Refresh the staff list
+      await loadList(search)
+      // Clear selection if deleted staff was selected
+      if (selectedId === staffId) {
+        setSelectedId(null)
+        setSelectedStaff(null)
+      }
+    } catch (error: any) {
+      toast.error(getApiErrorMessage(error, 'Failed to deactivate staff member'))
     }
   }
 
@@ -162,9 +180,10 @@ export default function StaffManagement() {
             }}
             onCreate={handleCreate}
             onBulkToggleDailyOps={handleBulkToggleDailyOps}
+            onDelete={handleDeleteStaff}
             onSearch={(value) => {
-              setSearch(value)
-              loadList(value)
+             setSearch(value)
+             loadList(value)
             }}
           />
 
