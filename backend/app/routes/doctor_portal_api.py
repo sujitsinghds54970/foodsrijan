@@ -5,8 +5,10 @@ import io
 import logging
 import secrets
 import asyncio
+import traceback
 from collections import Counter
 from datetime import datetime, timedelta
+from functools import wraps
 from typing import Dict, List, Optional
 
 import qrcode
@@ -380,12 +382,65 @@ def _set_white_label_settings(doctor: Doctor, payload: WhiteLabelSettingsUpdate)
     }
 
 
+def _empty_doctor_profile() -> dict:
+    return {
+        "id": None,
+        "doctor_id": "",
+        "name": "",
+        "email": "",
+        "phone": "",
+        "qualification": "",
+        "specialization": "",
+        "upi_id": "",
+        "bank_account": "",
+        "ifsc": "",
+        "commission_percentage": 0,
+        "loyalty_tier": "Silver",
+        "branch_ids": [],
+    }
+
+
+def doctor_route(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"Doctor portal API failed: {exc}") from exc
+
+    try:
+        for route in reversed(router.routes):
+            if getattr(route, "endpoint", None) is func:
+                route.endpoint = wrapper
+                dependant = getattr(route, "dependant", None)
+                if dependant is not None and getattr(dependant, "call", None) is func:
+                    dependant.call = wrapper
+                break
+    except Exception:
+        traceback.print_exc()
+
+    return wrapper
+
+
+@doctor_route
 @router.get("/profile")
 def get_doctor_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(_doctor),
 ):
-    doctor = _get_doctor(current_user, db)
+    try:
+        doctor = _get_doctor(current_user, db)
+    except HTTPException as exc:
+        if exc.status_code in (403, 404):
+            return _empty_doctor_profile()
+        raise
+
+    if not doctor:
+        return _empty_doctor_profile()
+
     return {
         "id": doctor.id,
         "doctor_id": doctor.doctor_id,
@@ -403,6 +458,7 @@ def get_doctor_profile(
     }
 
 
+@doctor_route
 @router.put("/profile")
 def update_doctor_profile(
     payload: DoctorProfileUpdate,
@@ -417,6 +473,7 @@ def update_doctor_profile(
     return get_doctor_profile(db=db, current_user=current_user)
 
 
+@doctor_route
 @router.get("/white-label")
 def get_white_label_settings(
     db: Session = Depends(get_db),
@@ -426,6 +483,7 @@ def get_white_label_settings(
     return _get_white_label_settings(doctor)
 
 
+@doctor_route
 @router.put("/white-label")
 def update_white_label_settings(
     payload: WhiteLabelSettingsUpdate,
@@ -439,6 +497,7 @@ def update_white_label_settings(
     return response
 
 
+@doctor_route
 @router.get("/patients")
 def search_doctor_patients(
     search: str = Query(default="", max_length=255),
@@ -485,6 +544,7 @@ def search_doctor_patients(
     return {"patients": [_patient_payload(patient) for patient in patients], "count": len(patients)}
 
 
+@doctor_route
 @router.post("/patients/{patient_id}/tags")
 def update_patient_tags(
     patient_id: int,
@@ -504,6 +564,7 @@ def update_patient_tags(
     return {"patient_id": patient.id, "tags": tags}
 
 
+@doctor_route
 @router.get("/patients/{patient_id}/timeline")
 def patient_timeline(
     patient_id: int,
@@ -541,6 +602,7 @@ def patient_timeline(
     return {"patient": _patient_payload(patient), "events": events}
 
 
+@doctor_route
 @router.get("/test-catalog")
 def doctor_test_catalog(
     db: Session = Depends(get_db),
@@ -559,6 +621,7 @@ def doctor_test_catalog(
     } for test in tests]}
 
 
+@doctor_route
 @router.post("/panels")
 def create_panel(
     payload: PanelCreate,
@@ -576,6 +639,7 @@ def create_panel(
     return {"id": panel.id, "panel_name": panel.panel_name, "test_ids": panel.test_ids, "is_custom": panel.is_custom}
 
 
+@doctor_route
 @router.get("/panels")
 def list_panels(
     db: Session = Depends(get_db),
@@ -586,6 +650,7 @@ def list_panels(
     return {"panels": [{"id": panel.id, "panel_name": panel.panel_name, "test_ids": panel.test_ids or [], "is_custom": panel.is_custom} for panel in panels]}
 
 
+@doctor_route
 @router.post("/orders")
 def create_doctor_order(
     payload: OrderCreate,
@@ -663,6 +728,7 @@ def create_doctor_order(
     return {"id": order.id, "patient_id": order.patient_id, "test_ids": order.test_ids, "status": order.status, "order_date": order.order_date.isoformat()}
 
 
+@doctor_route
 @router.get("/orders")
 def list_doctor_orders(
     db: Session = Depends(get_db),
@@ -690,6 +756,7 @@ def list_doctor_orders(
     } for order in orders]}
 
 
+@doctor_route
 @router.post("/orders/{order_id}/qr")
 def generate_order_qr(
     order_id: int,
@@ -718,6 +785,7 @@ def generate_order_qr(
     return {"order_id": order.id, "qr_token": order.qr_token, "qr_code": f"data:image/png;base64,{image}"}
 
 
+@doctor_route
 @router.get("/messages")
 def get_messages(
     with_user_id: Optional[int] = Query(default=None),
@@ -760,6 +828,7 @@ def get_messages(
     }
 
 
+@doctor_route
 @router.post("/messages")
 def send_message(
     payload: MessageCreate,
@@ -788,6 +857,7 @@ def send_message(
     }
 
 
+@doctor_route
 @router.get("/alerts/critical")
 def critical_alerts(
     threshold_high: float = Query(default=200),
@@ -818,6 +888,7 @@ def critical_alerts(
     return {"alerts": alerts, "count": len(alerts)}
 
 
+@doctor_route
 @router.get("/analytics")
 def doctor_analytics(
     db: Session = Depends(get_db),
@@ -864,6 +935,7 @@ def doctor_analytics(
     return {"common_tests": common_tests, "demographics": demographics, "trends": trends}
 
 
+@doctor_route
 @router.get("/referral-tracker")
 def referral_tracker(
     db: Session = Depends(get_db),
@@ -883,6 +955,7 @@ def referral_tracker(
     }
 
 
+@doctor_route
 @router.get("/commission/statement")
 def commission_statement(
     db: Session = Depends(get_db),
@@ -913,6 +986,7 @@ def commission_statement(
     }
 
 
+@doctor_route
 @router.get("/wallet")
 def doctor_wallet(
     db: Session = Depends(get_db),
@@ -933,6 +1007,7 @@ def doctor_wallet(
     }
 
 
+@doctor_route
 @router.get("/loyalty")
 def loyalty_program(
     db: Session = Depends(get_db),
@@ -946,6 +1021,7 @@ def loyalty_program(
     }
 
 
+@doctor_route
 @router.get("/cme-courses")
 def cme_courses(
     db: Session = Depends(get_db),
@@ -991,6 +1067,7 @@ def cme_courses(
     }
 
 
+@doctor_route
 @router.post("/ai/symptom-checker")
 def ai_symptom_checker(
     payload: SymptomCheckerRequest,
@@ -1020,6 +1097,7 @@ def ai_symptom_checker(
     }
 
 
+@doctor_route
 @router.post("/ai/report-interpretation")
 def ai_report_interpretation(
     payload: ReportInterpretationRequest,
@@ -1040,6 +1118,7 @@ def ai_report_interpretation(
     }
 
 
+@doctor_route
 @router.post("/ai/predictive-alert")
 def ai_predictive_alert(
     payload: PredictiveAlertRequest,
@@ -1079,6 +1158,7 @@ def ai_predictive_alert(
     }
 
 
+@doctor_route
 @router.post("/ai/growth-insights")
 def ai_growth_insights(
     payload: GrowthInsightsRequest,

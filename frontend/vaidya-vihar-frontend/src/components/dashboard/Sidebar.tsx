@@ -58,7 +58,6 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     { id: 'lis', label: 'LIS Lab Tests', icon: '🧪', gradient: 'from-cyan-500 to-blue-500' },
     { id: 'payments', label: 'Payments', icon: '💳', gradient: 'from-green-500 to-emerald-500' },
     { id: 'accounts', label: 'Accounts', icon: '📚', gradient: 'from-indigo-500 to-sky-500' },
-    { id: 'accounting', label: 'Accounting', icon: '💰', gradient: 'from-yellow-500 to-amber-500' },
     ...((role === 'branch_director' || role === 'branch_admin' || role === 'super_admin') ? [{ id: 'doctor-portal', label: 'Doctor Portal', icon: '🩺', gradient: 'from-teal-500 to-cyan-500' }] : []),
     { id: 'patient-portal', label: 'Patient Portal', icon: '🏥', gradient: 'from-rose-500 to-pink-500' },
   ]

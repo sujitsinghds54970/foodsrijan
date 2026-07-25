@@ -49,6 +49,8 @@ export default function CeoSecurityGuard({ children, enabled = true, intervalMs 
   const lastKeyTsRef = useRef<number | null>(null)
   const lastScrollTsRef = useRef<number | null>(null)
   const inFlightRef = useRef(false)
+  const lastToastTimeRef = useRef<number>(0)
+  const TOAST_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
   const isSuperAdmin = useMemo(() => (user?.role || '').trim().toLowerCase() === 'super_admin', [user])
 
   useEffect(() => {
@@ -125,7 +127,12 @@ export default function CeoSecurityGuard({ children, enabled = true, intervalMs 
       try {
         const result = await analyzeCeoBehavior(payload)
         if (result.step_up_required) {
-          toast.error(result.message || 'CEO step-up authentication required')
+          // Only show toast if cooldown has passed
+          const now = Date.now()
+          if (now - lastToastTimeRef.current > TOAST_COOLDOWN_MS) {
+            toast.error(result.message || 'CEO step-up authentication required')
+            lastToastTimeRef.current = now
+          }
           onStepUpRequired?.(result)
         }
       } catch {

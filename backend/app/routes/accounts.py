@@ -16,7 +16,7 @@ from sqlalchemy import case, extract, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User
+from app.models import Branch, User
 from app.models.finance import BranchAccount, FinanceExpense, FinanceInvoice, FinanceTransaction
 from app.services.finance_integration import create_transaction, ensure_branch_account
 from app.utils.auth_system import get_current_user
@@ -82,10 +82,13 @@ def _require_finance_role(current_user: User = Depends(get_current_user)) -> Use
     return current_user
 
 
-def _resolve_branch_id(current_user: User, requested_branch_id: Optional[int]) -> int:
+def _resolve_branch_id(db: Session, current_user: User, requested_branch_id: Optional[int]) -> int:
     if current_user.role == "super_admin":
         if requested_branch_id is None:
-            raise HTTPException(status_code=400, detail="branch_id is required for super_admin")
+            first_branch = db.query(Branch).order_by(Branch.id.asc()).first()
+            if not first_branch:
+                raise HTTPException(status_code=404, detail="Branch not found")
+            return first_branch.id
         return requested_branch_id
 
     if not current_user.branch_id:
@@ -203,7 +206,7 @@ def list_branch_accounts(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_finance_role),
 ):
-    resolved_branch = _resolve_branch_id(current_user, branch_id) if branch_id or current_user.role != "super_admin" else None
+    resolved_branch = _resolve_branch_id(db, current_user, branch_id) if branch_id or current_user.role != "super_admin" else None
 
     query = db.query(BranchAccount)
     if resolved_branch:
@@ -220,7 +223,7 @@ def list_transactions(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_finance_role),
 ):
-    resolved_branch = _resolve_branch_id(current_user, branch_id)
+    resolved_branch = _resolve_branch_id(db, current_user, branch_id)
     query = db.query(FinanceTransaction).filter(FinanceTransaction.branch_id == resolved_branch)
 
     if start:
@@ -239,7 +242,7 @@ def create_manual_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_finance_role),
 ):
-    resolved_branch = _resolve_branch_id(current_user, payload.branch_id)
+    resolved_branch = _resolve_branch_id(db, current_user, payload.branch_id)
     tx = create_transaction(
         db,
         branch_id=resolved_branch,
@@ -283,7 +286,7 @@ def list_invoices(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_finance_role),
 ):
-    resolved_branch = _resolve_branch_id(current_user, branch_id)
+    resolved_branch = _resolve_branch_id(db, current_user, branch_id)
     query = db.query(FinanceInvoice).filter(FinanceInvoice.branch_id == resolved_branch)
     if status:
         query = query.filter(FinanceInvoice.status == status)
@@ -296,7 +299,7 @@ def create_invoice(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_finance_role),
 ):
-    resolved_branch = _resolve_branch_id(current_user, payload.branch_id)
+    resolved_branch = _resolve_branch_id(db, current_user, payload.branch_id)
 
     invoice = FinanceInvoice(
         invoice_number=_generate_invoice_number(db),
@@ -345,7 +348,7 @@ def mark_invoice_paid(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
-    resolved_branch = _resolve_branch_id(current_user, branch_id or invoice.branch_id)
+    resolved_branch = _resolve_branch_id(db, current_user, branch_id or invoice.branch_id)
     if invoice.branch_id != resolved_branch:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -386,7 +389,7 @@ def generate_invoice_pdf(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
-    _resolve_branch_id(current_user, invoice.branch_id)
+    _resolve_branch_id(db, current_user, invoice.branch_id)
     invoice.pdf_url = _generate_invoice_pdf_file(invoice)
     db.commit()
     db.refresh(invoice)
@@ -405,7 +408,7 @@ def send_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
-    _resolve_branch_id(current_user, invoice.branch_id)
+    _resolve_branch_id(db, current_user, invoice.branch_id)
 
     if not invoice.pdf_url:
         invoice.pdf_url = _generate_invoice_pdf_file(invoice)
@@ -448,7 +451,7 @@ def list_expenses(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_finance_role),
 ):
-    resolved_branch = _resolve_branch_id(current_user, branch_id)
+    resolved_branch = _resolve_branch_id(db, current_user, branch_id)
     query = db.query(FinanceExpense).filter(FinanceExpense.branch_id == resolved_branch)
     if status:
         query = query.filter(FinanceExpense.status == status)
@@ -469,7 +472,7 @@ async def create_expense(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_finance_role),
 ):
-    resolved_branch = _resolve_branch_id(current_user, branch_id)
+    resolved_branch = _resolve_branch_id(db, current_user, branch_id)
     expense_date = datetime.fromisoformat(date) if date else datetime.utcnow()
 
     attachment_url = None
@@ -525,7 +528,7 @@ def approve_expense(
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    _resolve_branch_id(current_user, expense.branch_id)
+    _resolve_branch_id(db, current_user, expense.branch_id)
     expense.status = "approved"
     expense.approved_by = current_user.id
 
@@ -562,7 +565,7 @@ def profit_loss_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_finance_role),
 ):
-    resolved_branch = _resolve_branch_id(current_user, branch_id)
+    resolved_branch = _resolve_branch_id(db, current_user, branch_id)
 
     totals = (
         db.query(
@@ -599,7 +602,7 @@ def gst_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_finance_role),
 ):
-    resolved_branch = _resolve_branch_id(current_user, branch_id)
+    resolved_branch = _resolve_branch_id(db, current_user, branch_id)
 
     invoices = (
         db.query(FinanceInvoice)

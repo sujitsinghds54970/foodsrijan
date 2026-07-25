@@ -51,7 +51,10 @@ def _resolve_scope(db: Session, user: User, requested_branch_id: Optional[int]) 
 
     if user.role == "super_admin":
         if requested_branch_id is None:
-            raise HTTPException(status_code=400, detail="branch_id is required for super_admin")
+            branch = db.query(Branch).order_by(Branch.id.asc()).first()
+            if not branch:
+                raise HTTPException(status_code=404, detail="Branch not found")
+            return _OverviewScope(branch_id=branch.id, branch=branch)
         branch_id = requested_branch_id
     else:
         if user.branch_id is None:

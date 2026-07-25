@@ -258,9 +258,12 @@ def get_branches(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Super admins can see all branches, others see only their own
     if current_user.role == "super_admin":
         query = db.query(Branch)
     else:
+        if not current_user.branch_id:
+            raise HTTPException(status_code=400, detail="branch_id is required for your role")
         query = db.query(Branch).filter(Branch.id == current_user.branch_id)
 
     if search:

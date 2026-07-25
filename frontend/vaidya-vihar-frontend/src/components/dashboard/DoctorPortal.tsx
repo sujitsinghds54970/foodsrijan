@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
@@ -227,18 +227,25 @@ export default function DoctorPortal() {
   const [aiPredictive, setAiPredictive] = useState<AIPredictiveResponse | null>(null)
   const [aiGrowth, setAiGrowth] = useState<AIGrowthResponse | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
+  const [lastErrorTime, setLastErrorTime] = useState(0)
 
   const [whiteLabelClinicName, setWhiteLabelClinicName] = useState('')
   const [whiteLabelClinicAddress, setWhiteLabelClinicAddress] = useState('')
   const [whiteLabelLogo, setWhiteLabelLogo] = useState('')
   const [whiteLabelSaving, setWhiteLabelSaving] = useState(false)
   const [tourRun, setTourRun] = useState(false)
+  const initialLoadRanRef = useRef(false)
+  const lastErrorTimeRef = useRef(0)
+  const hasSeededChatUserRef = useRef(false)
 
   const requestConfig = useMemo(() => ({ headers: token ? { Authorization: `Bearer ${token}` } : {} }), [token])
   const doctorTourStorageKey = useMemo(
     () => `doctor-portal-tour-seen-${profile?.doctor_id || profile?.id || user?.id || 'default'}`,
     [profile?.doctor_id, profile?.id, user?.id],
   )
+  useEffect(() => {
+    lastErrorTimeRef.current = lastErrorTime
+  }, [lastErrorTime])
   const tourSteps = useMemo<Step[]>(() => [
     {
       target: '[data-tour="doctor-header"]',
@@ -312,11 +319,13 @@ export default function DoctorPortal() {
       setLabTeam(messagesRes.data.lab_team || [])
       const receivedMessages = messagesRes.data.messages || []
       setMessages(receivedMessages)
-      if (!chatUserId && receivedMessages.length) {
-        const counterpart = receivedMessages[receivedMessages.length - 1].sender_id === user?.id
-          ? receivedMessages[receivedMessages.length - 1].receiver_id
-          : receivedMessages[receivedMessages.length - 1].sender_id
+      if (!hasSeededChatUserRef.current && receivedMessages.length) {
+        const latestMessage = receivedMessages[receivedMessages.length - 1]
+        const counterpart = latestMessage.sender_id === user?.id
+          ? latestMessage.receiver_id
+          : latestMessage.sender_id
         setChatUserId(counterpart)
+        hasSeededChatUserRef.current = true
       }
       setAnalytics(analyticsRes.data)
       setReferrals(referralsRes.data)
@@ -345,15 +354,22 @@ export default function DoctorPortal() {
         setWhiteLabelLogo(window.localStorage.getItem(`${keyPrefix}-logo`) || '')
       }
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Unable to load doctor portal')
+      const now = Date.now()
+      if (now - lastErrorTimeRef.current >= 5000) {
+        lastErrorTimeRef.current = now
+        setLastErrorTime(now)
+        toast.error(error?.response?.data?.detail || 'Unable to load doctor portal')
+      }
     } finally {
       setLoading(false)
     }
-  }, [chatUserId, requestConfig, token, user?.id])
+  }, [requestConfig, token, user?.id])
 
   useEffect(() => {
+    if (!token || initialLoadRanRef.current) return
+    initialLoadRanRef.current = true
     void loadFoundation()
-  }, [loadFoundation])
+  }, [loadFoundation, token])
 
   useEffect(() => {
     if (loading) return
@@ -378,6 +394,15 @@ export default function DoctorPortal() {
     }, 250)
     return () => window.clearTimeout(timer)
   }, [dateFilter, requestConfig, search, tagFilter, token])
+
+  useEffect(() => {
+    if (!token) {
+      initialLoadRanRef.current = false
+      hasSeededChatUserRef.current = false
+      lastErrorTimeRef.current = 0
+      setLastErrorTime(0)
+    }
+  }, [token])
 
   useEffect(() => {
     if (!token) return

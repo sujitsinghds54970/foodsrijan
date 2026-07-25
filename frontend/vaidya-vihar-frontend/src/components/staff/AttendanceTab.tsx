@@ -155,10 +155,17 @@ export default function AttendanceTab(_: AttendanceTabProps) {
       const coords = await getLocation()
       setLocation({ lat: coords.lat, lng: coords.lng })
       console.log("✅ Location obtained:", coords)
-    } catch (error) {
+      setShowClockModal(true)
+    } catch (error: any) {
       console.warn("⚠️ Could not obtain location:", error)
+      // Check if permission was denied
+      if (error.code === 1) {
+        toast.error("Location access denied. Please enable GPS in your browser settings.")
+        return
+      }
+      // If location not available, show message but still allow clock-in
+      console.log("GPS location unavailable, proceeding without location.")
       setLocation({})
-    } finally {
       setShowClockModal(true)
     }
   }
@@ -523,7 +530,7 @@ export default function AttendanceTab(_: AttendanceTabProps) {
                             className="w-12 h-12 rounded object-cover border border-gray-200 cursor-pointer hover:opacity-80"
                             style={{ width: '48px', height: '48px', objectFit: 'cover', border: '1px solid #e5e7eb', borderRadius: '6px', cursor: 'pointer' }}
                             onError={(e) => {
-                              e.currentTarget.src = '/placeholder-avatar.png'
+                              e.currentTarget.src = '/placeholder-avatar.svg'
                             }}
                             onClick={() => {
                               setPreviewLog(row)
@@ -541,7 +548,7 @@ export default function AttendanceTab(_: AttendanceTabProps) {
                             className="w-12 h-12 rounded object-cover border border-gray-200 cursor-pointer hover:opacity-80"
                             style={{ width: '48px', height: '48px', objectFit: 'cover', border: '1px solid #e5e7eb', borderRadius: '6px', cursor: 'pointer' }}
                             onError={(e) => {
-                              e.currentTarget.src = '/placeholder-avatar.png'
+                              e.currentTarget.src = '/placeholder-avatar.svg'
                             }}
                             onClick={() => {
                               setPreviewLog(row)

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../contexts/AuthContext'
@@ -119,6 +119,7 @@ export default function BranchManagement() {
   const [branchActivityLoading, setBranchActivityLoading] = useState(false)
   const [deleteConfirmBranch, setDeleteConfirmBranch] = useState<Branch | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const lastErrorTimeRef = useRef(0)
   const API_BASE =
     process.env.REACT_APP_API_BASE_URL ||
     ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
@@ -135,6 +136,15 @@ export default function BranchManagement() {
     return { headers }
   }, [token])
 
+  const notifyError = (message: string) => {
+    setError(message)
+    const now = Date.now()
+    if (now - lastErrorTimeRef.current >= 5000) {
+      lastErrorTimeRef.current = now
+      toast.error(message)
+    }
+  }
+
   const fetchBranches = async () => {
     if (!token) return
     setLoading(true)
@@ -143,6 +153,9 @@ export default function BranchManagement() {
       const params = new URLSearchParams()
       params.append('include_stats', 'true')
       params.append('active_only', showInactive ? 'false' : 'true')
+      if (!isSuperAdmin && user?.branch_id) {
+        params.append('branch_id', String(user.branch_id))
+      }
       if (searchTerm.trim()) {
         params.append('search', searchTerm.trim())
       }
@@ -203,7 +216,7 @@ export default function BranchManagement() {
     if (!isSuperAdmin) {
       const msg = 'Only super admin can create branches'
       setError(msg)
-      toast.error(msg)
+      notifyError(msg)
       return
     }
 
@@ -212,7 +225,7 @@ export default function BranchManagement() {
     if (missing) {
       const msg = `${missing.replace('_', ' ')} is required`
       setError(msg)
-      toast.error(msg)
+      notifyError(msg)
       return
     }
 
@@ -220,7 +233,7 @@ export default function BranchManagement() {
     if (!/^\d{6}$/.test(pincode)) {
       const msg = 'Pincode must be exactly 6 digits'
       setError(msg)
-      toast.error(msg)
+      notifyError(msg)
       return
     }
 
@@ -228,14 +241,14 @@ export default function BranchManagement() {
     if (!/^\d{10,15}$/.test(phone)) {
       const msg = 'Phone must be 10 to 15 digits'
       setError(msg)
-      toast.error(msg)
+      notifyError(msg)
       return
     }
 
     if (form.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       const msg = 'Please enter a valid email address'
       setError(msg)
-      toast.error(msg)
+      notifyError(msg)
       return
     }
 
@@ -300,7 +313,7 @@ export default function BranchManagement() {
         } else {
           setSuccess('Branch created successfully.')
           toast.success('Branch created successfully.')
-          toast.error('Branch created, but credentials were not returned by API.')
+          notifyError('Branch created, but credentials were not returned by API.')
         }
       }
 
@@ -314,7 +327,7 @@ export default function BranchManagement() {
               : JSON.stringify(err.response.data.detail))
         : err?.message || 'Unable to save branch'
       setError(errorMsg)
-      toast.error(errorMsg)
+      notifyError(errorMsg)
     } finally {
       setSaving(false)
     }
@@ -337,7 +350,7 @@ export default function BranchManagement() {
             : JSON.stringify(err.response.data.detail))
         : 'Unable to delete branch';
       setError(errorMsg)
-      toast.error(errorMsg)
+      notifyError(errorMsg)
     }
   }
 
@@ -367,7 +380,7 @@ export default function BranchManagement() {
             : JSON.stringify(err.response.data.detail))
         : 'Unable to delete branch';
       setError(errorMsg)
-      toast.error(errorMsg)
+      notifyError(errorMsg)
     } finally {
       setDeleting(false)
     }

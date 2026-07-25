@@ -44,10 +44,10 @@ _ensure_tables()
 
 
 def _require_branch_director(current_user: User) -> None:
-    if current_user.role not in ["branch_director", "branch_admin"]:
+    if current_user.role not in ["super_admin", "branch_director", "branch_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only branch_director or branch_admin can access this module",
+            detail="Only super_admin, branch_director or branch_admin can access this module",
         )
 
 

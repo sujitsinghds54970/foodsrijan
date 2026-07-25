@@ -97,8 +97,18 @@ def stamp_image_with_gps(
         else "GPS: Unavailable"
     )
     
-    # Get address from parameter or reverse geocode, ensure it's truncated properly
-    resolved_address = (address or reverse_geocode_address(latitude, longitude) or "Location unavailable").strip()
+    # Get address from parameter or reverse geocode
+    if address:
+        resolved_address = address.strip()
+    elif latitude is not None and longitude is not None:
+        resolved_address = reverse_geocode_address(latitude, longitude)
+        if not resolved_address:
+            # If reverse geocoding fails, use raw coordinates instead of "Location unavailable"
+            resolved_address = f"Lat: {latitude:.6f}, Lng: {longitude:.6f}"
+    else:
+        resolved_address = "Location unavailable"
+    
+    # Truncate if too long
     if len(resolved_address) > 60:
         resolved_address = f"{resolved_address[:57]}..."
     
@@ -108,58 +118,56 @@ def stamp_image_with_gps(
         f"Location: {resolved_address}",
     ]
 
-    # Calculate text dimensions for the overlay box
-    max_width = 0
-    line_height = 0
-    for line in lines:
-        left, top, right, bottom = draw.textbbox((0, 0), line, font=font)
-        max_width = max(max_width, right - left)
-        line_height = max(line_height, bottom - top)
-
-    # Padding around the text inside the overlay box
-    padding_x = 15
-    padding_y = 12
-    gap = 5
-    
-    # Calculate box dimensions to fit text snugly
-    box_width = max_width + (padding_x * 2)
-    box_height = (line_height * len(lines)) + (gap * (len(lines) - 1)) + (padding_y * 2)
-
-    # Position stamp at bottom-right corner with 15px from edges
-    edge_offset = 15
-    x2 = image.width - edge_offset
-    y2 = image.height - edge_offset
-    x1 = x2 - box_width
-    y1 = y2 - box_height
-    
-    # Ensure box doesn't go off the left/top edges
-    if x1 < edge_offset:
-        x1 = edge_offset
-        x2 = x1 + box_width
-    if y1 < edge_offset:
-        y1 = edge_offset
-        y2 = y1 + box_height
-
-    # Draw semi-transparent rounded rectangle background (0.6 opacity ≈ 153 in RGBA)
-    # Using rectangle with rounded corners via multiple draws or just rectangle with rounded effect
-    corner_radius = 8
+    # Measure the full multi-line block so the box hugs the text closely.
+    block_text = "\n".join(lines)
     try:
-        # Try to use rounded_rectangle if available (Pillow >= 8.2.0)
+        text_left, text_top, text_right, text_bottom = draw.multiline_textbbox(
+            (0, 0),
+            block_text,
+            font=font,
+            spacing=4,
+        )
+        text_width = text_right - text_left
+        text_height = text_bottom - text_top
+    except AttributeError:
+        widths = []
+        heights = []
+        for line in lines:
+            left, top, right, bottom = draw.textbbox((0, 0), line, font=font)
+            widths.append(right - left)
+            heights.append(bottom - top)
+        text_width = max(widths) if widths else 0
+        text_height = sum(heights) + (4 * (len(lines) - 1))
+
+    padding = 15
+    box_width = text_width + 30
+    box_height = text_height + 30
+
+    x_start = image.width - box_width - 20
+    y_start = image.height - box_height - 20
+    if x_start < 0 or y_start < 0:
+        x_start, y_start = 10, 10
+
+    corner_radius = 10
+    try:
         draw.rounded_rectangle(
-            [(x1, y1), (x2, y2)],
+            [(x_start, y_start), (x_start + box_width, y_start + box_height)],
             radius=corner_radius,
-            fill=(0, 0, 0, 153)  # Semi-transparent black (60% opacity)
+            fill=(0, 0, 0, 140),
         )
     except AttributeError:
-        # Fallback for older Pillow versions: just use regular rectangle
-        draw.rectangle([(x1, y1), (x2, y2)], fill=(0, 0, 0, 153))
+        draw.rectangle(
+            [(x_start, y_start), (x_start + box_width, y_start + box_height)],
+            fill=(0, 0, 0, 140),
+        )
 
-    # Draw text lines with white color
-    text_x = x1 + padding_x
-    text_y = y1 + padding_y
-    for line in lines:
-        draw.text((text_x, text_y), line, font=font, fill=(255, 255, 255, 255))
-        text_y += line_height + gap
+    draw.multiline_text(
+        (x_start + padding, y_start + padding),
+        block_text,
+        font=font,
+        fill="white",
+        spacing=4,
+    )
 
     # Save stamped image to the same directory
     stamped_path = image_path.with_name(f"stamped_{image_path.stem}.jpg")

@@ -35,6 +35,7 @@ export default function StaffProfile({ staff, canReviewLeave, onChanged }: Staff
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingCreds, setSavingCreds] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [showIdCardModal, setShowIdCardModal] = useState(false)
 
   const formattedJoinDate = useMemo(() => {
     if (!staff.date_of_joining) return 'N/A'
@@ -123,7 +124,13 @@ export default function StaffProfile({ staff, canReviewLeave, onChanged }: Staff
             <h2 className="text-lg font-bold text-slate-900">{staff.full_name}</h2>
             <p className="text-xs text-slate-500">{staff.staff_id} • Joined: {formattedJoinDate}</p>
           </div>
-          <label className="ml-auto cursor-pointer rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+          <button
+            onClick={() => setShowIdCardModal(true)}
+            className="ml-auto rounded-lg border border-indigo-600 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+          >
+            View ID Card
+          </button>
+          <label className="cursor-pointer rounded-lg border bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
             {uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
             <input
               type="file"
@@ -204,7 +211,24 @@ export default function StaffProfile({ staff, canReviewLeave, onChanged }: Staff
       />
 
       <DirectorAttendancePanel staffProfileId={staff.staff_profile_id} />
-      <StaffIDCard staff={staff} branchName={branchName} />
+
+      {/* ID Card Modal */}
+      {showIdCardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">ID Card</h3>
+              <button
+                onClick={() => setShowIdCardModal(false)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+            <StaffIDCard staff={staff} branchName={branchName} downloadButtonLabel="Download PDF" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

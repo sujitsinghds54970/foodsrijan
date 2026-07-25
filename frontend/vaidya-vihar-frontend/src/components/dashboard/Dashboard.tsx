@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import Sidebar from './Sidebar'
@@ -31,7 +31,7 @@ import CeoDashboard from '../ceo/CeoDashboard'
 type ActiveTab = 'overview' | 'patients' | 'daily-operations' | 'staff' | 'payroll' | 'staff-profile' | 'staff-salary' | 'staff-attendance' | 'staff-tasks' | 'staff-notifications' | 'staff-performance' | 'inventory' | 'analytics' | 'reports' | 'lis' | 'payments' | 'accounting' | 'accounts' | 'hr' | 'doctor-portal' | 'patient-portal' | 'branch-management' | 'ceo'
 
 const tabPathMap: Record<ActiveTab, string> = {
-  overview: '/branch/overview',
+  overview: '/branch/dashboard',
   patients: '/branch/patients',
   'daily-operations': '/branch/daily-operations',
   staff: '/branch/staff',
@@ -58,6 +58,7 @@ const tabPathMap: Record<ActiveTab, string> = {
 
 function tabFromPath(pathname: string): ActiveTab {
   const path = normalizePath(pathname).toLowerCase()
+  if (path === '/branch/dashboard' || path.startsWith('/branch/dashboard/')) return 'overview'
   if (path === '/branch/staff' || path.startsWith('/branch/staff/')) return 'staff'
   if (path === '/branch/payroll' || path.startsWith('/branch/payroll/')) return 'payroll'
   if (path === '/staff/profile' || path.startsWith('/staff/profile/')) return 'staff-profile'
@@ -91,47 +92,35 @@ function normalizePath(pathname: string): string {
 }
 
 export default function Dashboard() {
-  const { user, logout } = useAuth()
+  const { user, logout, loading: isLoading } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview')
-  const hasRoleRedirectedRef = useRef<boolean>(false)
   const normalizedLocationPath = useMemo(() => normalizePath(location.pathname), [location.pathname])
 
-  const tabForRole = (role: string): ActiveTab => {
-    if (role === 'super_admin') return 'branch-management'
-    if (role === 'patient') return 'patient-portal'
-    if (role === 'doctor') return 'doctor-portal'
-    if (role === 'staff') return 'staff-profile'
-    return 'overview'
-  }
-
+  // Log every location pathname change
   useEffect(() => {
-    if (!user?.role) return
-    const role = user.role.trim().toLowerCase()
+    console.log('[DASHBOARD] Location pathname changed:', location.pathname)
+  }, [location.pathname])
 
-    const resolvedTab = tabFromPath(normalizedLocationPath)
+  // IMPORTANT: Sync activeTab with current route pathname (NO redirects here!)
+  useEffect(() => {
+    if (isLoading) return
+    const newTab = tabFromPath(normalizedLocationPath)
+    console.log('[DASHBOARD] Syncing activeTab:', { pathname: normalizedLocationPath, newTab })
+    setActiveTab(newTab)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, normalizedLocationPath])
 
-    if (resolvedTab !== 'overview') {
-      setActiveTab((prev) => (prev === resolvedTab ? prev : resolvedTab))
-      hasRoleRedirectedRef.current = false
-      return
-    }
-
-    const targetTab = tabForRole(role)
-    const targetPath = normalizePath(tabPathMap[targetTab])
-    setActiveTab((prev) => (prev === targetTab ? prev : targetTab))
-
-    if (normalizedLocationPath !== targetPath && !hasRoleRedirectedRef.current) {
-      hasRoleRedirectedRef.current = true
-      navigate(targetPath, { replace: true })
-      return
-    }
-
-    if (normalizedLocationPath === targetPath) {
-      hasRoleRedirectedRef.current = false
-    }
-  }, [navigate, normalizedLocationPath, user?.role])
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-700 shadow-lg">
+          Loading...
+        </div>
+      </div>
+    )
+  }
 
   if (activeTab === 'patient-portal') {
     return (
@@ -146,8 +135,9 @@ export default function Dashboard() {
   const handleTabChange = (nextTab: ActiveTab) => {
     if (nextTab === activeTab) return
 
-    setActiveTab(nextTab)
+    console.log('[DASHBOARD] Tab change:', { from: activeTab, to: nextTab })
     const targetPath = normalizePath(tabPathMap[nextTab])
+    console.log('[DASHBOARD] Navigate to:', { targetPath, currentPath: normalizedLocationPath })
     if (targetPath && normalizedLocationPath !== targetPath) {
       navigate(targetPath)
     }
@@ -155,6 +145,7 @@ export default function Dashboard() {
 
   const renderContent = () => {
     const normalizedRole = (user?.role || '').trim().toLowerCase()
+    console.log('[DASHBOARD] renderContent:', { activeTab, normalizedRole })
 
     switch (activeTab) {
       case 'overview':
