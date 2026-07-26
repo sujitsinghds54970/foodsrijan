@@ -144,98 +144,101 @@ interface AutocompleteCellProps {
 }
 
 function AutocompleteCell({ value, onChange, fetchOptions, placeholder }: AutocompleteCellProps) {
-  const [localValue, setLocalValue] = useState(String(value ?? ''))
-  const [options, setOptions] = useState<AutocompleteOption[]>([])
-  const [isFocused, setIsFocused] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const debouncedSearchTerm = useDebounce(localValue, 500)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [typedValue, setTypedValue] = useState(String(value ?? ''))
+  const [suggestion, setSuggestion] = useState('')
+  const debouncedSearchTerm = useDebounce(typedValue, 300)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Sync external value when not focused
   useEffect(() => {
-    if (String(value ?? '') !== localValue && !isFocused) {
-      setLocalValue(String(value ?? ''))
+    const currentValue = String(value ?? '')
+    if (currentValue !== typedValue) {
+      setTypedValue(currentValue)
+      setSuggestion('')
     }
-  }, [value, isFocused])
+  }, [value])
 
+  // Fetch suggestions when debounced input changes
   useEffect(() => {
-    if (!isFocused || debouncedSearchTerm.length === 0) {
-      setOptions([])
+    if (debouncedSearchTerm.length === 0) {
+      setSuggestion('')
       return
     }
 
-    const loadOptions = async () => {
+    const loadSuggestion = async () => {
       try {
-        setIsLoading(true)
         const results = await fetchOptions(debouncedSearchTerm)
-        setOptions(results)
+        if (results.length > 0) {
+          const firstResult = results[0].name
+          // Check if the first result starts with the typed value (case-insensitive)
+          if (firstResult.toLowerCase().startsWith(debouncedSearchTerm.toLowerCase())) {
+            // Calculate the suffix (the part after what the user typed)
+            const suffix = firstResult.substring(debouncedSearchTerm.length)
+            setSuggestion(suffix)
+          } else {
+            setSuggestion('')
+          }
+        } else {
+          setSuggestion('')
+        }
       } catch (error) {
-        console.error('Error fetching autocomplete options:', error)
-        setOptions([])
-      } finally {
-        setIsLoading(false)
+        console.error('Error fetching autocomplete suggestion:', error)
+        setSuggestion('')
       }
     }
 
-    loadOptions()
-  }, [debouncedSearchTerm, isFocused, fetchOptions])
-
-  const handleSelectOption = (option: AutocompleteOption) => {
-    setLocalValue(option.name)
-    onChange(option.name)
-    setOptions([])
-    setIsFocused(false)
-  }
+    loadSuggestion()
+  }, [debouncedSearchTerm, fetchOptions])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalValue(e.target.value)
+    setTypedValue(e.target.value)
   }
 
-  const handleInputBlur = () => {
-    setTimeout(() => {
-      setIsFocused(false)
-      if (String(value ?? '') !== localValue) {
-        onChange(localValue)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.key === 'Enter' || e.key === 'Tab') && suggestion) {
+      // Accept the suggestion
+      e.preventDefault()
+      const fullValue = typedValue + suggestion
+      setTypedValue(fullValue)
+      onChange(fullValue)
+      setSuggestion('')
+      if (e.key === 'Tab') {
+        // Tab should move to next field
+        ;(e.target as HTMLInputElement).blur()
       }
-    }, 100)
+    } else if (e.key === 'Backspace') {
+      // Clear suggestion on backspace
+      setSuggestion('')
+    }
+  }
+
+  const handleBlur = () => {
+    // Save the typed value on blur
+    if (typedValue !== String(value ?? '')) {
+      onChange(typedValue)
+    }
+    setSuggestion('')
   }
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div className="relative w-full">
+      {/* Gray suggestion text behind the input */}
+      <span className="absolute inset-0 text-gray-400 pointer-events-none whitespace-pre overflow-hidden rounded px-2 py-1 text-sm">
+        {typedValue}
+        <span className="text-gray-300">{suggestion}</span>
+      </span>
+      
+      {/* Actual input field on top */}
       <input
         ref={inputRef}
         type="text"
-        value={localValue}
+        value={typedValue}
         onChange={handleInputChange}
-        onFocus={() => setIsFocused(true)}
-        onBlur={handleInputBlur}
-        onKeyDown={e => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            inputRef.current?.blur()
-          }
-        }}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
         placeholder={placeholder}
-        className="w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500"
+        className="relative z-10 w-full px-2 py-1 border rounded text-sm bg-transparent text-gray-900 focus:outline-none focus:border-blue-500"
       />
-      {isFocused && options.length > 0 && (
-        <div className="absolute top-10 left-0 z-50 bg-white shadow-lg border rounded-lg w-full max-h-60 overflow-y-auto">
-          {options.map(option => (
-            <div
-              key={option.id}
-              onClick={() => handleSelectOption(option)}
-              className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-b-0"
-            >
-              {option.name}
-            </div>
-          ))}
-        </div>
-      )}
-      {isFocused && isLoading && (
-        <div className="absolute top-10 left-0 z-50 bg-white shadow-lg border rounded-lg w-full px-3 py-2 text-xs text-gray-500">
-          Loading...
-        </div>
-      )}
     </div>
   )
 }

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import func, distinct
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.auth import get_current_user
+from app.utils.auth_system import get_current_user
 from app.models import User
 from app.models.daily_entry_module import DailyEntryModule
 
