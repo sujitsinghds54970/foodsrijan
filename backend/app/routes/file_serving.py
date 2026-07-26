@@ -162,9 +162,17 @@ async def serve_file(
         print(f"❌ [FILE_SERVING] Invalid filename attempted: {filename}")
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    current_user = _resolve_current_user(db, authorization, access_token)
+    # For selected image files (staff photos, attendance images, CEO branding assets),
+    # allow without authentication so browser <img> tags can render without auth headers.
+    # This avoids ORB (Opaque Response Blocking) issues with query parameter tokens
+    is_image = filename.lower().endswith(('.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.ico'))
+    is_staff_or_attendance_image = 'staff/' in filename or 'attendance/' in filename
+    is_ceo_branding_image = 'ceo/branding/' in filename
 
-    _enforce_doctor_report_access(filename, current_user, db)
+    # If it's a non-image file (PDFs, reports) or a sensitive image, require authentication
+    if not is_image or (is_image and not (is_staff_or_attendance_image or is_ceo_branding_image)):
+        current_user = _resolve_current_user(db, authorization, access_token)
+        _enforce_doctor_report_access(filename, current_user, db)
     
     # Build the absolute path to the requested file
     # Ensure we construct the absolute path correctly
@@ -204,9 +212,8 @@ async def serve_file(
     return FileResponse(
         path=str(requested_file_path),
         media_type=media_type,
-        filename=os.path.basename(filename),
         headers={
-            "Content-Disposition": f'inline; filename="{os.path.basename(filename)}"',
+            "Content-Disposition": "inline",
             "Cache-Control": "public, max-age=3600",
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, OPTIONS",

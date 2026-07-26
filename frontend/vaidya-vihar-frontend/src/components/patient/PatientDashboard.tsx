@@ -22,6 +22,8 @@ interface Branding {
   clinic_name?: string
   clinic_address?: string
   logo_url?: string
+  branch_name?: string
+  branch_address?: string
   report_header?: {
     title?: string
     subtitle?: string
@@ -48,8 +50,8 @@ export default function PatientDashboard({ active }: PatientDashboardProps) {
 
   const kpis = useMemo(() => dashboard?.kpis || {}, [dashboard])
   const branding = useMemo<Branding>(() => dashboard?.branding || {}, [dashboard])
-  const brandTitle = branding?.clinic_name || 'Vaidya Vihar Diagnostic'
-  const brandSubtitle = branding?.clinic_address || 'Trusted diagnostics and patient care portal'
+  const brandTitle = branding?.branch_name || branding?.clinic_name || 'Vaidya Vihar Diagnostic'
+  const brandSubtitle = branding?.branch_address || branding?.clinic_address || 'Trusted diagnostics and patient care portal'
 
   const loadPortal = useCallback(async (portalToken: string) => {
     setLoading(true)

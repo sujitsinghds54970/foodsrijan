@@ -162,6 +162,19 @@ def _save_uploaded_file(upload: UploadFile, folder_name: str) -> str:
     return str(target_file.relative_to(UPLOADS_DIR))
 
 
+def _resolve_photo_url(photo_path: Optional[str]) -> Optional[str]:
+    """Convert photo_path to a URL that the frontend can use."""
+    if not photo_path:
+        return None
+    if photo_path.startswith("http://") or photo_path.startswith("https://"):
+        return photo_path
+    if photo_path.startswith("/api/files/"):
+        return photo_path
+    if photo_path.startswith("/"):
+        return photo_path
+    return f"/api/files/{photo_path}"
+
+
 def _ensure_director_notification(db: Session, branch_id: int, title: str, message: str) -> None:
     director_user = db.query(User).filter(
         User.branch_id == branch_id,
@@ -504,7 +517,7 @@ def upload_staff_photo(
 
     profile.photo_path = _save_uploaded_file(file, "staff_photos")
     db.commit()
-    return {"photo_path": profile.photo_path}
+    return {"photo_url": _resolve_photo_url(profile.photo_path)}
 
 
 @router.put("/{staff_profile_id}/credentials")

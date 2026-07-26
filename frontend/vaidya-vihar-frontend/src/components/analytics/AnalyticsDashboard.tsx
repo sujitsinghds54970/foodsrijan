@@ -30,9 +30,13 @@ function formatInr(value: number) {
   return `Rs ${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 }
 
-export default function AnalyticsDashboard() {
+interface AnalyticsDashboardProps {
+  forcedBranchId?: number
+}
+
+export default function AnalyticsDashboard({ forcedBranchId }: AnalyticsDashboardProps) {
   const { user, token } = useAuth()
-  const [branchId, setBranchId] = useState<number>(Number(user?.branch_id || 1))
+  const [branchId, setBranchId] = useState<number>(Number(forcedBranchId || user?.branch_id || 1))
   const [loading, setLoading] = useState(false)
 
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
@@ -44,10 +48,14 @@ export default function AnalyticsDashboard() {
   const [endDate, setEndDate] = useState<string>(toIsoDate(new Date()))
 
   useEffect(() => {
+    if (forcedBranchId && Number.isFinite(forcedBranchId) && forcedBranchId > 0) {
+      setBranchId(Number(forcedBranchId))
+      return
+    }
     if (user?.role !== 'super_admin' && user?.branch_id) {
       setBranchId(Number(user.branch_id))
     }
-  }, [user?.role, user?.branch_id])
+  }, [forcedBranchId, user?.role, user?.branch_id])
 
   const loadData = useCallback(async () => {
     if (!branchId) {
@@ -136,7 +144,7 @@ export default function AnalyticsDashboard() {
             onChange={(e) => setBranchId(Number(e.target.value || 0))}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
             placeholder="Branch ID"
-            disabled={user?.role !== 'super_admin'}
+            disabled={Boolean(forcedBranchId) || user?.role !== 'super_admin'}
           />
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />

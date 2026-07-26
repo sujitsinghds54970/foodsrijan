@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { payrollApi } from './api'
@@ -6,13 +6,25 @@ import { PayslipItem } from './types'
 
 export default function PayslipsTab() {
   const [items, setItems] = useState<PayslipItem[]>([])
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
+  const lastErrorAtRef = useRef(0)
 
   const handleDownload = async (item: PayslipItem) => {
+    const key = `${item.payroll_id}-${item.month}-${item.year}`
+    if (downloadingKey === key) return
+
     try {
+      setDownloadingKey(key)
       const fileName = `payslip_${String(item.month).padStart(2, '0')}_${item.year}.pdf`
       await payrollApi.downloadPayslip(item.download_url, fileName)
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || 'Unable to download payslip PDF')
+      const now = Date.now()
+      if (now - lastErrorAtRef.current >= 5000) {
+        toast.error(error?.response?.data?.detail || 'Unable to download payslip PDF')
+        lastErrorAtRef.current = now
+      }
+    } finally {
+      setDownloadingKey(null)
     }
   }
 
@@ -57,9 +69,10 @@ export default function PayslipsTab() {
                     <button
                       type="button"
                       onClick={() => void handleDownload(item)}
+                      disabled={downloadingKey === `${item.payroll_id}-${item.month}-${item.year}`}
                       className="rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700"
                     >
-                      Download PDF
+                      {downloadingKey === `${item.payroll_id}-${item.month}-${item.year}` ? 'Downloading...' : 'Download PDF'}
                     </button>
                   </td>
                 </tr>

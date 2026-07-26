@@ -57,6 +57,12 @@ function withMediaToken(url: string): string {
       return resolved.toString()
     }
 
+    // For staff photos and attendance images, don't add access_token query param
+    // to avoid ORB (Opaque Response Blocking) issues. Backend allows these without auth.
+    if (resolved.pathname.includes('/api/files/staff/') || resolved.pathname.includes('/api/files/attendance/')) {
+      return resolved.toString()
+    }
+
     if (!resolved.searchParams.has('access_token')) {
       resolved.searchParams.set('access_token', token)
     }
@@ -169,9 +175,20 @@ export const staffApi = {
     return response.data?.photo_url
   },
 
+  async uploadOwnPhoto(file: File): Promise<string> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await axios.post(`${STAFF_BASE}/me/photo`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data?.photo_url
+  },
+
   async updateSalary(staffProfileId: number, payload: StaffSalary): Promise<StaffSalary> {
-    const response = await axios.post(`${STAFF_BASE}/${staffProfileId}/salary`, payload)
-    return response.data?.salary
+    const response = await axios.put(`${STAFF_BASE}/${staffProfileId}/salary`, payload)
+    return response.data?.salary || response.data
   },
 
   async listAttendance(staffProfileId: number, month: number, year: number): Promise<AttendanceEntry[]> {
@@ -339,6 +356,10 @@ export const staffSelfApi = {
         'Content-Type': 'multipart/form-data',
       },
     })
+  },
+
+  async createLeaveRequest(payload: { leave_type: string; start_date: string; end_date: string; reason?: string }): Promise<void> {
+    await axios.post(`${STAFF_BASE}/leaves`, payload)
   },
 
   async cancelLeave(leaveId: number): Promise<void> {

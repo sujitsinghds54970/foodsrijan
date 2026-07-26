@@ -5,11 +5,14 @@ import secrets
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import User
 from app.models.hr import (
+    BranchNotification,
+    BranchNotificationType,
     DirectorNotification,
     StaffNotification,
     StaffProfile,
@@ -105,6 +108,13 @@ def _is_director_like(user: User) -> bool:
     return _normalize_role(user.role) in {"branch_director", "branch_admin", "super_admin"}
 
 
+def _is_staff_role(role: Optional[str]) -> bool:
+    """Check if role is a staff-type role (not admin/director/doctor)"""
+    role_normalized = _normalize_role(role)
+    non_staff_roles = {'super_admin', 'branch_admin', 'branch_director', 'admin', 'doctor'}
+    return role_normalized not in non_staff_roles
+
+
 def _ensure_task_access(task: StaffTask, current_user: User) -> None:
     role = _normalize_role(current_user.role)
     if role == "super_admin":
@@ -113,7 +123,7 @@ def _ensure_task_access(task: StaffTask, current_user: User) -> None:
         if current_user.branch_id != task.branch_id:
             raise HTTPException(status_code=403, detail="Access denied")
         return
-    if role == "staff":
+    if _is_staff_role(current_user.role):
         if task.assigned_to != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
         return
@@ -125,6 +135,26 @@ def _resolve_staff_profile(db: Session, user_id: int, branch_id: Optional[int]) 
     if branch_id is not None:
         query = query.filter(StaffProfile.branch_id == branch_id)
     return query.first()
+
+
+def _ensure_branch_notifications_table(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS branch_notifications (
+                id INTEGER PRIMARY KEY,
+                branch_id INTEGER NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                title VARCHAR(200) NOT NULL,
+                message TEXT NOT NULL,
+                related_entity_id INTEGER,
+                is_read BOOLEAN NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_branch_notifications_branch_id ON branch_notifications(branch_id)"))
 
 
 def _apply_overdue_flags(db: Session, branch_id: Optional[int] = None) -> None:
@@ -154,13 +184,14 @@ def list_tasks(
     current_user: User = Depends(get_current_user),
 ):
     role = _normalize_role(current_user.role)
-    if role not in {"staff", "branch_director", "branch_admin", "super_admin"}:
+    # Allow staff roles, directors, and admins
+    if not _is_staff_role(current_user.role) and role not in {"branch_director", "branch_admin", "super_admin"}:
         raise HTTPException(status_code=403, detail="Access denied")
 
     _apply_overdue_flags(db, None if role == "super_admin" else current_user.branch_id)
 
     query = db.query(StaffTask)
-    if role == "staff":
+    if _is_staff_role(current_user.role):
         query = query.filter(StaffTask.assigned_to == current_user.id)
     elif role in {"branch_director", "branch_admin"}:
         query = query.filter(StaffTask.branch_id == current_user.branch_id)
@@ -232,6 +263,18 @@ def create_task(
             branch_id=branch_id,
             message=f"New task assigned: {task.title or task.task_name}",
             link="/staff/tasks",
+        )
+    )
+
+    _ensure_branch_notifications_table(db)
+    db.add(
+        BranchNotification(
+            branch_id=branch_id,
+            type=BranchNotificationType.TASK_ASSIGNED,
+            title="Task assignment confirmed",
+            message=f"Task '{task.title or task.task_name}' assigned to {assigned_user.first_name} {assigned_user.last_name}.",
+            related_entity_id=task.id,
+            is_read=False,
         )
     )
 
@@ -318,7 +361,7 @@ def update_task_status(
     current_user: User = Depends(get_current_user),
 ):
     role = _normalize_role(current_user.role)
-    if role not in {"staff", "branch_director", "branch_admin", "super_admin"}:
+    if not _is_staff_role(current_user.role) and role not in {"branch_director", "branch_admin", "super_admin"}:
         raise HTTPException(status_code=403, detail="Access denied")
 
     task = db.query(StaffTask).filter(StaffTask.id == task_id).first()
@@ -328,7 +371,7 @@ def update_task_status(
     _ensure_task_access(task, current_user)
 
     normalized = _normalize_status(payload.status)
-    if role == "staff" and normalized not in {"In Progress", "Completed"}:
+    if _is_staff_role(current_user.role) and normalized not in {"In Progress", "Completed"}:
         raise HTTPException(status_code=400, detail="Staff can set only In Progress or Completed")
 
     task.status = normalized

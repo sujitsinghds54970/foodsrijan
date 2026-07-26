@@ -27,6 +27,7 @@ class StaffUpdateRequest(BaseModel):
     mobile: Optional[str] = None
     department: Optional[str] = None
     designation: Optional[str] = None
+    role: Optional[str] = None
     specialization: Optional[str] = None
     shift_timings: Optional[str] = None
     date_of_joining: Optional[datetime] = None
@@ -48,7 +49,13 @@ class StaffCredentialsUpdateRequest(BaseModel):
 
 class StaffSalaryUpdateRequest(BaseModel):
     basic: float = 0
+    da: float = 0
     hra: float = 0
+    shift_allowance: float = 0
+    ot: float = 0
+    incentives: float = 0
+    lop: float = 0
+    statutory_deductions: float = 0
     allowances: float = 0
     deductions: float = 0
     net_pay: Optional[float] = None

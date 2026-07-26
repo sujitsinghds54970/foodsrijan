@@ -173,7 +173,7 @@ def _resolve_patient_branding(profile: PatientProfile, db: Session) -> dict:
         if branch:
             branch_name = branch.name or branch_name
             branch_address = branch.address or ""
-            branch_logo_url = branch.director_photo_url or ""
+            branch_logo_url = branch.logo_url or ""
 
     doctor_branding = _get_doctor_white_label_for_branch(branch_id, db) if branch_id else {}
     clinic_name = doctor_branding.get("clinic_name") or branch_name
@@ -185,6 +185,8 @@ def _resolve_patient_branding(profile: PatientProfile, db: Session) -> dict:
         "clinic_address": clinic_address,
         "logo_url": logo_url,
         "branch_id": branch_id,
+        "branch_name": branch_name,
+        "branch_address": branch_address,
         "report_header": {
             "title": clinic_name,
             "subtitle": clinic_address,

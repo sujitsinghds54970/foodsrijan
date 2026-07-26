@@ -5,17 +5,39 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, desc
+from sqlalchemy import and_, desc, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Branch, User
 from app.models import Modality
+from app.models.hr import BranchNotification, BranchNotificationType
 from app.utils.auth_system import auth_guard, get_current_user
+from app.utils.onboarding_offer import run_offer_letter_workflow
 from app.utils.security import hash_password
 
 
 router = APIRouter()
+
+
+def _ensure_branch_notifications_table(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS branch_notifications (
+                id INTEGER PRIMARY KEY,
+                branch_id INTEGER NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                title VARCHAR(200) NOT NULL,
+                message TEXT NOT NULL,
+                related_entity_id INTEGER,
+                is_read BOOLEAN NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_branch_notifications_branch_id ON branch_notifications(branch_id)"))
 
 
 class BranchCreate(BaseModel):
@@ -89,6 +111,8 @@ class BranchAdminCredentials(BaseModel):
 
 class BranchCreateResponse(BranchResponse):
     branch_admin_credentials: BranchAdminCredentials
+    offer_email_sent: bool = False
+    offer_sms_sent: bool = False
 
 
 class BranchStatistics(BaseModel):
@@ -204,8 +228,49 @@ def create_branch(
         phone=branch_data.admin_phone or branch_data.phone,
     )
     db.add(branch_admin)
+    _ensure_branch_notifications_table(db)
+    db.add(
+        BranchNotification(
+            branch_id=db_branch.id,
+            type=BranchNotificationType.SYSTEM_ALERT,
+            title="Branch Admin Assigned",
+            message=f"{branch_admin.first_name} {branch_admin.last_name} assigned as branch admin.",
+            related_entity_id=branch_admin.id,
+            is_read=False,
+        )
+    )
     db.commit()
     db.refresh(db_branch)
+
+    onboarding_delivery = {"offer_email_sent": False, "offer_sms_sent": False}
+    try:
+        delivery_result = run_offer_letter_workflow(
+            user_data={
+                "first_name": branch_admin.first_name,
+                "last_name": branch_admin.last_name,
+                "full_name": f"{(branch_admin.first_name or '').strip()} {(branch_admin.last_name or '').strip()}".strip(),
+                "email": branch_admin.email,
+                "phone": branch_admin.phone,
+                "joining_date": datetime.utcnow().strftime("%Y-%m-%d"),
+                "reporting_manager": "Regional Operations Head",
+                "salary": "As per management compensation policy",
+            },
+            branch_data={
+                "name": db_branch.name,
+                "address": db_branch.address,
+                "city": db_branch.city,
+                "state": db_branch.state,
+                "phone": db_branch.phone,
+                "email": db_branch.email,
+                "logo_url": getattr(db_branch, "logo_url", None),
+                "director_photo_url": getattr(db_branch, "director_photo_url", None),
+            },
+            role=branch_admin.role or "branch_admin",
+        )
+        onboarding_delivery["offer_email_sent"] = bool(delivery_result.get("email_sent", False))
+        onboarding_delivery["offer_sms_sent"] = bool(delivery_result.get("sms_sent", False))
+    except Exception as onboarding_exc:
+        print(f"OFFER_WORKFLOW_WARNING(branch_create): {onboarding_exc}")
 
     auth_guard.log_activity(
         db=db,
@@ -241,6 +306,8 @@ def create_branch(
             "password": temp_password,
             "role": branch_admin.role,
         },
+        "offer_email_sent": onboarding_delivery["offer_email_sent"],
+        "offer_sms_sent": onboarding_delivery["offer_sms_sent"],
     }
     print("CREATE_RESPONSE:", result)
     return result
@@ -305,6 +372,7 @@ def get_branches(
             "is_active": branch.is_active,
             "created_at": branch.created_at,
             "updated_at": branch.updated_at,
+            "logo_url": branch.logo_url,
             "modalities": [m.name for m in (branch.modalities or [])],
         }
 
@@ -363,6 +431,7 @@ def get_branch(
         "is_active": branch.is_active,
         "created_at": branch.created_at,
         "updated_at": branch.updated_at,
+        "logo_url": branch.logo_url,
         "modalities": [m.name for m in (branch.modalities or [])],
         "total_staff": db.query(Staff).filter(Staff.branch_id == branch.id, Staff.is_active.is_(True)).count(),
         "total_patients": db.query(Patient).filter(Patient.branch_id == branch.id, Patient.is_active.is_(True)).count(),
@@ -433,6 +502,7 @@ def update_branch(
         "is_active": branch.is_active,
         "created_at": branch.created_at,
         "updated_at": branch.updated_at,
+        "logo_url": branch.logo_url,
         "modalities": [m.name for m in (branch.modalities or [])],
     }
 

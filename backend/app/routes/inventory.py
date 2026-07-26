@@ -26,15 +26,19 @@ router = APIRouter()
 
 
 def _require_inventory_role(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role not in ["branch_admin", "branch_director"]:
+    if current_user.role not in ["branch_admin", "branch_director", "super_admin"]:
         raise HTTPException(
             status_code=403,
-            detail="Only branch_admin or branch_director can access inventory endpoints",
+            detail="Only branch_admin, branch_director, or super_admin can access inventory endpoints",
         )
     return current_user
 
 
 def _resolve_branch_id(current_user: User, requested_branch_id: Optional[int]) -> int:
+    if current_user.role == "super_admin":
+        if requested_branch_id is None or int(requested_branch_id) <= 0:
+            raise HTTPException(status_code=400, detail="branch_id is required for super_admin inventory access")
+        return int(requested_branch_id)
     if not current_user.branch_id:
         raise HTTPException(status_code=403, detail="User is not assigned to a branch")
     return current_user.branch_id
@@ -92,6 +96,7 @@ class InventoryItemOut(BaseModel):
 
 
 class StockDeltaIn(BaseModel):
+    branch_id: Optional[int] = None
     quantity: float = Field(..., gt=0)
     notes: Optional[str] = None
 
@@ -120,11 +125,13 @@ class EquipmentOut(EquipmentIn):
 
 
 class ServiceLogIn(BaseModel):
+    branch_id: Optional[int] = None
     service_date: date
     notes: Optional[str] = None
 
 
 class ManualAuditIn(BaseModel):
+    branch_id: Optional[int] = None
     item_id: int
     physical_qty: float = Field(..., ge=0)
     notes: Optional[str] = None
@@ -133,10 +140,11 @@ class ManualAuditIn(BaseModel):
 @router.get("/api/inventory", response_model=List[InventoryItemOut])
 def list_inventory_items(
     department: Optional[InventoryDepartment] = Query(None),
+    branch_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_inventory_role),
 ):
-    branch_id = _resolve_branch_id(current_user, None)
+    branch_id = _resolve_branch_id(current_user, branch_id)
     query = db.query(InventoryItem).filter(
         InventoryItem.branch_id == branch_id,
         InventoryItem.is_active == True,
@@ -270,6 +278,7 @@ def update_inventory_item(
 @router.delete("/api/inventory/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_inventory_item(
     item_id: int,
+    branch_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_inventory_role),
 ):
@@ -277,7 +286,7 @@ def delete_inventory_item(
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
 
-    branch_id = _resolve_branch_id(current_user, None)
+    branch_id = _resolve_branch_id(current_user, branch_id)
     if item.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -297,7 +306,7 @@ def add_stock(
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
 
-    branch_id = _resolve_branch_id(current_user, None)
+    branch_id = _resolve_branch_id(current_user, payload.branch_id)
     if item.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -344,7 +353,7 @@ def consume_stock(
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")
 
-    branch_id = _resolve_branch_id(current_user, None)
+    branch_id = _resolve_branch_id(current_user, payload.branch_id)
     if item.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -373,10 +382,11 @@ def consume_stock(
 
 @router.get("/api/inventory/suppliers", response_model=List[SupplierOut])
 def list_suppliers(
+    branch_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_inventory_role),
 ):
-    branch_id = _resolve_branch_id(current_user, None)
+    branch_id = _resolve_branch_id(current_user, branch_id)
     return (
         db.query(Supplier)
         .filter(Supplier.branch_id == branch_id, Supplier.is_active == True)
@@ -411,10 +421,11 @@ def create_supplier(
 @router.get("/api/inventory/equipment", response_model=List[EquipmentOut])
 def list_equipment(
     department: Optional[InventoryDepartment] = Query(None),
+    branch_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_inventory_role),
 ):
-    branch_id = _resolve_branch_id(current_user, None)
+    branch_id = _resolve_branch_id(current_user, branch_id)
     query = db.query(InventoryEquipment).filter(
         InventoryEquipment.branch_id == branch_id,
         InventoryEquipment.is_active == True,
@@ -505,7 +516,7 @@ def log_service(
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
 
-    branch_id = _resolve_branch_id(current_user, None)
+    branch_id = _resolve_branch_id(current_user, payload.branch_id)
     if equipment.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -528,10 +539,11 @@ def log_service(
 
 @router.get("/api/inventory/consumption-history")
 def get_consumption_history(
+    branch_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_inventory_role),
 ):
-    branch_id = _resolve_branch_id(current_user, None)
+    branch_id = _resolve_branch_id(current_user, branch_id)
     history = (
         db.query(InventoryConsumptionHistory)
         .filter(InventoryConsumptionHistory.branch_id == branch_id)
@@ -558,10 +570,11 @@ def get_consumption_history(
 
 @router.get("/api/inventory/alerts")
 def get_inventory_alerts(
+    branch_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_inventory_role),
 ):
-    branch_id = _resolve_branch_id(current_user, None)
+    branch_id = _resolve_branch_id(current_user, branch_id)
     today = date.today()
     soon_cutoff = today + timedelta(days=30)
 
@@ -601,7 +614,7 @@ def manual_stock_audit(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_inventory_role),
 ):
-    branch_id = _resolve_branch_id(current_user, None)
+    branch_id = _resolve_branch_id(current_user, payload.branch_id)
     item = db.query(InventoryItem).filter(InventoryItem.id == payload.item_id, InventoryItem.is_active == True).first()
     if not item:
         raise HTTPException(status_code=404, detail="Inventory item not found")

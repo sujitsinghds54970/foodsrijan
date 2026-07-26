@@ -1,4 +1,6 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import axios from 'axios'
+import { FaHeartbeat, FaPuzzlePiece, FaShieldAlt } from 'react-icons/fa'
 import { useAuth } from '../../contexts/AuthContext'
 
 interface LoginProps {
@@ -9,7 +11,69 @@ export default function Login({ onSwitchToRegistration }: LoginProps) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [branding, setBranding] = useState<{ logo: string | null; name: string; tagline: string }>({ logo: null, name: '', tagline: '' })
+  const [stats, setStats] = useState({
+    modules: 0,
+    visibility: 0,
+    patients: 0,
+  })
   const { login } = useAuth()
+  const API_BASE =
+    (process as any).env.REACT_APP_API_BASE_URL ||
+    ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://127.0.0.1:8000'
+      : window.location.origin)
+
+  useEffect(() => {
+    const loadBranding = async () => {
+      try {
+        const response = await axios.get('/api/public/branding')
+        setBranding({
+          logo: response.data?.primary_logo_url || null,
+          name: response.data?.company_name || '',
+          tagline: response.data?.tagline || '',
+        })
+      } catch {
+        try {
+          const response = await axios.get(`${API_BASE}/api/public/branding`)
+          setBranding({
+            logo: response.data?.primary_logo_url || null,
+            name: response.data?.company_name || '',
+            tagline: response.data?.tagline || '',
+          })
+        } catch {
+          setBranding({ logo: null, name: '', tagline: '' })
+        }
+      }
+    }
+    void loadBranding()
+  }, [API_BASE])
+
+  useEffect(() => {
+    const intervals: number[] = []
+    const counters = [
+      { key: 'modules' as const, target: 20, duration: 900 },
+      { key: 'visibility' as const, target: 999, duration: 1100 },
+      { key: 'patients' as const, target: 1000, duration: 1300 },
+    ]
+    counters.forEach(({ key, target, duration }) => {
+      const steps = Math.max(1, Math.floor(duration / 30))
+      const increment = Math.max(1, Math.ceil(target / steps))
+      const intervalId = window.setInterval(() => {
+        setStats((prev) => {
+          const nextValue = Math.min(target, prev[key] + increment)
+          if (nextValue === target) {
+            window.clearInterval(intervalId)
+          }
+          return { ...prev, [key]: nextValue }
+        })
+      }, 30)
+      intervals.push(intervalId)
+    })
+    return () => {
+      intervals.forEach((id) => window.clearInterval(id))
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,32 +104,45 @@ export default function Login({ onSwitchToRegistration }: LoginProps) {
             Premium Diagnostic ERP
           </p>
           <h1 className="mt-6 text-5xl font-black leading-tight">
-            Beautiful.
-            <span className="block text-cyan-300">Fast. Trusted.</span>
+            {branding.name || 'VaidyaVihar Diagnostic'}
           </h1>
+          <p className="mt-5 text-cyan-100 text-3xl font-black leading-tight">
+            {branding.tagline || 'Accurate. Fast. Trusted.'}
+          </p>
           <p className="mt-5 text-white/80 text-lg max-w-xl">
             Manage patients, doctors, lab operations, billing, and analytics from one elegant control center crafted for modern Indian diagnostics teams.
           </p>
-          <div className="mt-8 grid grid-cols-2 gap-4 max-w-xl">
-            <div className="premium-glass rounded-2xl p-4 border-white/20 text-white">
-              <p className="text-2xl font-bold">20+</p>
-              <p className="text-xs text-white/80">Integrated modules</p>
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mx-auto max-w-5xl">
+            <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-8 text-center shadow-xl hover:scale-105 transition-transform duration-300">
+              {FaPuzzlePiece({ className: 'mx-auto mb-3 h-8 w-8 text-cyan-200' })}
+              <p className="text-3xl font-extrabold text-white">{stats.modules}+</p>
+              <p className="text-sm font-semibold text-white/90 mt-1">Integrated Modules</p>
             </div>
-            <div className="premium-glass rounded-2xl p-4 border-white/20 text-white">
-              <p className="text-2xl font-bold">99.9%</p>
-              <p className="text-xs text-white/80">Operational visibility</p>
+            <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-8 text-center shadow-xl hover:scale-105 transition-transform duration-300">
+              {FaShieldAlt({ className: 'mx-auto mb-3 h-8 w-8 text-emerald-200' })}
+              <p className="text-3xl font-extrabold text-white">{(stats.visibility / 10).toFixed(1)}%</p>
+              <p className="text-sm font-semibold text-white/90 mt-1">Operational Visibility</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-8 text-center shadow-xl hover:scale-105 transition-transform duration-300">
+              {FaHeartbeat({ className: 'mx-auto mb-3 h-8 w-8 text-rose-200' })}
+              <p className="text-3xl font-extrabold text-white">{stats.patients}+</p>
+              <p className="text-sm font-semibold text-white/90 mt-1">Happy Patients</p>
             </div>
           </div>
         </div>
 
         <div className="premium-glass rounded-3xl shadow-2xl p-8 md:p-10 w-full max-w-xl mx-auto border-white/40">
           <div className="text-center">
-            <div className="mx-auto h-14 w-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-cyan-500 shadow-lg">
-              <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            </div>
-            <h2 className="mt-6 text-3xl font-black text-slate-900">VaidyaVihar Diagnostic</h2>
+            {branding.logo ? (
+              <img src={branding.logo} alt="Company Logo" className="w-16 h-16 rounded-2xl object-cover mx-auto mb-4 shadow-sm border border-gray-100 bg-white" />
+            ) : (
+              <div className="mx-auto h-16 w-16 flex items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-cyan-500 shadow-lg mb-4">
+                <svg className="h-9 w-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+            )}
+            <h2 className="mt-6 text-3xl font-black text-slate-900">{branding.name || 'VaidyaVihar Diagnostic'}</h2>
             <p className="mt-2 text-sm text-slate-600">Sign in to your premium workspace</p>
           </div>
 

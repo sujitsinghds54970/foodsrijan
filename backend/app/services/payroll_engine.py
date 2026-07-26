@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models import Branch, DailyEntry
 from app.models.branch_bank_details import BranchBankDetails
 from app.models.finance import BranchAccount
-from app.models.hr import StaffAttendanceLog, StaffAttendanceStatus, StaffNotification, StaffProfile
+from app.models.hr import StaffAttendanceLog, StaffAttendanceStatus, StaffNotification, StaffProfile, StaffSalaryDetail
 from app.models.payroll.models import (
     AdvanceRequest,
     AdvanceStatus,
@@ -169,12 +169,15 @@ def generate_payroll_run(
     run = (
         db.query(PayrollRun)
         .filter(PayrollRun.branch_id == branch_id, PayrollRun.month == month, PayrollRun.year == year)
+        .order_by(PayrollRun.updated_at.desc(), PayrollRun.id.desc())
         .first()
     )
     if run and run.status == PayrollRunStatus.LOCKED:
-        raise ValueError("Payroll is locked and cannot be regenerated")
-
-    if not run:
+        # Preserve locked history by creating a new editable run for regeneration.
+        run = PayrollRun(branch_id=branch_id, month=month, year=year, status=PayrollRunStatus.DRAFT)
+        db.add(run)
+        db.flush()
+    elif not run:
         run = PayrollRun(branch_id=branch_id, month=month, year=year, status=PayrollRunStatus.DRAFT)
         db.add(run)
         db.flush()
@@ -187,12 +190,29 @@ def generate_payroll_run(
     if existing_locked:
         db.query(PayrollTransaction).filter(PayrollTransaction.payroll_run_id == run.id).delete(synchronize_session=False)
 
-    configs = (
-        db.query(StaffSalaryConfig)
-        .join(StaffProfile, StaffProfile.id == StaffSalaryConfig.staff_id)
-        .filter(StaffSalaryConfig.is_active.is_(True), StaffProfile.branch_id == branch_id)
+    staff_profiles = (
+        db.query(StaffProfile)
+        .filter(StaffProfile.branch_id == branch_id, StaffProfile.is_active.is_(True))
         .all()
     )
+    staff_ids = [staff.id for staff in staff_profiles]
+
+    configs_by_staff: dict[int, StaffSalaryConfig] = {}
+    salary_details_by_staff: dict[int, StaffSalaryDetail] = {}
+    if staff_ids:
+        configs = (
+            db.query(StaffSalaryConfig)
+            .filter(StaffSalaryConfig.staff_id.in_(staff_ids), StaffSalaryConfig.is_active.is_(True))
+            .all()
+        )
+        configs_by_staff = {config.staff_id: config for config in configs}
+
+        salary_details = (
+            db.query(StaffSalaryDetail)
+            .filter(StaffSalaryDetail.staff_profile_id.in_(staff_ids))
+            .all()
+        )
+        salary_details_by_staff = {detail.staff_profile_id: detail for detail in salary_details}
 
     logs = (
         db.query(StaffAttendanceLog)
@@ -208,13 +228,14 @@ def generate_payroll_run(
     total_deductions = Decimal("0")
     total_net = Decimal("0")
 
-    for config in configs:
-        staff = config.staff_profile
-        grade = config.grade
-        if staff is None or grade is None:
-            continue
+    for staff in staff_profiles:
+        config = configs_by_staff.get(staff.id)
+        salary_detail = salary_details_by_staff.get(staff.id)
+        grade = config.grade if config is not None else None
 
-        base_salary = _to_decimal(grade.base_salary)
+        configured_base = _to_decimal(grade.base_salary) if grade is not None else Decimal("0")
+        profile_base = _to_decimal(salary_detail.basic if salary_detail is not None else 0)
+        base_salary = configured_base if configured_base > 0 else profile_base
         summary = _attendance_summary(staff.id, logs, year, month)
         lop_days = summary["lop_days"]
         days_in_month = summary["days_in_month"]
@@ -234,7 +255,9 @@ def generate_payroll_run(
             .first()
         )
 
-        gross = base_salary + ot_amount + incentive_amount + reimbursement_amount
+        hra = _to_decimal(salary_detail.hra if salary_detail is not None else 0)
+        allowances = _to_decimal(salary_detail.allowances if salary_detail is not None else 0)
+        gross = base_salary + hra + allowances + ot_amount + incentive_amount + reimbursement_amount
         tds = _tds_monthly(gross, declaration)
         pt = _professional_tax(gross)
         advance_deduction = _advance_installment(db, staff.id)

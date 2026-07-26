@@ -51,6 +51,22 @@ export default function StaffProfile({ staff, canReviewLeave, onChanged }: Staff
     return (staff as any)?.branch_name || (user as any)?.branch_name || storedBranchName || 'VaidyaVihar Diagnostic'
   }, [staff, user])
 
+  const staffProfileForIdCard = useMemo<StaffDetail>(() => {
+    const computedName = `${profileForm.first_name} ${profileForm.last_name}`.trim()
+    return {
+      ...staff,
+      first_name: profileForm.first_name,
+      last_name: profileForm.last_name,
+      full_name: computedName || staff.full_name,
+      email: profileForm.email,
+      mobile: profileForm.mobile,
+      department: profileForm.department || staff.department,
+      designation: profileForm.designation || staff.designation,
+      address: profileForm.address || staff.address,
+      emergency_contact: profileForm.emergency_contact || staff.emergency_contact,
+    }
+  }, [profileForm, staff])
+
   // Resolve photo URL with version cache-busting parameter
   const photoUrl = useMemo(() => {
     const basePhotoUrl = staff.photo_url || (staff as any).photo_path
@@ -96,7 +112,11 @@ export default function StaffProfile({ staff, canReviewLeave, onChanged }: Staff
     if (!file) return
     setUploadingPhoto(true)
     try {
-      const photoUrl = await staffApi.uploadPhoto(staff.staff_profile_id, file)
+      // Check if uploading own photo or someone else's
+      const isOwnProfile = user?.id === staff.user_id
+      const photoUrl = isOwnProfile 
+        ? await staffApi.uploadOwnPhoto(file)
+        : await staffApi.uploadPhoto(staff.staff_profile_id, file)
       // Update staff object with both photo_url and photo_path for compatibility
       const updatedStaff: StaffDetail = {
         ...staff,
@@ -207,7 +227,14 @@ export default function StaffProfile({ staff, canReviewLeave, onChanged }: Staff
       <SalarySection
         staffProfileId={staff.staff_profile_id}
         salary={staff.salary}
-        onUpdated={(nextSalary) => onChanged({ ...staff, salary: nextSalary })}
+        onUpdated={(nextSalary) => {
+          onChanged({ ...staff, salary: nextSalary })
+          window.dispatchEvent(
+            new CustomEvent('staff-salary-updated', {
+              detail: { staffProfileId: staff.staff_profile_id, salary: nextSalary },
+            }),
+          )
+        }}
       />
 
       <DirectorAttendancePanel staffProfileId={staff.staff_profile_id} />
@@ -225,7 +252,7 @@ export default function StaffProfile({ staff, canReviewLeave, onChanged }: Staff
                 Close
               </button>
             </div>
-            <StaffIDCard staff={staff} branchName={branchName} downloadButtonLabel="Download PDF" />
+            <StaffIDCard staff={staffProfileForIdCard} branchName={branchName} downloadButtonLabel="Download PDF" />
           </div>
         </div>
       )}

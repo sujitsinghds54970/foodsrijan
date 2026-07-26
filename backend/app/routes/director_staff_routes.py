@@ -11,11 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 
 from app.database import get_db
 from app.models import User, Branch
 from app.models.hr import (
+    BranchNotification,
+    BranchNotificationType,
     DirectorProfile,
     StaffProfile,
     StaffSalaryDetail,
@@ -89,6 +91,26 @@ def _uploaded_file_url(path: Optional[str]) -> Optional[str]:
 
 def _leave_quota() -> dict:
     return {"casual": 12, "sick": 12, "earned": 15, "unpaid": 999}
+
+
+def _ensure_branch_notifications_table(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS branch_notifications (
+                id INTEGER PRIMARY KEY,
+                branch_id INTEGER NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                title VARCHAR(200) NOT NULL,
+                message TEXT NOT NULL,
+                related_entity_id INTEGER,
+                is_read BOOLEAN NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_branch_notifications_branch_id ON branch_notifications(branch_id)"))
 
 
 class DirectorCreatePayload(BaseModel):
@@ -400,6 +422,23 @@ def create_staff_member(
 
     salary = StaffSalaryDetail(staff_profile_id=profile.id, basic=0, allowances=0, deductions=0, net_pay=0)
     db.add(salary)
+
+    _ensure_branch_notifications_table(db)
+    role_label = (
+        (payload.role or "").strip()
+        or (payload.specialization or "").strip()
+        or "Staff"
+    )
+    db.add(
+        BranchNotification(
+            branch_id=current_user.branch_id,
+            type=BranchNotificationType.SYSTEM_ALERT,
+            title="New Staff Joined",
+            message=f"{user.first_name} {user.last_name} joined as {role_label}.",
+            related_entity_id=profile.id,
+            is_read=False,
+        )
+    )
     db.commit()
 
     return {
@@ -622,7 +661,7 @@ def upload_staff_photo(
 
     profile.photo_path = _save_uploaded_file(file, "staff_photos")
     db.commit()
-    return {"photo_path": profile.photo_path}
+    return {"photo_url": _uploaded_file_url(profile.photo_path)}
 
 
 @router.get("/staff/{staff_profile_id}/salary")

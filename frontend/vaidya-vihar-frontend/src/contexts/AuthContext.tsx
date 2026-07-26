@@ -7,7 +7,17 @@ interface User {
   username: string;
   email: string;
   role: string;
+  companyLogo?: string | null;
+  profilePhoto?: string;
+  photo?: string;
+  profile_photo?: string;
+  photo_url?: string;
   branch_id?: number | null;
+  branch?: {
+    id?: number;
+    name?: string;
+    logo_url?: string | null;
+  } | null;
   can_access_daily_ops?: boolean | null;
   first_name: string;
   last_name: string;
@@ -70,11 +80,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const initializeAuth = async () => {
       const storedToken = localStorage.getItem('token');
       const storedUser = localStorage.getItem('user');
+      let parsedStoredUser: User | null = null;
 
       if (storedUser) {
         try {
-          const parsedUser = JSON.parse(storedUser);
-          setUser(parsedUser);
+          parsedStoredUser = JSON.parse(storedUser);
+          setUser(parsedStoredUser);
         } catch {
           localStorage.removeItem('user');
         }
@@ -89,6 +100,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           localStorage.removeItem('token');
           delete axios.defaults.headers.common['Authorization'];
           setToken(null);
+        } else {
+          const needsHydration = !parsedStoredUser?.branch?.logo_url;
+          if (needsHydration) {
+            try {
+              const meResponse = await axios.get(`${API_BASE}/api/auth/me`);
+              const verifiedUser = meResponse.data;
+              if (verifiedUser?.role) {
+                setUser(verifiedUser);
+                localStorage.setItem('user', JSON.stringify(verifiedUser));
+              }
+            } catch (error) {
+              console.error('[AUTH_DEBUG] Failed to hydrate stored user from /api/auth/me', error);
+            }
+          }
         }
       }
 
@@ -249,18 +274,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           role: loginUser?.role,
         });
 
-        if (loginUser) {
-          setUser(loginUser);
-          localStorage.setItem('user', JSON.stringify(loginUser));
-        } else {
-          const meResponse = await axios.get(meUrl);
-          const verifiedUser = meResponse.data;
-          if (!verifiedUser?.role) {
-            throw new Error('User role missing in profile response');
-          }
-          setUser(verifiedUser);
-          localStorage.setItem('user', JSON.stringify(verifiedUser));
+        const meResponse = await axios.get(meUrl);
+        const verifiedUser = meResponse.data;
+        if (!verifiedUser?.role) {
+          throw new Error('User role missing in profile response');
         }
+        const mergedUser = { ...(loginUser || {}), ...verifiedUser };
+        setUser(mergedUser);
+        localStorage.setItem('user', JSON.stringify(mergedUser));
       } catch (meError: any) {
         setUser(null);
         setToken(null);

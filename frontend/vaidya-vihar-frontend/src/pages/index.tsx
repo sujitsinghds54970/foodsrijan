@@ -26,7 +26,7 @@ export default function Home() {
     
     const role = (user.role || '').trim().toLowerCase()
     if (role === 'super_admin' && !pathname.startsWith('/ceo')) {
-      navigate('/ceo', { replace: true })
+      navigate('/ceo/overview', { replace: true })
     } else if ((role === 'branch_admin' || role === 'branch_director') && !pathname.startsWith('/branch')) {
       navigate('/branch/dashboard', { replace: true })
     } else if (role === 'staff' && !pathname.startsWith('/staff')) {

@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+import json
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import Optional
@@ -13,8 +15,152 @@ from app.models.staff import StaffProfile
 from app.schemas.user import UserCreate, UserResponse, TokenResponse
 from app.utils.auth_system import auth_guard
 from app.utils.schema_compat import ensure_staff_daily_ops_column
+from app.utils.schema_compat import ensure_branch_logo_column
 
 router = APIRouter()
+
+
+def _public_file_url(path: Optional[str]) -> Optional[str]:
+    raw = (path or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    if raw.startswith("/api/files/"):
+        return f"http://localhost:8000{raw}"
+    return f"http://localhost:8000/api/files/{raw.lstrip('/')}"
+
+
+def _build_user_photo_payload(db: Session, user: User) -> dict:
+    profile = db.query(StaffProfile).filter(StaffProfile.user_id == user.id).first()
+    photo_url = _public_file_url(profile.photo_path) if profile else None
+    if not photo_url and user.role == "super_admin":
+        has_settings_table = db.execute(
+            text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='system_settings' LIMIT 1")
+        ).scalar()
+        if has_settings_table:
+            profile_row = db.execute(
+                text("SELECT setting_value FROM system_settings WHERE setting_key = 'ceo_profile' LIMIT 1")
+            ).scalar()
+            if isinstance(profile_row, str) and profile_row.strip():
+                try:
+                    parsed = json.loads(profile_row)
+                    if isinstance(parsed, dict):
+                        profile_photo_path = (parsed.get("profile_photo_url") or "").strip()
+                        if profile_photo_path:
+                            photo_url = _public_file_url(profile_photo_path)
+                except json.JSONDecodeError:
+                    pass
+    return {
+        "profilePhoto": photo_url,
+        "photo": photo_url,
+    }
+
+
+def _fetch_company_logo_url(db: Session) -> Optional[str]:
+    has_settings_table = db.execute(
+        text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='system_settings' LIMIT 1")
+    ).scalar()
+    if not has_settings_table:
+        return None
+
+    branding_row = db.execute(
+        text(
+            """
+            SELECT setting_value
+            FROM system_settings
+            WHERE setting_key IN ('ceo_branding', 'branding')
+            ORDER BY CASE WHEN setting_key = 'ceo_branding' THEN 0 ELSE 1 END
+            LIMIT 1
+            """
+        )
+    ).scalar()
+    if not branding_row:
+        return None
+
+    try:
+        parsed = json.loads(branding_row)
+    except json.JSONDecodeError:
+        return None
+
+    candidates = [
+        (parsed.get("assets") or {}).get("primary_logo_url"),
+        (parsed.get("branding_asset_manager") or {}).get("primary_logo_web"),
+        parsed.get("logo_url"),
+    ]
+    for candidate in candidates:
+        value = (candidate or "").strip()
+        if value:
+            return _public_file_url(value)
+    return None
+
+
+def _build_company_payload(db: Session, user: User) -> dict:
+    company_logo = _fetch_company_logo_url(db) if user.role == "super_admin" else None
+    return {
+        "companyLogo": company_logo,
+    }
+
+
+def _fetch_branch_logo_url(db: Session, branch_id: int) -> Optional[str]:
+    ensure_branch_logo_column(db)
+    logo_url = db.execute(
+        text("SELECT logo_url FROM branches WHERE id = :branch_id"),
+        {"branch_id": branch_id},
+    ).scalar()
+    normalized_logo = (logo_url or "").strip()
+    if normalized_logo:
+        return _public_file_url(normalized_logo)
+
+    has_settings_table = db.execute(
+        text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='system_settings' LIMIT 1")
+    ).scalar()
+    if not has_settings_table:
+        return None
+
+    branding_row = db.execute(
+        text(
+            """
+            SELECT setting_value
+            FROM system_settings
+            WHERE setting_key IN ('ceo_branding', 'branding')
+            ORDER BY CASE WHEN setting_key = 'ceo_branding' THEN 0 ELSE 1 END
+            LIMIT 1
+            """
+        )
+    ).scalar()
+    if not branding_row:
+        return None
+
+    try:
+        parsed = json.loads(branding_row)
+    except json.JSONDecodeError:
+        return None
+
+    candidates = [
+        (parsed.get("assets") or {}).get("primary_logo_url"),
+        (parsed.get("branding_asset_manager") or {}).get("primary_logo_web"),
+        parsed.get("logo_url"),
+    ]
+    for candidate in candidates:
+        value = (candidate or "").strip()
+        if value:
+            return _public_file_url(value)
+    return None
+
+
+def _build_branch_payload(db: Session, branch_id: Optional[int]):
+    if not branch_id:
+        return None
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    if not branch:
+        return None
+    branch_logo = _fetch_branch_logo_url(db, branch.id)
+    return {
+        "id": branch.id,
+        "name": branch.name,
+        "logo_url": branch_logo,
+    }
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -100,6 +246,9 @@ async def login_for_access_token(
             logger.warning(f"⚠️  Failed to log activity: {log_error}")
         
         logger.info(f"✅ PREPARING RESPONSE")
+        branch_payload = _build_branch_payload(db, user.branch_id)
+        user_photo_payload = _build_user_photo_payload(db, user)
+        company_payload = _build_company_payload(db, user)
         
         return {
             "access_token": access_token,
@@ -113,6 +262,9 @@ async def login_for_access_token(
                 "phone": user.phone,
                 "role": user.role,
                 "branch_id": user.branch_id,
+                "branch": branch_payload,
+                **user_photo_payload,
+                **company_payload,
                 "is_active": user.is_active,
                 "created_at": user.created_at,
                 "last_login": user.last_login
@@ -151,7 +303,7 @@ def public_register_user(
     user_data: UserCreate,
     db: Session = Depends(get_db)
 ):
-    """Public registration endpoint for patients, staff, and branch users - Returns auth token for auto-login"""
+    """Public registration endpoint for patients and doctors - Returns auth token for auto-login"""
     
     # Check if username already exists
     if db.query(User).filter(User.username == user_data.username).first():
@@ -181,18 +333,18 @@ def public_register_user(
         user_data.role = 'patient'
     
     # Validate role
-    allowed_roles = ['patient', 'staff', 'branch_admin']
+    allowed_roles = ['patient', 'doctor']
     if user_data.role not in allowed_roles:
         raise HTTPException(
             status_code=400,
             detail="Invalid role specified"
         )
     
-    # For staff and branch_admin, require branch_id
-    if user_data.role in ['staff', 'branch_admin'] and not user_data.branch_id:
+    # For doctors, require branch_id
+    if user_data.role == 'doctor' and not user_data.branch_id:
         raise HTTPException(
             status_code=400,
-            detail="Branch selection is required for staff and branch admin roles"
+            detail="Branch selection is required for doctor role"
         )
     
     # Create new user
@@ -229,6 +381,8 @@ def public_register_user(
     
     # Update last login
     update_last_login(db, db_user)
+    branch_payload = _build_branch_payload(db, db_user.branch_id)
+    company_payload = _build_company_payload(db, db_user)
     
     # Return token and user data for immediate login
     return {
@@ -243,6 +397,8 @@ def public_register_user(
             "phone": db_user.phone,
             "role": db_user.role,
             "branch_id": db_user.branch_id,
+            "branch": branch_payload,
+            **company_payload,
             "is_active": db_user.is_active,
             "created_at": db_user.created_at,
             "last_login": db_user.last_login
@@ -328,6 +484,20 @@ def get_current_user_info(current_user: User = Depends(get_current_user), db: Se
     last_login = getattr(current_user, 'last_login', None)
 
     can_access_daily_ops = None
+    branch_payload = None
+    user_photo_payload = _build_user_photo_payload(db, current_user)
+    company_payload = _build_company_payload(db, current_user)
+    if current_user.branch_id:
+        ensure_branch_logo_column(db)
+        branch = db.query(Branch).filter(Branch.id == current_user.branch_id).first()
+        if branch:
+            branch_logo = _fetch_branch_logo_url(db, branch.id)
+            branch_payload = {
+                "id": branch.id,
+                "name": branch.name,
+                "logo_url": branch_logo,
+            }
+
     if current_user.role == "staff" and current_user.branch_id:
         ensure_staff_daily_ops_column(db)
         profile = (
@@ -346,6 +516,9 @@ def get_current_user_info(current_user: User = Depends(get_current_user), db: Se
         "role": current_user.role,
         "branch_id": current_user.branch_id,
         "is_active": current_user.is_active,
+        "branch": branch_payload,
+        **user_photo_payload,
+        **company_payload,
         "can_access_daily_ops": can_access_daily_ops,
         "created_at": created_at,
         "last_login": last_login,
@@ -435,6 +608,8 @@ def refresh_access_token(
     """Refresh access token"""
     
     access_token = create_user_token(current_user)
+    branch_payload = _build_branch_payload(db, current_user.branch_id)
+    company_payload = _build_company_payload(db, current_user)
     
     return {
         "access_token": access_token,
@@ -446,13 +621,17 @@ def refresh_access_token(
             "first_name": current_user.first_name,
             "last_name": current_user.last_name,
             "role": current_user.role,
-            "branch_id": current_user.branch_id
+            "branch_id": current_user.branch_id,
+            "branch": branch_payload,
+            **company_payload,
         }
     }
 
 @router.get("/verify-token")
-def verify_token_validity(current_user: User = Depends(get_current_user)):
+def verify_token_validity(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Verify if current token is valid"""
+    branch_payload = _build_branch_payload(db, current_user.branch_id)
+    company_payload = _build_company_payload(db, current_user)
     return {
         "valid": True,
         "user": {
@@ -462,8 +641,8 @@ def verify_token_validity(current_user: User = Depends(get_current_user)):
             "first_name": current_user.first_name,
             "last_name": current_user.last_name,
             "role": current_user.role,
-            "branch_id": current_user.branch_id
+            "branch_id": current_user.branch_id,
+            "branch": branch_payload,
+            **company_payload,
         }
     }
-
-

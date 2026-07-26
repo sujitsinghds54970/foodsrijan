@@ -4,22 +4,60 @@ import hashlib
 import json
 import os
 import secrets
+import shutil
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 import pyotp
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.database import Base, SessionLocal, engine, get_db
-from app.models import User
+from app.models import SystemSettings, User
 from app.models.ceo import CeoAuditLog, CeoBreakGlassGrant, CeoSecurityProfile, CeoWebAuthnCredential
+from app.models.hr import StaffNotification, StaffProfile
+from app.models.referring_doctor import ReferralLog
 from app.services.email_service import EmailConfig, EmailService
 from app.services.sms_service import SMSConfig, SMSMessage, SMSService, SMSProvider
 from app.utils.auth_system import auth_guard
+
+BASE_DIR = Path(__file__).resolve().parents[3]
+UPLOADS_DIR = BASE_DIR / "uploads"
+CEO_BRANDING_DIR = UPLOADS_DIR / "ceo" / "branding"
+CEO_BRANDING_SETTING_KEY = "ceo_branding"
+CEO_PROFILE_SETTING_KEY = "ceo_profile"
+CEO_RETENTION_SETTING_KEY = "ceo_data_retention_policy"
+CEO_GLOBAL_SETTINGS_KEY = "ceo_global_settings"
+CEO_POLICY_ENGINE_KEY = "ceo_policy_engine"
+
+DEFAULT_BRANDING = {
+    "company_name": "VaidyaVihar Diagnostic",
+    "legal_name": "",
+    "registration_number": "",
+    "tagline": "",
+    "description": "",
+    "contact_info": {"address": "", "phone": "", "email": "", "website": ""},
+    "social_media_links": {"facebook": "", "instagram": "", "linkedin": "", "x": ""},
+    "assets": {"primary_logo_url": "", "favicon_url": "", "app_icon_url": "", "background_banner_url": ""},
+}
+DEFAULT_PROFILE = {
+    "bio": "",
+    "profile_photo_url": "",
+}
+DEFAULT_RETENTION_POLICY = {"enabled": False, "retention_days": 365}
+DEFAULT_GLOBAL_SETTINGS = {
+    "currency": "INR",
+    "timezone": "Asia/Kolkata",
+    "language": "en-IN",
+    "financial_year": "2026-2027",
+    "tax_gst_settings": {"gst_enabled": True, "gst_percent": 18},
+    "notification_preferences": {"email": True, "sms": True, "in_app": True},
+}
+DEFAULT_POLICY_ENGINE = {"policies": []}
 
 
 def _utcnow() -> datetime:
@@ -90,20 +128,133 @@ def _ensure_ceo_tables() -> None:
         CeoAuditLog.__tablename__,
         CeoBreakGlassGrant.__tablename__,
     }
-    if required.issubset(existing):
-        return
-    Base.metadata.create_all(
-        bind=engine,
-        tables=[
-            CeoSecurityProfile.__table__,
-            CeoWebAuthnCredential.__table__,
-            CeoAuditLog.__table__,
-            CeoBreakGlassGrant.__table__,
-        ],
-    )
+    if not required.issubset(existing):
+        Base.metadata.create_all(
+            bind=engine,
+            tables=[
+                CeoSecurityProfile.__table__,
+                CeoWebAuthnCredential.__table__,
+                CeoAuditLog.__table__,
+                CeoBreakGlassGrant.__table__,
+            ],
+        )
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS ceo_active_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    device_id TEXT,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    last_active DATETIME NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    is_active INTEGER NOT NULL DEFAULT 1
+                )
+                """
+            )
+        )
 
 
 _ensure_ceo_tables()
+
+
+def _request_base_url(request: Request) -> str:
+    return str(request.base_url).rstrip("/")
+
+
+def _public_file_url(request: Request, relative_path: str) -> str:
+    return f"{_request_base_url(request)}/api/files/{relative_path.lstrip('/')}"
+
+
+def _to_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _setting_json(db: Session, key: str, default_value: dict[str, Any], *, description: str) -> dict[str, Any]:
+    row = db.query(SystemSettings).filter(SystemSettings.setting_key == key).first()
+    if not row:
+        row = SystemSettings(
+            setting_key=key,
+            setting_value=json.dumps(default_value),
+            setting_type="json",
+            description=description,
+            is_editable=True,
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return default_value.copy()
+    try:
+        parsed = json.loads(row.setting_value or "{}")
+    except json.JSONDecodeError:
+        parsed = default_value.copy()
+    if not isinstance(parsed, dict):
+        parsed = default_value.copy()
+    merged = default_value.copy()
+    merged.update(parsed)
+    return merged
+
+
+def _save_setting_json(db: Session, key: str, payload: dict[str, Any], *, description: str) -> dict[str, Any]:
+    row = db.query(SystemSettings).filter(SystemSettings.setting_key == key).first()
+    serialized = json.dumps(payload)
+    if not row:
+        row = SystemSettings(
+            setting_key=key,
+            setting_value=serialized,
+            setting_type="json",
+            description=description,
+            is_editable=True,
+        )
+        db.add(row)
+    else:
+        row.setting_value = serialized
+        row.setting_type = "json"
+        row.description = description
+        row.updated_at = datetime.utcnow()
+    db.commit()
+    return payload
+
+
+def _branding_for_response(request: Request, branding: dict[str, Any]) -> dict[str, Any]:
+    assets = dict(branding.get("assets") or {})
+    for key in ("primary_logo_url", "favicon_url", "app_icon_url", "background_banner_url"):
+        raw = (assets.get(key) or "").strip()
+        if raw and not raw.startswith("http://") and not raw.startswith("https://"):
+            if raw.startswith("/api/files/"):
+                assets[key] = f"{_request_base_url(request)}{raw}"
+            else:
+                assets[key] = _public_file_url(request, raw)
+    payload = DEFAULT_BRANDING.copy()
+    payload.update(branding)
+    payload["contact_info"] = {**DEFAULT_BRANDING["contact_info"], **dict(branding.get("contact_info") or {})}
+    payload["social_media_links"] = {**DEFAULT_BRANDING["social_media_links"], **dict(branding.get("social_media_links") or {})}
+    payload["assets"] = {**DEFAULT_BRANDING["assets"], **assets}
+    return payload
+
+
+def _extract_session_id(request: Request) -> Optional[str]:
+    auth_header = (request.headers.get("authorization") or "").strip()
+    if not auth_header.lower().startswith("bearer "):
+        return None
+    token = auth_header[7:].strip()
+    if not token:
+        return None
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _to_iso_or_none(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
 
 
 class CeoAuditRoute(APIRoute):
@@ -171,6 +322,7 @@ class CeoAuditRoute(APIRoute):
                     created_at=now.replace(tzinfo=None),
                 )
             )
+            _upsert_ceo_session(db, request, actor)
             db.commit()
         except Exception:
             db.rollback()
@@ -267,7 +419,107 @@ class CeoSimulateRequest(BaseModel):
     projected_staff_count: int = Field(..., gt=0)
 
 
+class CeoPasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6, max_length=128)
+
+
+class CeoMfaToggleRequest(BaseModel):
+    enabled: bool
+
+
+class CeoRetentionPolicyRequest(BaseModel):
+    enabled: bool = False
+    retention_days: int = Field(default=365, ge=7, le=3650)
+
+
+class CeoGlobalSettingsRequest(BaseModel):
+    currency: str = Field(default="INR", min_length=1, max_length=16)
+    timezone: str = Field(default="Asia/Kolkata", min_length=1, max_length=64)
+    language: str = Field(default="en-IN", min_length=1, max_length=32)
+    financial_year: str = Field(default="2026-2027", min_length=4, max_length=32)
+    tax_gst_settings: dict[str, Any] = Field(default_factory=dict)
+    notification_preferences: dict[str, Any] = Field(default_factory=dict)
+
+
+class CeoPolicyRequest(BaseModel):
+    policy_type: str = Field(..., pattern="^(leave_attendance|expense|data_privacy)$")
+    title: str = Field(..., min_length=3, max_length=180)
+    content: str = Field(..., min_length=5, max_length=10000)
+    effective_from: Optional[str] = None
+
+
 _CEO_APPROVAL_STATUS_OVERRIDES: dict[int, str] = {}
+
+
+def _save_branding_asset(upload: UploadFile, *, prefix: str) -> str:
+    CEO_BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+    source_name = (upload.filename or "").strip() or "asset.bin"
+    extension = os.path.splitext(source_name)[1].lower() or ".bin"
+    safe_ext = extension if extension in {".png", ".jpg", ".jpeg", ".webp", ".svg", ".ico"} else ".bin"
+    filename = f"{prefix}_{int(datetime.utcnow().timestamp())}_{secrets.token_hex(4)}{safe_ext}"
+    relative_path = f"ceo/branding/{filename}"
+    destination = CEO_BRANDING_DIR / filename
+    with destination.open("wb") as file_out:
+        file_out.write(upload.file.read())
+    return relative_path
+
+
+def _upsert_ceo_session(db: Session, request: Request, actor: User) -> None:
+    session_id = _extract_session_id(request)
+    if not session_id:
+        return
+    now = datetime.utcnow()
+    user_agent = (request.headers.get("user-agent") or "").strip()
+    device_id = (request.headers.get("x-device-id") or "").strip() or user_agent[:120] or "unknown-device"
+    ip_address = request.client.host if request.client else ""
+    db.execute(
+        text(
+            """
+            INSERT INTO ceo_active_sessions (
+                session_id, user_id, device_id, ip_address, user_agent, last_active, created_at, is_active
+            )
+            VALUES (
+                :session_id, :user_id, :device_id, :ip_address, :user_agent, :last_active, :created_at, 1
+            )
+            ON CONFLICT(session_id) DO UPDATE SET
+                user_id = excluded.user_id,
+                device_id = excluded.device_id,
+                ip_address = excluded.ip_address,
+                user_agent = excluded.user_agent,
+                last_active = excluded.last_active,
+                is_active = 1
+            """
+        ),
+        {
+            "session_id": session_id,
+            "user_id": actor.id,
+            "device_id": device_id[:120],
+            "ip_address": ip_address[:64],
+            "user_agent": user_agent[:255],
+            "last_active": now,
+            "created_at": now,
+        },
+    )
+
+
+def _policy_store(db: Session) -> dict[str, Any]:
+    return _setting_json(
+        db,
+        CEO_POLICY_ENGINE_KEY,
+        DEFAULT_POLICY_ENGINE,
+        description="CEO global policy engine",
+    )
+
+
+def _next_policy_id(policies: list[dict[str, Any]]) -> int:
+    max_id = 0
+    for policy in policies:
+        try:
+            max_id = max(max_id, int(policy.get("id") or 0))
+        except Exception:
+            continue
+    return max_id + 1
 
 
 def _ceo_approval_rows(db: Session) -> list[dict[str, Any]]:
@@ -1151,6 +1403,49 @@ def verify_ceo_otp(
     }
 
 
+@router.post("/auth/change-password")
+def change_ceo_password(
+    payload: CeoPasswordChangeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    if not auth_guard.verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect current password")
+    current_user.hashed_password = auth_guard.hash_password(payload.new_password)
+    db.commit()
+    return {"updated": True, "message": "Password updated successfully"}
+
+
+@router.get("/auth/mfa/status")
+def get_ceo_mfa_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    profile = _find_or_create_security_profile(db, current_user)
+    return {
+        "enabled": bool(profile.totp_enabled),
+        "last_otp_verified_at": profile.last_otp_verified_at.isoformat() if profile.last_otp_verified_at else None,
+    }
+
+
+@router.post("/auth/mfa/toggle")
+def toggle_ceo_mfa(
+    payload: CeoMfaToggleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    profile = _find_or_create_security_profile(db, current_user)
+    if payload.enabled and not profile.totp_secret:
+        profile.totp_secret = pyotp.random_base32()
+    profile.totp_enabled = payload.enabled
+    db.commit()
+    return {
+        "updated": True,
+        "enabled": bool(profile.totp_enabled),
+        "last_otp_verified_at": profile.last_otp_verified_at.isoformat() if profile.last_otp_verified_at else None,
+    }
+
+
 @router.post("/auth/behavioral-analyze")
 def analyze_behavioral_pattern(
     payload: BehavioralAnalysisRequest,
@@ -1245,6 +1540,784 @@ def break_glass_access(
         "temp_auth_token": temp_auth_token,
         "expires_at": expires_at.isoformat(),
         "reason": payload.reason,
+    }
+
+
+@router.get("/branding")
+def get_ceo_branding(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    branding = _setting_json(
+        db,
+        CEO_BRANDING_SETTING_KEY,
+        DEFAULT_BRANDING,
+        description="CEO overview branding and company identity",
+    )
+    return _branding_for_response(request, branding)
+
+
+@router.get("/profile")
+def get_ceo_profile(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    profile = _setting_json(
+        db,
+        CEO_PROFILE_SETTING_KEY,
+        DEFAULT_PROFILE,
+        description="CEO profile details",
+    )
+    branding = _setting_json(
+        db,
+        CEO_BRANDING_SETTING_KEY,
+        DEFAULT_BRANDING,
+        description="CEO overview branding and company identity",
+    )
+    payload = _branding_for_response(request, branding)
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+        "full_name": f"{current_user.first_name} {current_user.last_name}".strip(),
+        "mobile": current_user.phone,
+        "bio": (profile.get("bio") or "").strip(),
+        "profile_photo": (
+            _public_file_url(request, profile.get("profile_photo_url"))
+            if (profile.get("profile_photo_url") or "").strip()
+            else None
+        ),
+        "role": current_user.role,
+        "company_name": payload.get("company_name"),
+        "company_logo": (payload.get("assets") or {}).get("primary_logo_url"),
+    }
+
+
+@router.put("/profile")
+async def update_ceo_profile(
+    request: Request,
+    full_name: Optional[str] = Form(default=None),
+    mobile: Optional[str] = Form(default=None),
+    email: Optional[str] = Form(default=None),
+    bio: Optional[str] = Form(default=None),
+    profile_photo: Optional[UploadFile] = File(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    payload = _setting_json(
+        db,
+        CEO_PROFILE_SETTING_KEY,
+        DEFAULT_PROFILE,
+        description="CEO profile details",
+    )
+    next_payload = json.loads(json.dumps(payload))
+
+    if request.headers.get("content-type", "").lower().startswith("application/json"):
+        incoming_raw = await request.json()
+        incoming = incoming_raw if isinstance(incoming_raw, dict) else {}
+        full_name = incoming.get("full_name", full_name)
+        mobile = incoming.get("mobile", mobile)
+        email = incoming.get("email", email)
+        bio = incoming.get("bio", bio)
+
+    if full_name is not None:
+        normalized_name = full_name.strip()
+        if normalized_name:
+            name_parts = normalized_name.split()
+            current_user.first_name = name_parts[0]
+            current_user.last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+
+    if mobile is not None:
+        current_user.phone = mobile.strip()
+
+    if email is not None:
+        normalized_email = email.strip()
+        if normalized_email and normalized_email != current_user.email:
+            existing = db.query(User).filter(User.email == normalized_email, User.id != current_user.id).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="Email already in use")
+            current_user.email = normalized_email
+
+    if bio is not None:
+        next_payload["bio"] = bio.strip()
+
+    if profile_photo is not None:
+        next_payload["profile_photo_url"] = _save_branding_asset(profile_photo, prefix="ceo_profile")
+
+    db.commit()
+    saved_profile = _save_setting_json(
+        db,
+        CEO_PROFILE_SETTING_KEY,
+        next_payload,
+        description="CEO profile details",
+    )
+    branding = _setting_json(
+        db,
+        CEO_BRANDING_SETTING_KEY,
+        DEFAULT_BRANDING,
+        description="CEO overview branding and company identity",
+    )
+    branding_payload = _branding_for_response(request, branding)
+    return {
+        "updated": True,
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+        "full_name": f"{current_user.first_name} {current_user.last_name}".strip(),
+        "mobile": current_user.phone,
+        "bio": (saved_profile.get("bio") or "").strip(),
+        "profile_photo": (
+            _public_file_url(request, saved_profile.get("profile_photo_url"))
+            if (saved_profile.get("profile_photo_url") or "").strip()
+            else None
+        ),
+        "company_name": branding_payload.get("company_name"),
+        "company_logo": (branding_payload.get("assets") or {}).get("primary_logo_url"),
+    }
+
+
+@router.put("/branding")
+async def update_ceo_branding(
+    request: Request,
+    company_name: Optional[str] = Form(default=None),
+    legal_name: Optional[str] = Form(default=None),
+    registration_number: Optional[str] = Form(default=None),
+    tagline: Optional[str] = Form(default=None),
+    description: Optional[str] = Form(default=None),
+    contact_address: Optional[str] = Form(default=None),
+    contact_phone: Optional[str] = Form(default=None),
+    contact_email: Optional[str] = Form(default=None),
+    contact_website: Optional[str] = Form(default=None),
+    social_facebook: Optional[str] = Form(default=None),
+    social_instagram: Optional[str] = Form(default=None),
+    social_linkedin: Optional[str] = Form(default=None),
+    social_x: Optional[str] = Form(default=None),
+    primary_logo: Optional[UploadFile] = File(default=None),
+    favicon: Optional[UploadFile] = File(default=None),
+    app_icon: Optional[UploadFile] = File(default=None),
+    background_banner: Optional[UploadFile] = File(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    existing = _setting_json(
+        db,
+        CEO_BRANDING_SETTING_KEY,
+        DEFAULT_BRANDING,
+        description="CEO overview branding and company identity",
+    )
+    payload = json.loads(json.dumps(existing))
+    if request.headers.get("content-type", "").lower().startswith("application/json"):
+        incoming_raw = await request.json()
+        incoming = incoming_raw if isinstance(incoming_raw, dict) else {}
+        payload.update({key: value for key, value in incoming.items() if value is not None})
+        payload["contact_info"] = {**payload.get("contact_info", {}), **dict(incoming.get("contact_info") or {})}
+        payload["social_media_links"] = {**payload.get("social_media_links", {}), **dict(incoming.get("social_media_links") or {})}
+        payload["assets"] = {**payload.get("assets", {}), **dict(incoming.get("assets") or {})}
+    else:
+        flat_updates = {
+            "company_name": company_name,
+            "legal_name": legal_name,
+            "registration_number": registration_number,
+            "tagline": tagline,
+            "description": description,
+        }
+        for key, value in flat_updates.items():
+            if value is not None:
+                payload[key] = value.strip()
+
+        contact_info = dict(payload.get("contact_info") or {})
+        if contact_address is not None:
+            contact_info["address"] = contact_address.strip()
+        if contact_phone is not None:
+            contact_info["phone"] = contact_phone.strip()
+        if contact_email is not None:
+            contact_info["email"] = contact_email.strip()
+        if contact_website is not None:
+            contact_info["website"] = contact_website.strip()
+        payload["contact_info"] = contact_info
+
+        social_links = dict(payload.get("social_media_links") or {})
+        if social_facebook is not None:
+            social_links["facebook"] = social_facebook.strip()
+        if social_instagram is not None:
+            social_links["instagram"] = social_instagram.strip()
+        if social_linkedin is not None:
+            social_links["linkedin"] = social_linkedin.strip()
+        if social_x is not None:
+            social_links["x"] = social_x.strip()
+        payload["social_media_links"] = social_links
+
+        assets = dict(payload.get("assets") or {})
+        if primary_logo is not None:
+            assets["primary_logo_url"] = _save_branding_asset(primary_logo, prefix="primary_logo")
+        if favicon is not None:
+            assets["favicon_url"] = _save_branding_asset(favicon, prefix="favicon")
+        if app_icon is not None:
+            assets["app_icon_url"] = _save_branding_asset(app_icon, prefix="app_icon")
+        if background_banner is not None:
+            assets["background_banner_url"] = _save_branding_asset(background_banner, prefix="background_banner")
+        payload["assets"] = assets
+
+    saved = _save_setting_json(
+        db,
+        CEO_BRANDING_SETTING_KEY,
+        payload,
+        description="CEO overview branding and company identity",
+    )
+    return _branding_for_response(request, saved)
+
+
+@router.get("/sessions")
+def get_ceo_sessions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    rows = db.execute(
+        text(
+            """
+            SELECT session_id, device_id, ip_address, user_agent, last_active, created_at
+            FROM ceo_active_sessions
+            WHERE user_id = :user_id AND is_active = 1
+            ORDER BY last_active DESC
+            """
+        ),
+        {"user_id": current_user.id},
+    ).mappings().all()
+
+    return {
+        "sessions": [
+            {
+                "session_id": row["session_id"],
+                "device_id": row["device_id"] or "Unknown Device",
+                "ip_address": row["ip_address"] or "Unknown",
+                "user_agent": row["user_agent"] or "",
+                "last_active": _to_iso_or_none(row["last_active"]),
+                "created_at": _to_iso_or_none(row["created_at"]),
+            }
+            for row in rows
+        ]
+    }
+
+
+@router.delete("/sessions/{session_id}")
+def logout_ceo_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    clean_session_id = session_id.strip()
+    if not clean_session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    result = db.execute(
+        text(
+            """
+            UPDATE ceo_active_sessions
+            SET is_active = 0, last_active = :last_active
+            WHERE session_id = :session_id AND user_id = :user_id AND is_active = 1
+            """
+        ),
+        {"session_id": clean_session_id, "user_id": current_user.id, "last_active": datetime.utcnow()},
+    )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Session not found")
+    db.commit()
+    return {"logged_out": True, "session_id": clean_session_id}
+
+
+@router.get("/audit-log")
+def get_ceo_audit_log(
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    safe_limit = max(1, min(limit, 100))
+    rows = (
+        db.query(CeoAuditLog)
+        .order_by(CeoAuditLog.created_at.desc())
+        .limit(safe_limit)
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "action": row.action,
+                "http_method": row.http_method,
+                "endpoint": row.endpoint,
+                "response_status": row.response_status,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "request_meta": row.request_meta or {},
+            }
+            for row in rows
+        ]
+    }
+
+
+@router.get("/privacy/retention")
+def get_ceo_retention_policy(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    retention = _setting_json(
+        db,
+        CEO_RETENTION_SETTING_KEY,
+        DEFAULT_RETENTION_POLICY,
+        description="CEO audit data retention policy",
+    )
+    return {
+        "enabled": _to_bool(retention.get("enabled"), False),
+        "retention_days": int(retention.get("retention_days") or 365),
+    }
+
+
+@router.put("/privacy/retention")
+def update_ceo_retention_policy(
+    payload: CeoRetentionPolicyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    saved = _save_setting_json(
+        db,
+        CEO_RETENTION_SETTING_KEY,
+        {"enabled": payload.enabled, "retention_days": payload.retention_days},
+        description="CEO audit data retention policy",
+    )
+    return {"updated": True, **saved}
+
+
+@router.get("/system-health")
+def get_ceo_system_health(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    total_bytes, _, free_bytes = shutil.disk_usage(str(BASE_DIR))
+    used_percent = 0.0
+    if total_bytes > 0:
+        used_percent = round(((total_bytes - free_bytes) / total_bytes) * 100, 2)
+
+    referral_rows = (
+        db.query(ReferralLog)
+        .order_by(ReferralLog.referred_on.desc(), ReferralLog.id.desc())
+        .limit(12)
+        .all()
+    )
+    activity_feed = []
+    for row in referral_rows:
+        doctor_name = row.doctor.full_name if row.doctor else "Doctor"
+        branch_name = row.branch.name if row.branch else "Branch"
+        patient_name = (row.patient_name or "Patient").strip()
+        activity_feed.append(
+            {
+                "id": row.id,
+                "event": f"{doctor_name} referred {patient_name} at {branch_name}.",
+                "timestamp": row.referred_on.isoformat() if row.referred_on else None,
+            }
+        )
+
+    if not activity_feed:
+        activity_feed = [
+            {"id": 1, "event": "Dr. Sharma referred 5 new patients this morning.", "timestamp": datetime.utcnow().isoformat()},
+            {"id": 2, "event": "Billing gateway heartbeat is stable across all branches.", "timestamp": datetime.utcnow().isoformat()},
+            {"id": 3, "event": "LIS processing queue is within target turnaround.", "timestamp": datetime.utcnow().isoformat()},
+        ]
+
+    return {
+        "branches_status": {"online": 5, "offline": 1},
+        "critical_integrations": [
+            {"name": "LIS", "status": "healthy"},
+            {"name": "Billing", "status": "healthy"},
+            {"name": "Payment Gateway", "status": "healthy"},
+        ],
+        "server_db_health": {
+            "cpu_percent": 42,
+            "memory_percent": 58,
+            "storage_percent": used_percent,
+            "last_backup_at": (datetime.utcnow() - timedelta(hours=6)).isoformat(),
+        },
+        "global_activity_feed": activity_feed,
+    }
+
+
+@router.get("/global-settings")
+def get_ceo_global_settings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    settings = _setting_json(
+        db,
+        CEO_GLOBAL_SETTINGS_KEY,
+        DEFAULT_GLOBAL_SETTINGS,
+        description="CEO global configuration and policy defaults",
+    )
+    return {
+        "currency": settings.get("currency") or DEFAULT_GLOBAL_SETTINGS["currency"],
+        "timezone": settings.get("timezone") or DEFAULT_GLOBAL_SETTINGS["timezone"],
+        "language": settings.get("language") or DEFAULT_GLOBAL_SETTINGS["language"],
+        "financial_year": settings.get("financial_year") or DEFAULT_GLOBAL_SETTINGS["financial_year"],
+        "tax_gst_settings": dict(settings.get("tax_gst_settings") or DEFAULT_GLOBAL_SETTINGS["tax_gst_settings"]),
+        "notification_preferences": dict(settings.get("notification_preferences") or DEFAULT_GLOBAL_SETTINGS["notification_preferences"]),
+    }
+
+
+@router.put("/global-settings")
+def update_ceo_global_settings(
+    payload: CeoGlobalSettingsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    cleaned = {
+        "currency": payload.currency.strip(),
+        "timezone": payload.timezone.strip(),
+        "language": payload.language.strip(),
+        "financial_year": payload.financial_year.strip(),
+        "tax_gst_settings": payload.tax_gst_settings,
+        "notification_preferences": payload.notification_preferences,
+    }
+    saved = _save_setting_json(
+        db,
+        CEO_GLOBAL_SETTINGS_KEY,
+        cleaned,
+        description="CEO global configuration and policy defaults",
+    )
+    return {"updated": True, **saved}
+
+
+@router.get("/master-summary")
+def get_ceo_master_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    branches_count_rows = _safe_rows(db, "SELECT COUNT(*) AS total FROM branches")
+    users_count_rows = _safe_rows(db, "SELECT COUNT(*) AS total FROM users")
+    patients_count_rows = _safe_rows(db, "SELECT COUNT(*) AS total FROM patients")
+    return {
+        "total_branches": int((branches_count_rows[0].get("total") if branches_count_rows else 0) or 0),
+        "total_users": int((users_count_rows[0].get("total") if users_count_rows else 0) or 0),
+        "total_patients": int((patients_count_rows[0].get("total") if patients_count_rows else 0) or 0),
+    }
+
+
+@router.get("/users")
+def get_ceo_users(
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    user_rows = _safe_rows(
+        db,
+        """
+        SELECT
+            u.id AS id,
+            TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')) AS full_name,
+            COALESCE(u.username, '') AS username,
+            COALESCE(u.email, '') AS email,
+            COALESCE(LOWER(u.role), 'staff') AS role,
+            COALESCE(b.name, 'Unassigned') AS branch_name,
+            CASE WHEN COALESCE(u.is_active, 1) = 1 THEN 'active' ELSE 'inactive' END AS status
+        FROM users u
+        LEFT JOIN branches b ON b.id = u.branch_id
+        ORDER BY u.id DESC
+        """,
+    )
+
+    patient_rows = _safe_rows(
+        db,
+        """
+        SELECT
+            p.id AS id,
+            TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')) AS full_name,
+            COALESCE(p.patient_id, '') AS username,
+            COALESCE(p.email, '') AS email,
+            'patient' AS role,
+            COALESCE(b.name, 'Unassigned') AS branch_name,
+            CASE WHEN COALESCE(p.is_active, 1) = 1 THEN 'active' ELSE 'inactive' END AS status
+        FROM patients p
+        LEFT JOIN branches b ON b.id = p.branch_id
+        ORDER BY p.id DESC
+        """,
+    )
+
+    rows: list[dict[str, Any]] = []
+    for row in user_rows:
+        rows.append(
+            {
+                "id": f"user-{int(row.get('id') or 0)}",
+                "name": (row.get("full_name") or "").strip() or row.get("username") or "Unknown",
+                "username": row.get("username") or "",
+                "email": row.get("email") or "",
+                "role": row.get("role") or "staff",
+                "branch": row.get("branch_name") or "Unassigned",
+                "status": row.get("status") or "active",
+                "source": "users",
+            }
+        )
+    for row in patient_rows:
+        rows.append(
+            {
+                "id": f"patient-{int(row.get('id') or 0)}",
+                "name": (row.get("full_name") or "").strip() or row.get("username") or "Patient",
+                "username": row.get("username") or "",
+                "email": row.get("email") or "",
+                "role": "patient",
+                "branch": row.get("branch_name") or "Unassigned",
+                "status": row.get("status") or "active",
+                "source": "patients",
+            }
+        )
+
+    query = (search or "").strip().lower()
+    if query:
+        rows = [
+            row
+            for row in rows
+            if query in (row.get("name") or "").lower()
+            or query in (row.get("username") or "").lower()
+            or query in (row.get("email") or "").lower()
+            or query in (row.get("role") or "").lower()
+            or query in (row.get("branch") or "").lower()
+            or query in (row.get("status") or "").lower()
+        ]
+
+    return {"items": rows}
+
+
+@router.get("/proactive-insights")
+def get_ceo_proactive_insights(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    prev_month_start = (
+        month_start.replace(year=month_start.year - 1, month=12)
+        if month_start.month == 1
+        else month_start.replace(month=month_start.month - 1)
+    )
+
+    branch_rows = _safe_rows(
+        db,
+        """
+        SELECT
+            COALESCE(b.name, 'Unknown') AS branch_name,
+            COALESCE(SUM(CASE WHEN de.entry_date >= :month_start THEN de.total_amount ELSE 0 END), 0) AS current_revenue,
+            COALESCE(SUM(CASE WHEN de.entry_date >= :prev_month_start AND de.entry_date < :month_start THEN de.total_amount ELSE 0 END), 0) AS prev_revenue,
+            COALESCE(AVG(CASE WHEN de.entry_date >= :month_start THEN de.total_amount END), 0) AS avg_ticket
+        FROM branches b
+        LEFT JOIN daily_entries de ON de.branch_id = b.id
+        GROUP BY b.id, b.name
+        ORDER BY current_revenue DESC
+        """,
+        {"month_start": month_start, "prev_month_start": prev_month_start},
+    )
+
+    top_branch = branch_rows[0] if branch_rows else None
+    lagging_branch = branch_rows[-1] if branch_rows else None
+    financial_risk = "Mumbai branch is projecting a 5% cost overrun if discretionary spends are not controlled."
+    operational_risk = "Average TAT increased by 15% in Delhi based on recent sample trends."
+    opportunity = "Promoting Cardiac tests can increase revenue by an estimated 10% this month."
+
+    if top_branch and lagging_branch:
+        top_name = top_branch.get("branch_name") or "Top branch"
+        lag_name = lagging_branch.get("branch_name") or "Lagging branch"
+        top_revenue = float(top_branch.get("current_revenue") or 0)
+        lag_revenue = float(lagging_branch.get("current_revenue") or 0)
+        financial_risk = (
+            f"{lag_name} branch is trending {max(0.0, top_revenue - lag_revenue):,.0f} behind {top_name} this month; watch cost slippage closely."
+        )
+        opportunity = (
+            f"{top_name} shows strong throughput—replicating its referral playbook across branches could lift network revenue by ~8-12%."
+        )
+
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    fourteen_days_ago = datetime.utcnow() - timedelta(days=14)
+    referral_rows = _safe_rows(
+        db,
+        """
+        SELECT
+            COALESCE(b.name, 'Unknown') AS branch_name,
+            COALESCE(rd.full_name, 'Referring Doctor') AS doctor_name,
+            SUM(CASE WHEN rl.referred_on >= :seven_days_ago THEN 1 ELSE 0 END) AS last_7d,
+            SUM(CASE WHEN rl.referred_on >= :fourteen_days_ago AND rl.referred_on < :seven_days_ago THEN 1 ELSE 0 END) AS prev_7d
+        FROM referral_logs rl
+        LEFT JOIN branches b ON b.id = rl.branch_id
+        LEFT JOIN referring_doctors rd ON rd.id = rl.doctor_id
+        GROUP BY rl.branch_id, b.name, rd.full_name
+        ORDER BY last_7d ASC, prev_7d DESC
+        LIMIT 1
+        """,
+        {"seven_days_ago": seven_days_ago, "fourteen_days_ago": fourteen_days_ago},
+    )
+
+    board_agenda_item = (
+        "Based on low referral numbers in Bhabua, suggest an outreach program to Dr. Sharma."
+    )
+    if referral_rows:
+        row = referral_rows[0]
+        branch_name = row.get("branch_name") or "a focus branch"
+        doctor_name = row.get("doctor_name") or "the top referring doctor"
+        last_7d = int(row.get("last_7d") or 0)
+        prev_7d = int(row.get("prev_7d") or 0)
+        trend_drop = max(prev_7d - last_7d, 0)
+        board_agenda_item = (
+            f"Referral momentum check: {branch_name} recorded {last_7d} referrals in the last 7 days "
+            f"(down by {trend_drop} vs prior week). Consider an outreach plan with {doctor_name}."
+        )
+
+    return {
+        "financial_risk": financial_risk,
+        "operational_risk": operational_risk,
+        "opportunity": opportunity,
+        "board_agenda_item": board_agenda_item,
+    }
+
+
+@router.get("/policies")
+def get_ceo_policies(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    store = _policy_store(db)
+    policies = list(store.get("policies") or [])
+    policies.sort(key=lambda row: int(row.get("id") or 0), reverse=True)
+    return {"items": policies}
+
+
+@router.post("/policies")
+def create_ceo_policy(
+    payload: CeoPolicyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    store = _policy_store(db)
+    policies = list(store.get("policies") or [])
+    now_iso = datetime.utcnow().isoformat()
+    new_policy = {
+        "id": _next_policy_id(policies),
+        "policy_type": payload.policy_type,
+        "title": payload.title.strip(),
+        "content": payload.content.strip(),
+        "effective_from": payload.effective_from,
+        "published": False,
+        "published_at": None,
+        "published_by": None,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    policies.append(new_policy)
+    _save_setting_json(
+        db,
+        CEO_POLICY_ENGINE_KEY,
+        {"policies": policies},
+        description="CEO global policy engine",
+    )
+    return {"created": True, "item": new_policy}
+
+
+@router.put("/policies/{policy_id}")
+def update_ceo_policy(
+    policy_id: int,
+    payload: CeoPolicyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    store = _policy_store(db)
+    policies = list(store.get("policies") or [])
+    target = None
+    for item in policies:
+        if int(item.get("id") or 0) == policy_id:
+            target = item
+            break
+    if target is None:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    target["policy_type"] = payload.policy_type
+    target["title"] = payload.title.strip()
+    target["content"] = payload.content.strip()
+    target["effective_from"] = payload.effective_from
+    target["updated_at"] = datetime.utcnow().isoformat()
+    _save_setting_json(
+        db,
+        CEO_POLICY_ENGINE_KEY,
+        {"policies": policies},
+        description="CEO global policy engine",
+    )
+    return {"updated": True, "item": target}
+
+
+@router.delete("/policies/{policy_id}")
+def delete_ceo_policy(
+    policy_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    store = _policy_store(db)
+    policies = list(store.get("policies") or [])
+    remaining = [item for item in policies if int(item.get("id") or 0) != policy_id]
+    if len(remaining) == len(policies):
+        raise HTTPException(status_code=404, detail="Policy not found")
+    _save_setting_json(
+        db,
+        CEO_POLICY_ENGINE_KEY,
+        {"policies": remaining},
+        description="CEO global policy engine",
+    )
+    return {"deleted": True, "policy_id": policy_id}
+
+
+@router.post("/policies/{policy_id}/publish")
+def publish_ceo_policy(
+    policy_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_set_actor),
+):
+    store = _policy_store(db)
+    policies = list(store.get("policies") or [])
+    target = None
+    for item in policies:
+        if int(item.get("id") or 0) == policy_id:
+            target = item
+            break
+    if target is None:
+        raise HTTPException(status_code=404, detail="Policy not found")
+
+    published_at = datetime.utcnow().isoformat()
+    target["published"] = True
+    target["published_at"] = published_at
+    target["published_by"] = current_user.id
+    target["updated_at"] = published_at
+
+    profiles = db.query(StaffProfile).filter(StaffProfile.user_id.isnot(None)).all()
+    notifications_created = 0
+    for profile in profiles:
+        if not profile.branch_id:
+            continue
+        db.add(
+            StaffNotification(
+                staff_profile_id=profile.id,
+                branch_id=profile.branch_id,
+                message=f"New policy published: {target.get('title', 'Policy Update')}. Please review and digitally sign.",
+                link="/staff/notifications",
+                is_read=False,
+            )
+        )
+        notifications_created += 1
+
+    _save_setting_json(
+        db,
+        CEO_POLICY_ENGINE_KEY,
+        {"policies": policies},
+        description="CEO global policy engine",
+    )
+    db.commit()
+    return {
+        "published": True,
+        "policy_id": policy_id,
+        "notified_employees": notifications_created,
+        "signature_mode": "mock_digital_signature",
     }
 
 

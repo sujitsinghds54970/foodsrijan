@@ -121,10 +121,134 @@ function EditableCellInput({ initialValue, onCommit, type = 'text', className }:
   )
 }
 
-export default function DailyOperations() {
+// Debounce hook for search queries
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay)
+    return () => clearTimeout(handler)
+  }, [value, delay])
+  return debouncedValue
+}
+
+interface AutocompleteOption {
+  id: string | number
+  name: string
+}
+
+interface AutocompleteCellProps {
+  value: string
+  onChange: (value: string) => void
+  fetchOptions: (searchTerm: string) => Promise<AutocompleteOption[]>
+  placeholder: string
+}
+
+function AutocompleteCell({ value, onChange, fetchOptions, placeholder }: AutocompleteCellProps) {
+  const [localValue, setLocalValue] = useState(String(value ?? ''))
+  const [options, setOptions] = useState<AutocompleteOption[]>([])
+  const [isFocused, setIsFocused] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const debouncedSearchTerm = useDebounce(localValue, 500)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (String(value ?? '') !== localValue && !isFocused) {
+      setLocalValue(String(value ?? ''))
+    }
+  }, [value, isFocused])
+
+  useEffect(() => {
+    if (!isFocused || debouncedSearchTerm.length === 0) {
+      setOptions([])
+      return
+    }
+
+    const loadOptions = async () => {
+      try {
+        setIsLoading(true)
+        const results = await fetchOptions(debouncedSearchTerm)
+        setOptions(results)
+      } catch (error) {
+        console.error('Error fetching autocomplete options:', error)
+        setOptions([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadOptions()
+  }, [debouncedSearchTerm, isFocused, fetchOptions])
+
+  const handleSelectOption = (option: AutocompleteOption) => {
+    setLocalValue(option.name)
+    onChange(option.name)
+    setOptions([])
+    setIsFocused(false)
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalValue(e.target.value)
+  }
+
+  const handleInputBlur = () => {
+    setTimeout(() => {
+      setIsFocused(false)
+      if (String(value ?? '') !== localValue) {
+        onChange(localValue)
+      }
+    }, 100)
+  }
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <input
+        ref={inputRef}
+        type="text"
+        value={localValue}
+        onChange={handleInputChange}
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleInputBlur}
+        onKeyDown={e => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            inputRef.current?.blur()
+          }
+        }}
+        placeholder={placeholder}
+        className="w-full px-2 py-1 border rounded focus:outline-none focus:border-blue-500"
+      />
+      {isFocused && options.length > 0 && (
+        <div className="absolute top-10 left-0 z-50 bg-white shadow-lg border rounded-lg w-full max-h-60 overflow-y-auto">
+          {options.map(option => (
+            <div
+              key={option.id}
+              onClick={() => handleSelectOption(option)}
+              className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-b-0"
+            >
+              {option.name}
+            </div>
+          ))}
+        </div>
+      )}
+      {isFocused && isLoading && (
+        <div className="absolute top-10 left-0 z-50 bg-white shadow-lg border rounded-lg w-full px-3 py-2 text-xs text-gray-500">
+          Loading...
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface DailyOperationsProps {
+  branchId?: number
+}
+
+export default function DailyOperations({ branchId }: DailyOperationsProps) {
   const { user, token } = useAuth()
   const navigate = useNavigate()
   const [entries, setEntries] = useState<DailyEntry[]>([])
+  const [entriesLoadError, setEntriesLoadError] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
   const [stats, setStats] = useState<DailyStats | null>(null)
   const [loading, setLoading] = useState(false)
@@ -185,15 +309,23 @@ export default function DailyOperations() {
     endDate: null as Date | null,
   })
 
-  const API_BASE = (process as any).env.REACT_APP_API_BASE_URL ||
+  const rawApiBase = (process as any).env.REACT_APP_API_BASE_URL ||
     ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? 'http://127.0.0.1:8000'
       : window.location.origin)
+  const API_BASE =
+    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? String(rawApiBase).replace('://localhost', '://127.0.0.1')
+      : rawApiBase
 
   const normalizedRole = (user?.role || '').trim().toLowerCase()
   const isStaff = normalizedRole === 'staff'
   const isDirector = normalizedRole === 'branch_director'
   const isAdminOrDirector = normalizedRole === 'super_admin' || normalizedRole === 'branch_admin' || isDirector
+  const forcedBranchId = Number(branchId)
+  const effectiveBranchId = Number.isFinite(forcedBranchId) && forcedBranchId > 0
+    ? forcedBranchId
+    : (user?.branch_id ? Number(user.branch_id) : null)
 
   const requestConfig = useMemo(() => ({
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -335,6 +467,7 @@ export default function DailyOperations() {
       if (activeFilters.testNameFilter) params.append('test_name', activeFilters.testNameFilter)
       if (activeFilters.startDate) params.append('start_date', activeFilters.startDate.toISOString().split('T')[0])
       if (activeFilters.endDate) params.append('end_date', activeFilters.endDate.toISOString().split('T')[0])
+      if (effectiveBranchId) params.append('branch_id', String(effectiveBranchId))
 
       const res = await axios.get(`${API_BASE}/api/daily-entries?${params.toString()}`, requestConfig)
       const data = Array.isArray(res.data) ? res.data : []
@@ -344,6 +477,7 @@ export default function DailyOperations() {
         return timeA - timeB
       })
       setEntries(sortedData)
+      setEntriesLoadError(false)
     } catch (err: any) {
       const statusCode = Number(err?.response?.status || 0)
       const detail = String(err?.response?.data?.detail || '').toLowerCase()
@@ -352,13 +486,16 @@ export default function DailyOperations() {
         navigate('/staff/profile', { replace: true })
         return
       }
-      toast.error(getErrorMessage(err, 'Failed to fetch entries'))
+      setEntriesLoadError(true)
+      if (!isBackground) {
+        toast.error(getErrorMessage(err, 'Failed to fetch entries'))
+      }
     } finally {
       if (!isBackground) {
         setLoading(false)
       }
     }
-  }, [token, API_BASE, requestConfig, getErrorMessage, isStaff, navigate])
+  }, [token, API_BASE, requestConfig, getErrorMessage, isStaff, navigate, effectiveBranchId])
 
   useLayoutEffect(() => {
     if (restoreScrollYRef.current === null && restoreContainerScrollTopRef.current === null) return
@@ -385,12 +522,15 @@ export default function DailyOperations() {
   const fetchStats = useCallback(async () => {
     if (!token) return
     try {
-      const res = await axios.get(`${API_BASE}/api/daily-stats`, requestConfig)
+      const statsParams = new URLSearchParams()
+      if (effectiveBranchId) statsParams.append('branch_id', String(effectiveBranchId))
+      const statsUrl = statsParams.toString() ? `${API_BASE}/api/daily-stats?${statsParams.toString()}` : `${API_BASE}/api/daily-stats`
+      const res = await axios.get(statsUrl, requestConfig)
       setStats(res.data)
     } catch {
       // Keep dashboard resilient even if stats API fails.
     }
-  }, [token, API_BASE, requestConfig])
+  }, [token, API_BASE, requestConfig, effectiveBranchId])
 
   useEffect(() => {
     if (!token) return
@@ -465,6 +605,40 @@ export default function DailyOperations() {
       cancelled = true
     }
   }, [token, entries, API_BASE, requestConfig])
+
+  // Autocomplete fetch functions
+  const fetchDoctorOptions = useCallback(async (searchTerm: string) => {
+    if (!token) return []
+    try {
+      const res = await axios.get(`${API_BASE}/api/doctors/search?q=${encodeURIComponent(searchTerm)}`, requestConfig)
+      return res.data || []
+    } catch (error) {
+      console.error('Error fetching doctors:', error)
+      return []
+    }
+  }, [token, API_BASE, requestConfig])
+
+  const fetchTestOptions = useCallback(async (searchTerm: string) => {
+    if (!token) return []
+    try {
+      const res = await axios.get(`${API_BASE}/api/tests/search?q=${encodeURIComponent(searchTerm)}`, requestConfig)
+      return res.data || []
+    } catch (error) {
+      console.error('Error fetching tests:', error)
+      return []
+    }
+  }, [token, API_BASE, requestConfig])
+
+  const fetchPatientOptions = useCallback(async (searchTerm: string) => {
+    if (!token) return []
+    try {
+      const res = await axios.get(`${API_BASE}/api/patients/search?q=${encodeURIComponent(searchTerm)}`, requestConfig)
+      return res.data || []
+    } catch (error) {
+      console.error('Error fetching patients:', error)
+      return []
+    }
+  }, [token, API_BASE, requestConfig])
 
   const updateEntryField = useCallback(async (
     rowId: number,
@@ -568,6 +742,7 @@ export default function DailyOperations() {
           payment_method: 'Hold',
           is_paid: false,
           auto_entry_datetime: new Date().toLocaleString(),
+          ...(effectiveBranchId ? { branch_id: effectiveBranchId } : {}),
         },
         requestConfig
       )
@@ -842,9 +1017,10 @@ export default function DailyOperations() {
 
   const exportToCSV = async (period: ExportPeriod) => {
     const range = getPeriodRange(period)
+    const branchQuery = effectiveBranchId ? `&branch_id=${effectiveBranchId}` : ''
     const [entryRes, expenseRes] = await Promise.all([
-      axios.get(`${API_BASE}/api/daily-entries?start_date=${range.start}&end_date=${range.end}`, requestConfig),
-      axios.get(`${API_BASE}/api/daily-expenses?start_date=${range.start}&end_date=${range.end}`, requestConfig),
+      axios.get(`${API_BASE}/api/daily-entries?start_date=${range.start}&end_date=${range.end}${branchQuery}`, requestConfig),
+      axios.get(`${API_BASE}/api/daily-expenses?start_date=${range.start}&end_date=${range.end}${branchQuery}`, requestConfig),
     ])
 
     const periodEntries: DailyEntry[] = entryRes.data || []
@@ -960,9 +1136,10 @@ export default function DailyOperations() {
 
   const exportToPDF = async (period: ExportPeriod) => {
     const range = getPeriodRange(period)
+    const branchQuery = effectiveBranchId ? `&branch_id=${effectiveBranchId}` : ''
     const [entryRes, expenseRes] = await Promise.all([
-      axios.get(`${API_BASE}/api/daily-entries?start_date=${range.start}&end_date=${range.end}`, requestConfig),
-      axios.get(`${API_BASE}/api/daily-expenses?start_date=${range.start}&end_date=${range.end}`, requestConfig),
+      axios.get(`${API_BASE}/api/daily-entries?start_date=${range.start}&end_date=${range.end}${branchQuery}`, requestConfig),
+      axios.get(`${API_BASE}/api/daily-expenses?start_date=${range.start}&end_date=${range.end}${branchQuery}`, requestConfig),
     ])
 
     const periodEntries: DailyEntry[] = entryRes.data || []
@@ -1072,9 +1249,11 @@ export default function DailyOperations() {
       size: 130,
       minSize: 130,
       cell: info => (
-        <EditableCellInput
-          initialValue={String(info.getValue() || '')}
-          onCommit={value => updateEntryField(info.row.original.id, 'patient_name', value)}
+        <AutocompleteCell
+          value={String(info.getValue() || '')}
+          onChange={value => updateEntryField(info.row.original.id, 'patient_name', value)}
+          fetchOptions={fetchPatientOptions}
+          placeholder="Search patient..."
         />
       ),
     }),
@@ -1222,9 +1401,11 @@ export default function DailyOperations() {
       size: 100,
       minSize: 100,
       cell: info => (
-        <EditableCellInput
-          initialValue={String(info.getValue() || '')}
-          onCommit={value => updateEntryField(info.row.original.id, 'referred_doctor', value)}
+        <AutocompleteCell
+          value={String(info.getValue() || '')}
+          onChange={value => updateEntryField(info.row.original.id, 'referred_doctor', value)}
+          fetchOptions={fetchDoctorOptions}
+          placeholder="Search doctor..."
         />
       ),
     }),
@@ -1233,9 +1414,11 @@ export default function DailyOperations() {
       size: 100,
       minSize: 100,
       cell: info => (
-        <EditableCellInput
-          initialValue={String(info.getValue() || '')}
-          onCommit={value => updateEntryField(info.row.original.id, 'test_name', value)}
+        <AutocompleteCell
+          value={String(info.getValue() || '')}
+          onChange={value => updateEntryField(info.row.original.id, 'test_name', value)}
+          fetchOptions={fetchTestOptions}
+          placeholder="Search test..."
         />
       ),
     }),
@@ -1333,6 +1516,9 @@ export default function DailyOperations() {
     hasValidUPI,
     openBillModal,
     openActionsMenuId,
+    fetchDoctorOptions,
+    fetchPatientOptions,
+    fetchTestOptions,
   ])
 
   const totalPages = Math.max(1, Math.ceil(entries.length / pageSize))
@@ -1383,6 +1569,12 @@ export default function DailyOperations() {
 
   return (
     <div className="space-y-6">
+      {entriesLoadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-800">Daily operations data is temporarily unavailable</p>
+          <p className="mt-1 text-xs text-amber-700">Data will auto-refresh when the connection is restored.</p>
+        </div>
+      )}
       <div className="premium-card p-8">
         <div className="flex items-center justify-between">
           <div>
@@ -1933,7 +2125,7 @@ export default function DailyOperations() {
                       <img
                         src={invoiceLogoUrl}
                         alt={`${invoiceBranch?.name || 'Clinic'} logo`}
-                        className="w-16 h-16 rounded-full object-cover border border-slate-200"
+                        className="w-16 h-16 object-contain rounded-md shadow-sm"
                       />
                     ) : null}
                   </div>
@@ -1963,13 +2155,13 @@ export default function DailyOperations() {
 
                 {/* Service Table */}
                 <table className="w-full border-collapse border border-gray-200 text-sm">
-                  <thead className="bg-gray-800 text-white">
-                    <tr>
-                      <th className="border p-2 text-left w-10">#</th>
-                      <th className="border p-2 text-left">Description</th>
-                      <th className="border p-2 text-center w-16">Qty</th>
-                      <th className="border p-2 text-right w-24">Unit Price</th>
-                      <th className="border p-2 text-right w-24">Amount</th>
+                  <thead>
+                    <tr className="bg-gray-100 border-b-2 border-gray-300">
+                      <th className="px-4 py-3 text-sm font-bold text-gray-900 text-center w-10">#</th>
+                      <th className="px-4 py-3 text-sm font-bold text-gray-900 text-left">Description</th>
+                      <th className="px-4 py-3 text-sm font-bold text-gray-900 text-center w-16">Qty</th>
+                      <th className="px-4 py-3 text-sm font-bold text-gray-900 text-right w-24">Unit Price</th>
+                      <th className="px-4 py-3 text-sm font-bold text-gray-900 text-right w-24">Amount</th>
                     </tr>
                   </thead>
                   <tbody>

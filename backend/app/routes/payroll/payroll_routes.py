@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Branch, DailyEntry, User
 from app.models.branch_bank_details import BranchBankDetails
-from app.models.hr import StaffProfile
+from app.models.hr import StaffProfile, StaffSalaryDetail
 from app.models.finance import FinanceTransaction
 from app.models.payroll.models import (
     AdvanceRequest,
@@ -145,7 +145,7 @@ def seed_payroll_defaults(db: Session = Depends(get_db), current_user: User = De
 
 @router.get("/staff/{staff_id}/salary-config")
 def get_salary_config(staff_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if _role(current_user) == "staff":
+    if _is_staff_role(current_user.role):
         profile = db.query(StaffProfile).filter(StaffProfile.user_id == current_user.id).first()
         if not profile or profile.id != staff_id:
             raise HTTPException(status_code=403, detail="Not allowed")
@@ -470,7 +470,7 @@ def upsert_tax_declaration(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if _role(current_user) == "staff":
+    if _is_staff_role(current_user.role):
         profile = db.query(StaffProfile).filter(StaffProfile.user_id == current_user.id).first()
         if not profile or profile.id != staff_id:
             raise HTTPException(status_code=403, detail="Not allowed")
@@ -551,7 +551,7 @@ def generate_payslip_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if _role(current_user) == "staff":
+    if _is_staff_role(current_user.role):
         profile = db.query(StaffProfile).filter(StaffProfile.user_id == current_user.id).first()
         if not profile or profile.id != staff_id:
             raise HTTPException(status_code=403, detail="Not allowed")
@@ -585,38 +585,102 @@ def generate_payslip_pdf(
         raise HTTPException(status_code=400, detail="Registered phone number is required to open payslip PDF")
     password = normalized_phone
 
+    salary_detail = db.query(StaffSalaryDetail).filter(StaffSalaryDetail.staff_profile_id == staff.id).first()
+    basic = float(tx.base_salary or 0)
+    da = float(tx.reimbursement_amount or 0)
+    hra = float(salary_detail.hra if salary_detail else 0)
+    shift_allowance = float(salary_detail.allowances if salary_detail else 0)
+    ot = float(tx.overtime_hours or 0)
+    lop = float(tx.lop_days or 0)
+    incentives = float(tx.incentive_amount or 0)
+    statutory_deductions = float(salary_detail.deductions if salary_detail else max(0.0, float(tx.total_deductions or 0) - lop))
+    gross_pay = basic + da + hra + shift_allowance + ot + incentives
+    total_deductions = lop + statutory_deductions
+    net_pay = gross_pay - total_deductions
+
     packet = io.BytesIO()
     encrypt = StandardEncryption(userPassword=password, ownerPassword=password, canPrint=1, canModify=0, canCopy=0)
     c = canvas.Canvas(packet, pagesize=A4, encrypt=encrypt)
+    page_w, page_h = A4
 
-    y = 280 * mm
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(20 * mm, y, "Salary Payslip")
-    y -= 8 * mm
+    # Header band
+    c.setFillColorRGB(0.13, 0.29, 0.78)
+    c.rect(0, page_h - 44 * mm, page_w, 44 * mm, stroke=0, fill=1)
+    c.setFillColorRGB(1, 1, 1)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(18 * mm, page_h - 22 * mm, (branch.name if branch else "VaidyaVihar Diagnostic"))
+    c.setFont("Helvetica", 9)
+    c.drawString(18 * mm, page_h - 28 * mm, (branch.address if branch and getattr(branch, "address", None) else "Branch Address"))
+    c.drawString(18 * mm, page_h - 33 * mm, f"Pay Period: {run.month:02d}/{run.year}")
+    c.setFont("Helvetica-Bold", 24)
+    c.drawRightString(page_w - 18 * mm, page_h - 24 * mm, "PAYSLIP")
 
+    fmt = lambda value: f"INR {value:,.2f}"
+    employee_name = ((user.first_name or "").strip() + " " + (user.last_name or "").strip()).strip() if user else staff.staff_id
+    info_top = page_h - 58 * mm
+    c.setFillColorRGB(0.95, 0.96, 0.99)
+    c.rect(14 * mm, info_top - 24 * mm, page_w - 28 * mm, 24 * mm, stroke=0, fill=1)
+    c.setFillColorRGB(0.12, 0.12, 0.16)
     c.setFont("Helvetica", 10)
-    c.drawString(20 * mm, y, f"Branch: {(branch.name if branch else 'N/A')}")
-    y -= 6 * mm
-    c.drawString(20 * mm, y, f"Staff: {(user.first_name + ' ' + user.last_name) if user else staff.staff_id}")
-    y -= 6 * mm
-    c.drawString(20 * mm, y, f"Period: {run.month:02d}/{run.year}")
-    y -= 10 * mm
+    c.drawString(18 * mm, info_top - 7 * mm, f"Employee Name: {employee_name}")
+    c.drawString(18 * mm, info_top - 13 * mm, f"Employee ID: {staff.staff_id}")
+    c.drawString(18 * mm, info_top - 19 * mm, f"Pay Period: {run.month:02d}/{run.year}")
+    c.drawString(112 * mm, info_top - 7 * mm, f"Department: {staff.department or '-'}")
+    c.drawString(112 * mm, info_top - 13 * mm, f"Role: {user.role if user else '-'}")
+    c.drawString(112 * mm, info_top - 19 * mm, f"Joining Date: {(staff.date_of_joining.strftime('%d-%m-%Y') if staff.date_of_joining else '-')}")
 
-    c.drawString(20 * mm, y, f"Base Salary: INR {tx.base_salary}")
-    y -= 6 * mm
-    c.drawString(20 * mm, y, f"Overtime Hours: {tx.overtime_hours}")
-    y -= 6 * mm
-    c.drawString(20 * mm, y, f"Incentive: INR {tx.incentive_amount}")
-    y -= 6 * mm
-    c.drawString(20 * mm, y, f"Reimbursement: INR {tx.reimbursement_amount}")
-    y -= 6 * mm
-    c.drawString(20 * mm, y, f"Deductions: INR {tx.total_deductions}")
-    y -= 6 * mm
+    table_top = info_top - 34 * mm
+    c.setFillColorRGB(0.90, 0.92, 0.97)
+    c.rect(14 * mm, table_top, page_w - 28 * mm, 8 * mm, stroke=0, fill=1)
+    c.setFillColorRGB(0.2, 0.25, 0.35)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(18 * mm, table_top + 2.8 * mm, "Earnings")
+    c.drawString(112 * mm, table_top + 2.8 * mm, "Deductions")
 
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(20 * mm, y, f"Net Pay: INR {tx.net_pay}")
+    earnings = [
+        ("Basic Salary", basic),
+        ("DA", da),
+        ("HRA", hra),
+        ("Shift Allowance", shift_allowance),
+        ("OT", ot),
+        ("Incentives", incentives),
+        ("Reimbursement", 0.0),
+    ]
+    deductions = [
+        ("LOP", lop),
+        ("PF", 0.0),
+        ("ESI", 0.0),
+        ("Professional Tax", 0.0),
+        ("TDS", 0.0),
+        ("Statutory Deductions", statutory_deductions),
+        ("Other", 0.0),
+    ]
+    c.setFont("Helvetica", 9)
+    row_h = 7 * mm
+    for idx in range(len(earnings)):
+        y = table_top - ((idx + 1) * row_h)
+        if idx % 2 == 1:
+            c.setFillColorRGB(0.97, 0.97, 0.98)
+            c.rect(14 * mm, y, page_w - 28 * mm, row_h, stroke=0, fill=1)
+        c.setFillColorRGB(0.16, 0.16, 0.2)
+        c.drawString(18 * mm, y + 2.2 * mm, earnings[idx][0])
+        c.drawRightString(106 * mm, y + 2.2 * mm, fmt(earnings[idx][1]))
+        c.drawString(112 * mm, y + 2.2 * mm, deductions[idx][0])
+        c.drawRightString(page_w - 18 * mm, y + 2.2 * mm, fmt(deductions[idx][1]))
 
-    qr_data = f"PAYSLIP|RUN:{run.id}|STAFF:{staff.id}|MONTH:{run.month}|YEAR:{run.year}|NET:{tx.net_pay}"
+    totals_y = table_top - (len(earnings) + 1) * row_h - 3 * mm
+    c.setFillColorRGB(0.94, 0.95, 0.98)
+    c.rect(14 * mm, totals_y - 22 * mm, page_w - 28 * mm, 22 * mm, stroke=0, fill=1)
+    c.setFillColorRGB(0.12, 0.12, 0.16)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(18 * mm, totals_y - 7 * mm, f"Gross Pay: {fmt(gross_pay)}")
+    c.drawString(18 * mm, totals_y - 13 * mm, f"Total Deductions: {fmt(total_deductions)}")
+    c.line(18 * mm, totals_y - 16 * mm, page_w - 18 * mm, totals_y - 16 * mm)
+    c.setFillColorRGB(0.05, 0.30, 0.74)
+    c.setFont("Helvetica-Bold", 15)
+    c.drawString(18 * mm, totals_y - 21 * mm, f"Net Pay: {fmt(net_pay)}")
+
+    qr_data = f"PAYSLIP|RUN:{run.id}|STAFF:{staff.id}|MONTH:{run.month}|YEAR:{run.year}|NET:{net_pay:.2f}"
     qr_code = qr.QrCodeWidget(qr_data)
     bounds = qr_code.getBounds()
     width = bounds[2] - bounds[0]
@@ -629,10 +693,11 @@ def generate_payslip_pdf(
 
     drawing = Drawing(d, d, transform=[scale, 0, 0, scale, 0, 0])
     drawing.add(qr_code)
-    renderPDF.draw(drawing, c, 160 * mm, 235 * mm)
+    renderPDF.draw(drawing, c, page_w - 46 * mm, 22 * mm)
 
     c.setFont("Helvetica", 8)
-    c.drawString(160 * mm, 232 * mm, "Scan to verify")
+    c.setFillColorRGB(0.2, 0.2, 0.25)
+    c.drawString(page_w - 46 * mm, 18 * mm, "Scan to verify")
 
     c.showPage()
     c.save()
@@ -656,26 +721,61 @@ def list_my_payslips(db: Session = Depends(get_db), current_user: User = Depends
         raise HTTPException(status_code=404, detail="Staff profile not found")
 
     rows = (
-        db.query(PayrollTransaction, PayrollRun)
+        db.query(PayrollTransaction, PayrollRun, StaffSalaryDetail)
         .join(PayrollRun, PayrollRun.id == PayrollTransaction.payroll_run_id)
+        .outerjoin(StaffSalaryDetail, StaffSalaryDetail.staff_profile_id == PayrollTransaction.staff_id)
         .filter(PayrollTransaction.staff_id == profile.id)
-        .order_by(PayrollRun.year.desc(), PayrollRun.month.desc())
+        .order_by(PayrollRun.year.desc(), PayrollRun.month.desc(), PayrollRun.id.desc())
         .all()
     )
 
-    return {
-        "items": [
-            {
-                "payroll_id": run.id,
-                "month": run.month,
-                "year": run.year,
-                "status": run.status.value,
-                "net_pay": float(tx.net_pay or 0),
-                "download_url": f"/api/payroll/{run.id}/payslip/{profile.id}",
-            }
-            for tx, run in rows
-        ]
+    status_rank = {
+        PayrollRunStatus.LOCKED: 4,
+        PayrollRunStatus.APPROVED: 3,
+        PayrollRunStatus.READY: 2,
+        PayrollRunStatus.DRAFT: 1,
     }
+    latest_by_period: dict[tuple[int, int], dict] = {}
+    for tx, run, salary_detail in rows:
+        basic = float(tx.base_salary or 0)
+        da = float(tx.reimbursement_amount or 0)
+        hra = float(salary_detail.hra if salary_detail else 0)
+        shift_allowance = float(salary_detail.allowances if salary_detail else 0)
+        ot = float(tx.overtime_hours or 0)
+        lop = float(tx.lop_days or 0)
+        incentives = float(tx.incentive_amount or 0)
+        statutory_deductions = float(
+            salary_detail.deductions
+            if salary_detail
+            else max(0.0, float(tx.total_deductions or 0) - lop)
+        )
+        gross_pay = basic + da + hra + shift_allowance + ot + incentives
+        total_deductions = lop + statutory_deductions
+        computed_net = gross_pay - total_deductions
+
+        item = {
+            "payroll_id": run.id,
+            "month": run.month,
+            "year": run.year,
+            "status": run.status.value,
+            "net_pay": float(computed_net),
+            "download_url": f"/api/payroll/{run.id}/payslip/{profile.id}",
+            "_status_rank": status_rank.get(run.status, 0),
+        }
+        key = (run.year, run.month)
+        existing = latest_by_period.get(key)
+        if not existing:
+            latest_by_period[key] = item
+            continue
+        existing_rank = int(existing.get("_status_rank", 0))
+        current_rank = int(item["_status_rank"])
+        if current_rank > existing_rank or (current_rank == existing_rank and run.id > existing["payroll_id"]):
+            latest_by_period[key] = item
+
+    items = sorted(latest_by_period.values(), key=lambda row: (row["year"], row["month"], row["payroll_id"]), reverse=True)
+    for item in items:
+        item.pop("_status_rank", None)
+    return {"items": items}
 
 
 @router.get("/payroll/compliance/pf-esi-file")

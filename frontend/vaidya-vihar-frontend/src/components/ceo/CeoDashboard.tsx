@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   Area,
   AreaChart,
@@ -47,6 +48,7 @@ const toPercent = (value: number, digits = 2) => `${Number(value || 0).toFixed(d
 type CeoTab = 'dashboard' | 'master-data' | 'approvals' | 'executives' | 'simulator'
 
 export default function CeoDashboard() {
+  const location = useLocation()
   const [activeTab, setActiveTab] = useState<CeoTab>('dashboard')
   const [loading, setLoading] = useState(true)
   const [dashboard, setDashboard] = useState<CeoDashboardResponse | null>(null)
@@ -92,6 +94,16 @@ export default function CeoDashboard() {
     void loadDashboard()
     void loadDailyBrief()
   }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const tab = (params.get('tab') || '').trim()
+    if (tab === 'master-data') {
+      setActiveTab('master-data')
+    } else if (tab === 'simulator') {
+      setActiveTab('simulator')
+    }
+  }, [location.search])
 
   useEffect(() => {
     if (activeTab === 'master-data') {

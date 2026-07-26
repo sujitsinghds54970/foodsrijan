@@ -1,11 +1,12 @@
 from datetime import date, datetime, time
+import json
 import math
 from pathlib import Path
 import secrets
 import traceback
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, text
 from sqlalchemy.orm import Session
@@ -13,6 +14,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Branch, DailyEntry, User
 from app.models.hr import (
+    BranchNotification,
+    BranchNotificationType,
     AttendanceDispute,
     AttendanceDisputeStatus,
     DirectorAttendanceType,
@@ -30,7 +33,8 @@ from app.models.hr import (
 )
 from app.utils.auth_system import get_current_user
 from app.utils.attendance_utils import stamp_image_with_gps
-from app.utils.schema_compat import ensure_staff_daily_ops_column
+from app.utils.file_utils import replace_file, storage_relative_path_from_public_url
+from app.utils.schema_compat import ensure_branch_logo_column, ensure_staff_daily_ops_column
 
 router = APIRouter(prefix="/staff", tags=["Staff Self Service"])
 
@@ -113,7 +117,9 @@ def _photo_url(path: Optional[str]) -> Optional[str]:
         return path
     if path.startswith("/"):
         return path
-    return f"/api/files/{path}"
+    # Convert relative path to absolute URL
+    clean_path = path.lstrip("/")
+    return f"http://localhost:8000/api/files/{clean_path}"
 
 
 def _resolve_uploaded_url(path: Optional[str]) -> Optional[str]:
@@ -130,6 +136,26 @@ def _safe_parse_month(month_token: str) -> tuple[datetime, datetime]:
         return start, end
     except Exception:
         raise HTTPException(status_code=400, detail="month must be in YYYY-MM format")
+
+
+def _ensure_branch_notifications_table(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS branch_notifications (
+                id INTEGER PRIMARY KEY,
+                branch_id INTEGER NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                title VARCHAR(200) NOT NULL,
+                message TEXT NOT NULL,
+                related_entity_id INTEGER,
+                is_read BOOLEAN NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_branch_notifications_branch_id ON branch_notifications(branch_id)"))
 
 
 def _serialize_attendance_log(row: StaffAttendanceLog, absence_reason: Optional[str] = None) -> dict:
@@ -241,8 +267,58 @@ def _to_photo_path(photo_url: Optional[str]) -> Optional[str]:
     return raw
 
 
+def _fetch_branch_logo_url(db: Session, branch_id: Optional[int]) -> Optional[str]:
+    if not branch_id:
+        return None
+    ensure_branch_logo_column(db)
+    logo_url = db.execute(
+        text("SELECT logo_url FROM branches WHERE id = :branch_id"),
+        {"branch_id": branch_id},
+    ).scalar()
+    normalized_logo = (logo_url or "").strip()
+    if normalized_logo:
+        return normalized_logo
+
+    has_settings_table = db.execute(
+        text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='system_settings' LIMIT 1")
+    ).scalar()
+    if not has_settings_table:
+        return None
+
+    branding_row = db.execute(
+        text(
+            """
+            SELECT setting_value
+            FROM system_settings
+            WHERE setting_key IN ('ceo_branding', 'branding')
+            ORDER BY CASE WHEN setting_key = 'ceo_branding' THEN 0 ELSE 1 END
+            LIMIT 1
+            """
+        )
+    ).scalar()
+    if not branding_row:
+        return None
+
+    try:
+        parsed = json.loads(branding_row)
+    except json.JSONDecodeError:
+        return None
+
+    candidates = [
+        (parsed.get("assets") or {}).get("primary_logo_url"),
+        (parsed.get("branding_asset_manager") or {}).get("primary_logo_web"),
+        parsed.get("logo_url"),
+    ]
+    for candidate in candidates:
+        value = (candidate or "").strip()
+        if value:
+            return value
+    return None
+
+
 def _get_staff_context(db: Session, current_user: User):
     ensure_staff_daily_ops_column(db)
+    ensure_branch_logo_column(db)
     profile = db.query(StaffProfile).filter(StaffProfile.user_id == current_user.id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Staff profile not found")
@@ -270,8 +346,15 @@ def _normalize_task_status(raw: Optional[str]) -> str:
     return mapping[value]
 
 
-def _build_me_response(current_user: User, profile: StaffProfile, branch: Optional[Branch], salary: StaffSalaryDetail):
+def _build_me_response(
+    current_user: User,
+    profile: StaffProfile,
+    branch: Optional[Branch],
+    salary: StaffSalaryDetail,
+    db: Session,
+):
     full_name = f"{(current_user.first_name or '').strip()} {(current_user.last_name or '').strip()}".strip()
+    branch_logo = _fetch_branch_logo_url(db, profile.branch_id)
     return {
         "id": current_user.id,
         "staff_profile_id": profile.id,
@@ -289,7 +372,7 @@ def _build_me_response(current_user: User, profile: StaffProfile, branch: Option
         "branch_id": profile.branch_id,
         "can_access_daily_ops": bool(profile.can_access_daily_ops),
         "branch_name": branch.name if branch else None,
-        "branch_logo_url": branch.director_photo_url if branch else None,
+        "branch_logo_url": branch_logo,
     }
 
 
@@ -297,7 +380,7 @@ def _build_me_response(current_user: User, profile: StaffProfile, branch: Option
 def get_me(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     _require_staff(current_user)
     profile, branch, salary = _get_staff_context(db, current_user)
-    return _build_me_response(current_user, profile, branch, salary)
+    return _build_me_response(current_user, profile, branch, salary, db)
 
 
 @router.put("/me")
@@ -342,7 +425,7 @@ def update_me(payload: StaffMeUpdateRequest, db: Session = Depends(get_db), curr
 
     return {
         "message": "Profile updated successfully",
-        "profile": _build_me_response(current_user, profile, branch, salary),
+        "profile": _build_me_response(current_user, profile, branch, salary, db),
     }
 
 
@@ -359,20 +442,18 @@ def upload_me_photo(
     if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
         raise HTTPException(status_code=400, detail="Only jpg, jpeg, png, webp are allowed")
 
-    STAFF_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"staff_self_{profile.id}_{secrets.token_hex(8)}{suffix}"
-    destination = STAFF_UPLOADS_DIR / filename
+    new_photo_url = replace_file(profile.photo_path, file, "staff")
+    new_photo_path = storage_relative_path_from_public_url(new_photo_url)
+    if not new_photo_path:
+        raise HTTPException(status_code=500, detail="Unable to store uploaded photo")
 
-    with destination.open("wb") as output:
-        output.write(file.file.read())
-
-    profile.photo_path = f"staff/{filename}"
+    profile.photo_path = new_photo_path
     db.commit()
 
     return {
         "message": "Photo uploaded",
         "photo_url": _photo_url(profile.photo_path),
-        "profile": _build_me_response(current_user, profile, branch, salary),
+        "profile": _build_me_response(current_user, profile, branch, salary, db),
     }
 
 
@@ -962,15 +1043,8 @@ def list_staff_leaves(
 
 
 @router.post("/leaves")
-def create_staff_leave(
-    leave_type: str = Form(...),
-    start_date: str = Form(...),
-    end_date: str = Form(...),
-    start_time: Optional[str] = Form(default=None),
-    end_time: Optional[str] = Form(default=None),
-    duration_hours: Optional[float] = Form(default=None),
-    reason: Optional[str] = Form(default=None),
-    attachment: Optional[UploadFile] = File(default=None),
+async def create_staff_leave(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -978,99 +1052,125 @@ def create_staff_leave(
     profile, _, _ = _get_staff_context(db, current_user)
 
     try:
-        start_dt = datetime.fromisoformat(start_date)
-        end_dt = datetime.fromisoformat(end_date)
-    except Exception:
-        raise HTTPException(status_code=400, detail="start_date and end_date must be valid ISO datetime values")
+        leave_type: Optional[str] = None
+        start_date: Optional[str] = None
+        end_date: Optional[str] = None
+        start_time: Optional[str] = None
+        end_time: Optional[str] = None
+        duration_hours: float = 0.0
+        reason: Optional[str] = None
+        attachment: Optional[UploadFile] = None
 
-    if end_dt < start_dt:
-        raise HTTPException(status_code=400, detail="end_date cannot be before start_date")
+        content_type = (request.headers.get("content-type") or "").lower()
+        if "application/json" in content_type:
+            payload = await request.json()
+            if not isinstance(payload, dict):
+                raise HTTPException(status_code=400, detail="Invalid JSON payload for leave request")
+            leave_type = str(payload.get("leave_type") or "").strip()
+            start_date = str(payload.get("start_date") or "").strip()
+            end_date = str(payload.get("end_date") or "").strip()
+            reason = payload.get("reason")
+        else:
+            form_data = await request.form()
+            leave_type = str(form_data.get("leave_type") or "").strip()
+            start_date = str(form_data.get("start_date") or "").strip()
+            end_date = str(form_data.get("end_date") or "").strip()
+            start_time = str(form_data.get("start_time") or "").strip() or None
+            end_time = str(form_data.get("end_time") or "").strip() or None
+            reason = str(form_data.get("reason") or "").strip() or None
+            raw_duration_hours = str(form_data.get("duration_hours") or "").strip()
+            duration_hours = float(raw_duration_hours) if raw_duration_hours else 0.0
+            attachment_candidate = form_data.get("attachment")
+            if isinstance(attachment_candidate, UploadFile):
+                attachment = attachment_candidate
 
-    start_time_dt = datetime.fromisoformat(start_time) if start_time else None
-    end_time_dt = datetime.fromisoformat(end_time) if end_time else None
-    duration_days = float((end_dt.date() - start_dt.date()).days + 1)
-    computed_duration_hours = float(duration_hours or 0)
+        if not leave_type or not start_date or not end_date:
+            raise HTTPException(status_code=400, detail="leave_type, start_date, and end_date are required")
 
-    attachment_path: Optional[str] = None
-    if attachment is not None:
-        suffix = Path(attachment.filename or "attachment").suffix.lower()
-        if suffix not in {".jpg", ".jpeg", ".png", ".pdf", ".webp", ".doc", ".docx"}:
-            raise HTTPException(status_code=400, detail="Attachment must be jpg, jpeg, png, webp, pdf, doc, or docx")
-        LEAVE_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-        filename = f"leave_{profile.id}_{secrets.token_hex(6)}{suffix}"
-        destination = LEAVE_UPLOADS_DIR / filename
-        with destination.open("wb") as output:
-            output.write(attachment.file.read())
-        attachment_path = f"staff/leave_attachments/{filename}"
+        try:
+            start_dt = datetime.fromisoformat(start_date)
+            end_dt = datetime.fromisoformat(end_date)
+        except Exception as date_error:
+            print(f"❌ [LEAVE_APPLY] Invalid date format: start_date={start_date}, end_date={end_date}, error={date_error}")
+            raise HTTPException(status_code=400, detail="start_date and end_date must be valid ISO datetime values")
 
-    normalized_leave_type = (leave_type or "").strip().lower()
-    status = LeaveStatus.PENDING
-    approved_by = None
-    approval_date = None
+        if start_dt > end_dt:
+            print(f"❌ [LEAVE_APPLY] Validation failed: start_date after end_date ({start_dt} > {end_dt})")
+            raise HTTPException(status_code=400, detail="start_date cannot be after end_date")
 
-    if normalized_leave_type == "casual" and duration_days <= 2:
-        year_start = datetime(datetime.utcnow().year, 1, 1)
-        year_end = datetime(datetime.utcnow().year + 1, 1, 1)
-        used_casual = (
-            db.query(func.coalesce(func.sum(StaffLeaveRequest.duration_days), 0.0))
-            .filter(
-                StaffLeaveRequest.staff_profile_id == profile.id,
-                StaffLeaveRequest.status == LeaveStatus.APPROVED,
-                StaffLeaveRequest.leave_type == "casual",
-                StaffLeaveRequest.start_date >= year_start,
-                StaffLeaveRequest.start_date < year_end,
-            )
-            .scalar()
+        start_time_dt = datetime.fromisoformat(start_time) if start_time else None
+        end_time_dt = datetime.fromisoformat(end_time) if end_time else None
+        duration_days = float((end_dt.date() - start_dt.date()).days + 1)
+        normalized_leave_type = leave_type.lower()
+
+        attachment_path: Optional[str] = None
+        if attachment is not None:
+            suffix = Path(attachment.filename or "attachment").suffix.lower()
+            if suffix not in {".jpg", ".jpeg", ".png", ".pdf", ".webp", ".doc", ".docx"}:
+                raise HTTPException(status_code=400, detail="Attachment must be jpg, jpeg, png, webp, pdf, doc, or docx")
+            LEAVE_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+            filename = f"leave_{profile.id}_{secrets.token_hex(6)}{suffix}"
+            destination = LEAVE_UPLOADS_DIR / filename
+            with destination.open("wb") as output:
+                output.write(attachment.file.read())
+            attachment_path = f"staff/leave_attachments/{filename}"
+
+        row = StaffLeaveRequest(
+            staff_profile_id=profile.id,
+            branch_id=profile.branch_id,
+            leave_type=normalized_leave_type,
+            start_date=start_dt,
+            end_date=end_dt,
+            start_time=start_time_dt,
+            end_time=end_time_dt,
+            total_days=duration_days,
+            duration_days=duration_days,
+            duration_hours=float(duration_hours or 0),
+            reason=reason,
+            attachments=attachment_path,
+            status=LeaveStatus.PENDING,
         )
-        if float(used_casual or 0) + duration_days <= 12:
-            status = LeaveStatus.APPROVED
-            approved_by = current_user.id
-            approval_date = datetime.utcnow()
+        db.add(row)
+        db.flush()
 
-    row = StaffLeaveRequest(
-        staff_profile_id=profile.id,
-        branch_id=profile.branch_id,
-        leave_type=normalized_leave_type,
-        start_date=start_dt,
-        end_date=end_dt,
-        start_time=start_time_dt,
-        end_time=end_time_dt,
-        total_days=duration_days,
-        duration_days=duration_days,
-        duration_hours=computed_duration_hours,
-        reason=reason,
-        attachments=attachment_path,
-        status=status,
-        approved_by=approved_by,
-        approval_date=approval_date,
-        reviewed_by=approved_by,
-        reviewed_at=approval_date,
-        review_comment="Auto-approved casual leave" if status == LeaveStatus.APPROVED else None,
-    )
-    db.add(row)
-    db.flush()
-
-    if status == LeaveStatus.APPROVED:
+        _ensure_branch_notifications_table(db)
+        staff_display_name = (
+            f"{(profile.user.first_name or '').strip()} {(profile.user.last_name or '').strip()}".strip()
+            if profile.user
+            else ""
+        )
+        if not staff_display_name:
+            staff_display_name = profile.staff_id
         db.add(
-            StaffNotification(
-                staff_profile_id=profile.id,
+            BranchNotification(
                 branch_id=profile.branch_id,
-                message=f"Your leave request #{row.id} was auto-approved.",
-                link="/staff/attendance",
+                type=BranchNotificationType.LEAVE_REQUEST,
+                title="New Leave Request",
+                message=f"{staff_display_name} has applied for {normalized_leave_type.title()} leave.",
+                related_entity_id=row.id,
+                is_read=False,
             )
         )
 
-    db.commit()
-    db.refresh(row)
+        db.commit()
+        db.refresh(row)
 
-    return {
-        "message": "Leave request submitted",
-        "leave": {
-            "id": row.id,
-            "status": row.status.value.capitalize(),
-            "attachments": _resolve_uploaded_url(row.attachments),
-        },
-    }
+        return {
+            "message": "Leave request submitted",
+            "leave": {
+                "id": row.id,
+                "status": "Pending",
+                "attachments": _resolve_uploaded_url(row.attachments),
+            },
+        }
+    except HTTPException as http_error:
+        print(f"❌ [LEAVE_APPLY] Request validation failed for user={current_user.id}: {http_error.detail}")
+        raise
+    except Exception as error:
+        db.rollback()
+        print(f"❌ [LEAVE_APPLY] Unexpected error for user={current_user.id}: {error}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Failed to apply leave")
 
 
 @router.put("/leaves/{leave_id}")
@@ -1557,6 +1657,24 @@ def director_assign_task_to_attendance(
 
     row.task = payload.task.strip()
     row.task_status = _normalize_task_status(payload.task_status)
+    _ensure_branch_notifications_table(db)
+    staff_display_name = (
+        f"{(profile.user.first_name or '').strip()} {(profile.user.last_name or '').strip()}".strip()
+        if profile.user
+        else ""
+    )
+    if not staff_display_name:
+        staff_display_name = profile.staff_id
+    db.add(
+        BranchNotification(
+            branch_id=profile.branch_id,
+            type=BranchNotificationType.TASK_ASSIGNED,
+            title="Task assignment confirmed",
+            message=f"Task assigned to {staff_display_name}: {row.task}",
+            related_entity_id=row.id,
+            is_read=False,
+        )
+    )
     db.add(
         StaffNotification(
             staff_profile_id=staff_profile_id,

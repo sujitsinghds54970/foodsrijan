@@ -1,7 +1,8 @@
+import axios from 'axios'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { staffSelfApi } from '../staff/api'
+import { resolveStaffMediaUrl, staffSelfApi } from '../staff/api'
 
 interface User {
   id: number
@@ -12,6 +13,12 @@ interface User {
   last_name: string
   branch_id?: number | null
   branch_name?: string
+  branch_logo_url?: string
+  logo_url?: string
+  branch?: {
+    name?: string
+    logo_url?: string
+  }
 }
 
 interface HeaderProps {
@@ -20,33 +27,67 @@ interface HeaderProps {
 }
 
 export default function Header({ user, onLogout }: HeaderProps) {
-  const { user: authUser } = useAuth()
+  const auth = useAuth()
+  const { user: authUser } = auth
   const location = useLocation()
   const [showDropdown, setShowDropdown] = useState(false)
-  const [profileImageError, setProfileImageError] = useState(false)
-  const [branchName, setBranchName] = useState<string>('Vaidya Vihar Diagnostic')
+  const [branchName, setBranchName] = useState<string>('VaidyaVihar Diagnostic')
+  const [branchLogoSrc, setBranchLogoSrc] = useState<string>('/default-branch-logo.png')
   const dropdownRef = useRef<HTMLDivElement | null>(null)
+  const API_BASE =
+    (process as any).env.REACT_APP_API_BASE_URL ||
+    ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://127.0.0.1:8000'
+      : window.location.origin)
+
+  const normalizeHeaderTitle = (value?: string | null) => {
+    const normalized = (value || '').trim()
+    if (!normalized) return 'VaidyaVihar Diagnostic'
+    return normalized === 'Vaidya Vihar Diagnostic' ? 'VaidyaVihar Diagnostic' : normalized
+  }
 
   const role = (authUser?.role || user?.role || '').toLowerCase()
   const isStaffRoute = location.pathname.toLowerCase().startsWith('/staff/')
+  const isStaffLikeRole = role !== 'super_admin' &&
+    role !== 'branch_admin' &&
+    role !== 'branch_director' &&
+    role !== 'doctor'
 
   useEffect(() => {
     const init = async () => {
-      if (isStaffRoute && role === 'staff') {
+      const authPayload = (authUser as any) || (user as any) || {}
+      let nextBranchName = (authPayload?.branch?.name || authPayload?.branch_name || '').trim()
+      let nextBranchLogoRaw = (
+        authPayload?.branch?.logo_url ||
+        authPayload?.branch_logo_url ||
+        authPayload?.logo_url ||
+        ''
+      ).trim()
+
+      if (isStaffRoute && isStaffLikeRole) {
         try {
           const me = await staffSelfApi.getMe()
-          setBranchName(me.branch_name || 'Vaidya Vihar Diagnostic')
-          return
+          nextBranchName = (me.branch_name || nextBranchName || '').trim()
+          nextBranchLogoRaw = (me.branch_logo_url || nextBranchLogoRaw || '').trim()
         } catch {
-          // fallback to auth user info below
+          // Use auth payload fallback if staff profile call fails.
         }
       }
 
-      const fromUser = (authUser as any)?.branch_name || (user as any)?.branch_name
-      if (fromUser) setBranchName(fromUser)
+      if (!nextBranchName && authPayload?.branch_id) {
+        try {
+          const response = await axios.get(`${API_BASE}/api/branches/${authPayload.branch_id}`)
+          nextBranchName = (response.data?.name || nextBranchName || '').trim()
+          nextBranchLogoRaw = (response.data?.logo_url || response.data?.branch_logo_url || nextBranchLogoRaw || '').trim()
+        } catch {
+          // Keep fallback branch title.
+        }
+      }
+      setBranchName(normalizeHeaderTitle(nextBranchName))
+      setBranchLogoSrc(resolveStaffMediaUrl(nextBranchLogoRaw) || '/default-branch-logo.png')
     }
     void init()
-  }, [authUser, isStaffRoute, role, user])
+  }, [API_BASE, authUser, isStaffLikeRole, isStaffRoute, user])
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
@@ -63,14 +104,19 @@ export default function Header({ user, onLogout }: HeaderProps) {
     setShowDropdown(false)
   }, [location.pathname])
 
+  useEffect(() => {
+    console.log('BRANCH LOGO URL:', auth.user?.branch?.logo_url)
+    console.log('STAFF PHOTO URL:', auth.user?.profilePhoto)
+  }, [auth.user?.branch?.logo_url, auth.user?.profilePhoto])
+
   const displayName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'User'
   const roleLabel = role ? role.replace('_', ' ') : 'Staff'
 
   return (
-    <header className="relative overflow-visible border-b border-white/30 bg-gradient-to-r from-indigo-600/90 via-blue-600/85 to-cyan-600/85 px-8 py-5 shadow-xl backdrop-blur-xl dark:border-slate-700 dark:from-indigo-950 dark:via-slate-900 dark:to-blue-950">
+    <header className="relative z-50 overflow-visible border-b border-white/30 bg-gradient-to-r from-indigo-600/90 via-blue-600/85 to-cyan-600/85 px-8 py-5 shadow-xl backdrop-blur-xl dark:border-slate-700 dark:from-indigo-950 dark:via-slate-900 dark:to-blue-950">
       {/* Animated Background */}
       <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-purple-300/20 to-pink-300/20 rounded-full blur-3xl -mr-32 -mt-32" />
-      
+
       <div className="relative flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-3xl">
           <h1 className="text-center text-4xl font-extrabold tracking-wide text-white drop-shadow-md md:text-5xl lg:text-left">
@@ -83,16 +129,26 @@ export default function Header({ user, onLogout }: HeaderProps) {
 
         <div className="flex items-center gap-4">
           {/* User Profile Dropdown */}
-          <div className="relative" ref={dropdownRef}>
+          <div className="relative z-50" ref={dropdownRef}>
             <button
               type="button"
               onClick={() => setShowDropdown(!showDropdown)}
               className="flex items-center space-x-2 text-slate-700 hover:text-slate-900 focus:outline-none bg-white border-2 border-slate-200 hover:border-purple-300 rounded-full px-2.5 py-2.5 shadow-lg hover:shadow-xl transition-all group"
             >
-              <div className="w-9 h-9 rounded-full overflow-hidden shadow-lg shrink-0 bg-slate-100">
-                <div className="w-full h-full bg-gradient-to-br from-purple-600 via-pink-600 to-red-600 flex items-center justify-center text-white font-black text-lg" aria-hidden="true">
-                  {user?.first_name?.charAt(0)}{user?.last_name?.charAt(0)}
-                </div>
+              <div className="w-10 h-10 rounded-full overflow-hidden shadow-lg shrink-0 bg-slate-100">
+                {(() => {
+                  console.log('BRANCH DATA IN HEADER/SIDEBAR:', auth.user?.branch)
+                  return null
+                })()}
+                <img
+                  src={auth.user?.profilePhoto || auth.user?.photo || "/default-avatar.png"}
+                  alt="User avatar"
+                  className="w-10 h-10 rounded-full object-cover border-2 border-white"
+                  onError={(event) => {
+                    event.currentTarget.onerror = null
+                    event.currentTarget.src = '/default-avatar.png'
+                  }}
+                />
               </div>
               <svg className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${showDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -100,23 +156,20 @@ export default function Header({ user, onLogout }: HeaderProps) {
             </button>
 
             {showDropdown && (
-              <div className="absolute right-0 mt-3 w-72 bg-white rounded-2xl shadow-2xl py-3 z-[120] border-2 border-slate-100 animate-fadeIn">
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-100 z-50 overflow-hidden">
                 {/* Profile Header */}
                 <div className="px-5 py-4 border-b-2 border-slate-100 bg-gradient-to-r from-purple-50 to-pink-50">
                   <div className="flex items-center space-x-3">
                     <div className="w-12 h-12 rounded-xl overflow-hidden shadow-lg bg-slate-100">
-                      {!profileImageError ? (
-                        <img
-                          src="/founder.jpg"
-                          alt="Founder profile"
-                          className="w-full h-full object-cover"
-                          onError={() => setProfileImageError(true)}
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-purple-600 via-pink-600 to-red-600 flex items-center justify-center text-white font-black text-xl" aria-hidden="true">
-                          {user?.first_name?.charAt(0)}{user?.last_name?.charAt(0)}
-                        </div>
-                      )}
+                      <img
+                        src={branchLogoSrc}
+                        alt="Branch logo"
+                        className="w-full h-full object-cover"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null
+                          event.currentTarget.src = '/default-branch-logo.png'
+                        }}
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-black text-slate-900 text-base truncate">{displayName}</div>
@@ -133,7 +186,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                     </svg>
                     <span>My Profile</span>
                   </button>
-                  
+
                   <button className="w-full text-left px-5 py-3 text-sm font-semibold text-slate-700 opacity-60 pointer-events-none transition-all flex items-center space-x-3 group">
                     <svg className="w-5 h-5 text-slate-400 group-hover:text-purple-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -141,7 +194,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
                     </svg>
                     <span>Settings</span>
                   </button>
-                  
+
                   <button className="w-full text-left px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-gradient-to-r hover:from-purple-50 hover:to-pink-50 transition-all flex items-center space-x-3 group">
                     <svg className="w-5 h-5 text-slate-400 group-hover:text-purple-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />

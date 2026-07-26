@@ -30,8 +30,18 @@ function formatMoney(amount: number): string {
   return `Rs ${Number(amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-export default function AccountsModule() {
+interface AccountsModuleProps {
+  branchId?: number
+}
+
+export default function AccountsModule({ branchId }: AccountsModuleProps) {
   const { user } = useAuth()
+  const forcedBranchId = Number(branchId)
+  const effectiveBranchId = Number.isFinite(forcedBranchId) && forcedBranchId > 0
+    ? forcedBranchId
+    : user?.role === 'super_admin'
+      ? undefined
+      : (user?.branch_id ? Number(user.branch_id) : undefined)
   const [transactions, setTransactions] = useState<FinanceTransaction[]>([])
   const [invoices, setInvoices] = useState<FinanceInvoice[]>([])
   const [expenses, setExpenses] = useState<FinanceExpense[]>([])
@@ -76,9 +86,9 @@ export default function AccountsModule() {
     try {
       setLoading(true)
       const [txData, invData, expData] = await Promise.all([
-        listTransactions({ start: `${startDate}T00:00:00`, end: `${endDate}T23:59:59`, type: transactionType || undefined }),
-        listInvoices({}),
-        listExpenses({}),
+        listTransactions({ branch_id: effectiveBranchId, start: `${startDate}T00:00:00`, end: `${endDate}T23:59:59`, type: transactionType || undefined }),
+        listInvoices({ branch_id: effectiveBranchId }),
+        listExpenses({ branch_id: effectiveBranchId }),
       ])
 
       setTransactions(txData)
@@ -89,8 +99,8 @@ export default function AccountsModule() {
       const year = new Date().getFullYear()
 
       const [pl, gst] = await Promise.all([
-        getProfitLoss({ start: `${startDate}T00:00:00`, end: `${endDate}T23:59:59` }),
-        getGstReport({ month, year }),
+        getProfitLoss({ start: `${startDate}T00:00:00`, end: `${endDate}T23:59:59`, branch_id: effectiveBranchId }),
+        getGstReport({ month, year, branch_id: effectiveBranchId }),
       ])
 
       setPlSummary(pl)
@@ -100,7 +110,7 @@ export default function AccountsModule() {
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate, transactionType])
+  }, [startDate, endDate, transactionType, effectiveBranchId])
 
   useEffect(() => {
     loadAllData().catch(() => {
@@ -200,6 +210,7 @@ export default function AccountsModule() {
       }
 
       await createTransaction({
+        branch_id: effectiveBranchId,
         type: newTx.type,
         amount: Number(newTx.amount),
         description: newTx.description,
@@ -223,6 +234,7 @@ export default function AccountsModule() {
       }
 
       await createInvoice({
+        branch_id: effectiveBranchId,
         patient_name: newInvoice.patient_name || undefined,
         total_amount: Number(newInvoice.total_amount),
         tax_amount: Number(newInvoice.tax_amount || 0),
@@ -254,6 +266,7 @@ export default function AccountsModule() {
       }
 
       await createExpense({
+        branch_id: effectiveBranchId,
         category: newExpense.category,
         amount: Number(newExpense.amount),
         description: newExpense.description,

@@ -19,6 +19,7 @@ from app.models.payroll import (
     EarningHead,
     PayrollDispute,
     PayrollDisputeStatus,
+    PayrollAuditLog,
     PayrollLock,
     PayrollRun,
     PayrollRunStatus,
@@ -50,6 +51,7 @@ from app.models.appointment import Appointment
 from app.models.calendar_day import CalendarDay
 from app.models.release_day import ReleaseDay
 from app.models.ceo import CeoAuditLog, CeoBreakGlassGrant, CeoSecurityProfile, CeoWebAuthnCredential
+import json
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Float, DECIMAL, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -72,6 +74,7 @@ class Branch(Base):
     opening_hours = Column(String(500), nullable=True)
     facilities = Column(Text, nullable=True)
     director_photo_url = Column(Text, nullable=True)
+    logo_url = Column(Text, nullable=True)
     director_age = Column(String(50), nullable=True)
     director_credentials_username = Column(String(100), nullable=True)
     director_credentials_password = Column(String(255), nullable=True)
@@ -405,3 +408,35 @@ class SystemSettings(Base):
     is_editable = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    @property
+    def tagline(self) -> str:
+        if self.setting_key not in {"branding", "ceo_branding"}:
+            return ""
+        try:
+            payload = json.loads(self.setting_value or "{}")
+        except (TypeError, json.JSONDecodeError):
+            return ""
+        if not isinstance(payload, dict):
+            return ""
+        return (
+            (payload.get("tagline") or "").strip()
+            or ((payload.get("company_profile") or {}).get("tagline") or "").strip()
+        )
+
+    @tagline.setter
+    def tagline(self, value: str) -> None:
+        if self.setting_key not in {"branding", "ceo_branding"}:
+            return
+        try:
+            payload = json.loads(self.setting_value or "{}")
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        clean = (value or "").strip()
+        payload["tagline"] = clean
+        company_profile = dict(payload.get("company_profile") or {})
+        company_profile["tagline"] = clean
+        payload["company_profile"] = company_profile
+        self.setting_value = json.dumps(payload)

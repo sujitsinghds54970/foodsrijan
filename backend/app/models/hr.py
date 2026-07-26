@@ -76,6 +76,14 @@ class LeaveStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class BranchNotificationType(str, enum.Enum):
+    LEAVE_REQUEST = "LeaveRequest"
+    EXPENSE_APPROVAL = "ExpenseApproval"
+    SYSTEM_ALERT = "SystemAlert"
+    TASK_ASSIGNED = "TaskAssigned"
+    STAFF_JOINED = "StaffJoined"
+
+
 class AttendanceStatus(str, enum.Enum):
     """Attendance status enumeration"""
     PRESENT = "present"
@@ -615,6 +623,7 @@ class StaffLeaveRequest(Base):
     reviewed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
     review_comment = Column(Text, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -784,3 +793,17 @@ class DirectorNotification(Base):
     director = relationship("User", foreign_keys=[director_user_id])
     branch = relationship("Branch")
 
+
+class BranchNotification(Base):
+    __tablename__ = "branch_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
+    type = Column(CompatEnum(BranchNotificationType), nullable=False)
+    title = Column(String(200), nullable=False)
+    message = Column(Text, nullable=False)
+    related_entity_id = Column(Integer, nullable=True)
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    branch = relationship("Branch", foreign_keys=[branch_id])

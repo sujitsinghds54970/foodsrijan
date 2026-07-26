@@ -119,12 +119,17 @@ export default function BranchDirectorOverviewDashboard({
   const branchLogoInputRef = useRef<HTMLInputElement>(null)
   const directorIdFrontRef = useRef<HTMLDivElement | null>(null)
   const directorIdBackRef = useRef<HTMLDivElement | null>(null)
+  const [overviewLoadError, setOverviewLoadError] = useState(false)
 
-  const API_BASE =
+  const rawApiBase =
     process.env.REACT_APP_API_BASE_URL ||
     ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
       ? 'http://127.0.0.1:8000'
       : window.location.origin)
+  const API_BASE =
+    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? String(rawApiBase).replace('://localhost', '://127.0.0.1')
+      : rawApiBase
 
   const requestConfig = useMemo(() => ({
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -136,6 +141,7 @@ export default function BranchDirectorOverviewDashboard({
     if (!token) return
 
     setLoading(true)
+    setOverviewLoadError(false)
     try {
       const params = new URLSearchParams()
       if (selectedBranchId) {
@@ -178,8 +184,8 @@ export default function BranchDirectorOverviewDashboard({
           setTrends([])
         }
       }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to load overview dashboard')
+    } catch {
+      setOverviewLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -367,6 +373,12 @@ export default function BranchDirectorOverviewDashboard({
 
   return (
     <div className="space-y-6">
+      {overviewLoadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-800">Overview dashboard is temporarily unavailable</p>
+          <p className="mt-1 text-xs text-amber-700">Live branch summary widgets are using fallback data while services recover.</p>
+        </div>
+      )}
       <div className="premium-card p-8 relative overflow-hidden">
         <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-gradient-to-br from-cyan-300/30 to-blue-300/30 blur-3xl" />
         <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-gradient-to-br from-emerald-300/30 to-teal-300/30 blur-3xl" />

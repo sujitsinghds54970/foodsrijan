@@ -7,12 +7,13 @@ import { useAuth } from '../../contexts/AuthContext'
 import PayslipsTab from '../payroll/PayslipsTab'
 import StaffIDCard from './StaffIDCard'
 import { getApiErrorMessage, resolveStaffMediaUrl, staffSelfApi } from './api'
-import { StaffSelfProfile } from './types'
+import { LeaveRequestItem, StaffNotification, StaffSelfProfile } from './types'
 
 const isStaffRole = (role?: string): boolean => {
   if (!role) return false
-  const staffRoles = ['staff', 'receptionist', 'technician', 'doctor', 'nurse']
-  return staffRoles.includes(role.toLowerCase())
+  const normalizedRole = role.trim().toLowerCase()
+  const blockedRoles = ['super_admin', 'branch_admin', 'branch_director', 'patient']
+  return !blockedRoles.includes(normalizedRole)
 }
 
 export default function MyProfileTab() {
@@ -24,6 +25,14 @@ export default function MyProfileTab() {
   const [profile, setProfile] = useState<StaffSelfProfile | null>(null)
   const [showPhotoPreview, setShowPhotoPreview] = useState(false)
   const [showIdCardModal, setShowIdCardModal] = useState(false)
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false)
+  const [isApplyingLeave, setIsApplyingLeave] = useState(false)
+  const [leaveType, setLeaveType] = useState('Sick')
+  const [leaveStartDate, setLeaveStartDate] = useState('')
+  const [leaveEndDate, setLeaveEndDate] = useState('')
+  const [leaveReason, setLeaveReason] = useState('')
+  const [leaveHistory, setLeaveHistory] = useState<LeaveRequestItem[]>([])
+  const [staffNotifications, setStaffNotifications] = useState<StaffNotification[]>([])
 
   const [mobile, setMobile] = useState('')
   const [email, setEmail] = useState('')
@@ -43,6 +52,12 @@ export default function MyProfileTab() {
       setAccountNumber(me.bank_account_number || '')
       setIfscCode(me.ifsc_code || '')
       setUpiId(me.upi_id || '')
+      const [leaves, notifications] = await Promise.all([
+        staffSelfApi.listLeaves(),
+        staffSelfApi.getNotifications(),
+      ])
+      setLeaveHistory(leaves)
+      setStaffNotifications(notifications)
     } catch (error: any) {
       toast.error(getApiErrorMessage(error, 'Unable to load profile'))
     } finally {
@@ -101,6 +116,40 @@ export default function MyProfileTab() {
   }
 
   const dropzone = useDropzone({ onDrop, accept: { 'image/*': [] }, maxFiles: 1 })
+
+  const submitLeaveRequest = async () => {
+    if (!leaveStartDate || !leaveEndDate || !leaveReason.trim()) {
+      toast.error('Please fill leave type, start date, end date, and reason')
+      return
+    }
+
+    try {
+      setIsApplyingLeave(true)
+      await staffSelfApi.createLeaveRequest({
+        leave_type: leaveType,
+        start_date: new Date(leaveStartDate).toISOString(),
+        end_date: new Date(leaveEndDate).toISOString(),
+        reason: leaveReason.trim(),
+      })
+      toast.success('Leave applied successfully')
+      setIsLeaveModalOpen(false)
+      setLeaveType('Sick')
+      setLeaveStartDate('')
+      setLeaveEndDate('')
+      setLeaveReason('')
+      const [leaves, notifications] = await Promise.all([
+        staffSelfApi.listLeaves(),
+        staffSelfApi.getNotifications(),
+      ])
+      setLeaveHistory(leaves)
+      setStaffNotifications(notifications)
+    } catch (error: any) {
+      const errorMessage = getApiErrorMessage(error, 'Failed to apply leave')
+      toast.error(`Failed to apply leave: ${errorMessage}`)
+    } finally {
+      setIsApplyingLeave(false)
+    }
+  }
 
   const staffCardData = useMemo(() => {
     if (!profile) return null
@@ -189,7 +238,7 @@ export default function MyProfileTab() {
               <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">My Profile</h2>
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <button onClick={() => navigate('/staff/attendance')} className="rounded-lg bg-emerald-600 px-3 py-2 font-semibold text-white hover:bg-emerald-700">Mark Attendance</button>
-                <button onClick={() => navigate('/staff/profile')} className="rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-700">Apply for Leave</button>
+                <button onClick={() => setIsLeaveModalOpen(true)} className="rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-700">Apply for Leave</button>
                 <button type="button" onClick={() => setShowIdCardModal(true)} className="rounded-lg bg-slate-900 px-3 py-2 font-semibold text-white hover:bg-black">View ID Card</button>
               </div>
             </div>
@@ -241,10 +290,144 @@ export default function MyProfileTab() {
             </div>
           </div>
 
+          <div className="rounded-3xl border-t-4 border-amber-500 bg-white/80 p-6 shadow-2xl backdrop-blur dark:border-amber-400 dark:bg-slate-900/80">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Leave History & Decisions</h3>
+            {leaveHistory.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">No leave requests yet.</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {leaveHistory.slice(0, 6).map((leave) => {
+                  const statusText = (leave.status || '').toLowerCase()
+                  const statusClass = statusText === 'approved'
+                    ? 'bg-green-100 text-green-800'
+                    : statusText === 'rejected'
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-yellow-100 text-yellow-800'
+                  return (
+                    <div key={leave.id} className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {leave.leave_type} • {new Date(leave.start_date).toLocaleDateString()} - {new Date(leave.end_date).toLocaleDateString()}
+                          </p>
+                          <p className="text-xs text-slate-600 dark:text-slate-300">{leave.reason || 'No reason provided'}</p>
+                        </div>
+                        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClass}`}>
+                          {leave.status}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            <h4 className="mt-5 text-sm font-bold text-slate-900 dark:text-slate-100">My Notifications</h4>
+            {staffNotifications.length === 0 ? (
+              <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">No notifications yet.</p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {staffNotifications.slice(0, 5).map((note) => (
+                  <div key={note.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                    <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">{note.message}</p>
+                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      {note.created_at ? new Date(note.created_at).toLocaleString() : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </section>
       </div>
 
       <PayslipsTab />
+
+      {isLeaveModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !isApplyingLeave && setIsLeaveModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">Apply for Leave</h4>
+              <button
+                type="button"
+                className="rounded border px-2 py-1 text-xs"
+                onClick={() => setIsLeaveModalOpen(false)}
+                disabled={isApplyingLeave}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Leave Type</label>
+                <select
+                  value={leaveType}
+                  onChange={(event) => setLeaveType(event.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                >
+                  <option value="Sick">Sick</option>
+                  <option value="Casual">Casual</option>
+                  <option value="Earned">Earned</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Start Date</label>
+                <input
+                  type="date"
+                  value={leaveStartDate}
+                  onChange={(event) => setLeaveStartDate(event.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">End Date</label>
+                <input
+                  type="date"
+                  value={leaveEndDate}
+                  onChange={(event) => setLeaveEndDate(event.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">Reason</label>
+                <textarea
+                  rows={4}
+                  value={leaveReason}
+                  onChange={(event) => setLeaveReason(event.target.value)}
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                onClick={() => setIsLeaveModalOpen(false)}
+                disabled={isApplyingLeave}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                onClick={() => void submitLeaveRequest()}
+                disabled={isApplyingLeave}
+              >
+                {isApplyingLeave ? 'Submitting...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showPhotoPreview && profile.photo_url && (
         <div

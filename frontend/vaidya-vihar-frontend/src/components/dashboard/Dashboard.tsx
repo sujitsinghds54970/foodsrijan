@@ -15,6 +15,7 @@ import Accounting from './Accounting'
 import Accounts from './Accounts'
 import HR from './HR'
 import PayrollDashboard from '../payroll/PayrollDashboard'
+import BranchDirectorSalaryDashboard from '../branch-director/BranchDirectorSalaryDashboard'
 import PatientPortal from './PatientPortal'
 import DoctorManagementCRMModule from '../doctors/DoctorManagementCRMModule'
 import DoctorPortal from './DoctorPortal'
@@ -27,15 +28,36 @@ import TasksTab from '../staff/TasksTab'
 import NotificationsTab from '../staff/NotificationsTab'
 import PerformanceTab from '../staff/PerformanceTab'
 import CeoDashboard from '../ceo/CeoDashboard'
+import CeoOverview from '../ceo/CeoOverview'
+import CeoComplianceLegal from '../ceo/CeoComplianceLegal'
+import CeoDoctorNetwork from '../ceo/CeoDoctorNetwork'
+import CeoFinanceAccounts from '../ceo/CeoFinanceAccounts'
+import CeoInventorySupply from '../ceo/CeoInventorySupply'
+import CeoPatientInsights from '../ceo/CeoPatientInsights'
+import CeoPeopleCulture from '../ceo/CeoPeopleCulture'
+import CeoSystemSettings from '../ceo/CeoSystemSettings'
+import CeoProfile from '../ceo/CeoProfile'
+import BranchDetailsDashboard from '../branch/BranchDetailsDashboard'
+import BranchNotificationCenter from '../branch/BranchNotificationCenter'
 
-type ActiveTab = 'overview' | 'patients' | 'daily-operations' | 'staff' | 'payroll' | 'staff-profile' | 'staff-salary' | 'staff-attendance' | 'staff-tasks' | 'staff-notifications' | 'staff-performance' | 'inventory' | 'analytics' | 'reports' | 'lis' | 'payments' | 'accounting' | 'accounts' | 'hr' | 'doctor-portal' | 'patient-portal' | 'branch-management' | 'ceo'
+type ActiveTab = 'overview' | 'ceo-overview' | 'ceo-profile' | 'ceo-people-culture' | 'ceo-finance-accounts' | 'ceo-doctor-network' | 'ceo-patient-insights' | 'ceo-inventory-supply' | 'ceo-compliance-legal' | 'ceo-system-settings' | 'patients' | 'daily-operations' | 'staff' | 'payroll' | 'branch-notifications' | 'staff-profile' | 'staff-salary' | 'staff-attendance' | 'staff-tasks' | 'staff-notifications' | 'staff-performance' | 'inventory' | 'analytics' | 'reports' | 'lis' | 'payments' | 'accounting' | 'accounts' | 'hr' | 'doctor-portal' | 'patient-portal' | 'branch-management' | 'ceo' | 'branch-details'
 
 const tabPathMap: Record<ActiveTab, string> = {
   overview: '/branch/dashboard',
+  'ceo-overview': '/ceo/overview',
+  'ceo-profile': '/ceo/profile',
+  'ceo-people-culture': '/ceo/people-and-culture',
+  'ceo-finance-accounts': '/ceo/finance-accounts',
+  'ceo-doctor-network': '/ceo/doctor-network',
+  'ceo-patient-insights': '/ceo/patient-insights',
+  'ceo-inventory-supply': '/ceo/inventory-supply',
+  'ceo-compliance-legal': '/ceo/compliance-legal',
+  'ceo-system-settings': '/ceo/system-settings',
   patients: '/branch/patients',
   'daily-operations': '/branch/daily-operations',
   staff: '/branch/staff',
   payroll: '/branch/payroll',
+  'branch-notifications': '/branch/notifications',
   'staff-profile': '/staff/profile',
   'staff-salary': '/staff/salary',
   'staff-attendance': '/staff/attendance',
@@ -54,13 +76,24 @@ const tabPathMap: Record<ActiveTab, string> = {
   'patient-portal': '/branch/patient-portal',
   'branch-management': '/branch/management',
   ceo: '/ceo',
+  'branch-details': '/branch-details',
 }
 
 function tabFromPath(pathname: string): ActiveTab {
   const path = normalizePath(pathname).toLowerCase()
+  if (path === '/ceo/overview' || path.startsWith('/ceo/overview/')) return 'ceo-overview'
+  if (path === '/ceo/profile' || path.startsWith('/ceo/profile/')) return 'ceo-profile'
+  if (path === '/ceo/people-and-culture' || path.startsWith('/ceo/people-and-culture/')) return 'ceo-people-culture'
+  if (path === '/ceo/finance-accounts' || path.startsWith('/ceo/finance-accounts/')) return 'ceo-finance-accounts'
+  if (path === '/ceo/doctor-network' || path.startsWith('/ceo/doctor-network/')) return 'ceo-doctor-network'
+  if (path === '/ceo/patient-insights' || path.startsWith('/ceo/patient-insights/')) return 'ceo-patient-insights'
+  if (path === '/ceo/inventory-supply' || path.startsWith('/ceo/inventory-supply/')) return 'ceo-inventory-supply'
+  if (path === '/ceo/compliance-legal' || path.startsWith('/ceo/compliance-legal/')) return 'ceo-compliance-legal'
+  if (path === '/ceo/system-settings' || path.startsWith('/ceo/system-settings/')) return 'ceo-system-settings'
   if (path === '/branch/dashboard' || path.startsWith('/branch/dashboard/')) return 'overview'
   if (path === '/branch/staff' || path.startsWith('/branch/staff/')) return 'staff'
   if (path === '/branch/payroll' || path.startsWith('/branch/payroll/')) return 'payroll'
+  if (path === '/branch/notifications' || path.startsWith('/branch/notifications/')) return 'branch-notifications'
   if (path === '/staff/profile' || path.startsWith('/staff/profile/')) return 'staff-profile'
   if (path === '/staff/salary' || path.startsWith('/staff/salary/')) return 'staff-salary'
   if (path === '/staff/attendance' || path.startsWith('/staff/attendance/')) return 'staff-attendance'
@@ -79,6 +112,7 @@ function tabFromPath(pathname: string): ActiveTab {
   if (path === '/branch/hr' || path.startsWith('/branch/hr/')) return 'hr'
   if (path === '/branch/doctor-portal' || path.startsWith('/branch/doctor-portal/')) return 'doctor-portal'
   if (path === '/branch/patient-portal' || path.startsWith('/branch/patient-portal/')) return 'patient-portal'
+  if (path === '/branch-details' || path.startsWith('/branch-details/')) return 'branch-details'
   if (path === '/ceo' || path.startsWith('/ceo/')) return 'ceo'
   if (path === '/branch/patients' || path.startsWith('/branch/patients/')) return 'patients'
   return 'overview'
@@ -115,33 +149,47 @@ export default function Dashboard() {
   // Initial redirect based on user role
   useEffect(() => {
     if (isLoading || !user) return
-    
+
     const userRole = (user.role || '').trim().toLowerCase()
-    console.log('[DASHBOARD] Checking role for redirect:', { role: userRole, currentPath: location.pathname })
-    
-    // IMPORTANT: Only redirect if user is on WRONG path type for their role
-    // Don't redirect if they're already on a valid path for their role
-    
-    if (userRole === 'super_admin' && !location.pathname.startsWith('/ceo')) {
-      console.log('[DASHBOARD] Redirecting super_admin to /ceo')
-      navigate('/ceo', { replace: true })
-    } else if ((userRole === 'branch_admin' || userRole === 'branch_director') && !location.pathname.startsWith('/branch/')) {
-      console.log('[DASHBOARD] Redirecting branch admin/director to /branch/dashboard')
-      navigate('/branch/dashboard', { replace: true })
-    } else if (isStaffRole(userRole) && !location.pathname.startsWith('/staff/')) {
-      console.log('[DASHBOARD] Redirecting staff to /staff/profile')
-      navigate('/staff/profile', { replace: true })
+    const currentPath = normalizePath(window.location.pathname)
+    console.log('[DASHBOARD] Checking role for redirect:', { role: userRole, currentPath })
+
+    // Redirect only from root/generic dashboard entry paths to prevent redirect loops on tab navigation.
+    if (currentPath === '/' || currentPath === '/dashboard') {
+      if (userRole === 'super_admin') {
+        navigate('/ceo/overview', { replace: true })
+      } else if (userRole === 'branch_admin' || userRole === 'branch_director') {
+        navigate('/branch/dashboard', { replace: true })
+      } else if (isStaffRole(userRole)) {
+        navigate('/staff/profile', { replace: true })
+      }
     }
   }, [isLoading, user, navigate]) // REMOVED location.pathname to prevent re-redirect on tab change
 
   // IMPORTANT: Sync activeTab with current route pathname (NO redirects here!)
   useEffect(() => {
     if (isLoading) return
+    const normalizedRole = (user?.role || '').trim().toLowerCase()
+    if (
+      normalizedRole === 'super_admin' &&
+      (normalizedLocationPath === '/branch/daily-operations' ||
+        normalizedLocationPath === '/branch/inventory' ||
+        normalizedLocationPath === '/branch/analytics' ||
+        normalizedLocationPath === '/branch/lis' ||
+        normalizedLocationPath === '/branch/payments' ||
+        normalizedLocationPath === '/branch/accounts' ||
+        normalizedLocationPath === '/branch/doctor-portal' ||
+        normalizedLocationPath === '/branch/patient-portal')
+    ) {
+      navigate('/branch/management', { replace: true })
+      return
+    }
+
     const newTab = tabFromPath(normalizedLocationPath)
     console.log('[DASHBOARD] Syncing activeTab:', { pathname: normalizedLocationPath, newTab })
     setActiveTab(newTab)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, normalizedLocationPath])
+  }, [isLoading, navigate, normalizedLocationPath, user?.role])
 
   if (isLoading) {
     return (
@@ -182,6 +230,24 @@ export default function Dashboard() {
       case 'overview':
         if (isStaffRole(normalizedRole)) return <MyProfileTab />
         return <Overview />
+      case 'ceo-overview':
+        return normalizedRole === 'super_admin' ? <CeoOverview /> : <Overview />
+      case 'ceo-profile':
+        return normalizedRole === 'super_admin' ? <CeoProfile /> : <Overview />
+      case 'ceo-people-culture':
+        return normalizedRole === 'super_admin' ? <CeoPeopleCulture /> : <Overview />
+      case 'ceo-finance-accounts':
+        return normalizedRole === 'super_admin' ? <CeoFinanceAccounts /> : <Overview />
+      case 'ceo-doctor-network':
+        return normalizedRole === 'super_admin' ? <CeoDoctorNetwork /> : <Overview />
+      case 'ceo-patient-insights':
+        return normalizedRole === 'super_admin' ? <CeoPatientInsights /> : <Overview />
+      case 'ceo-inventory-supply':
+        return normalizedRole === 'super_admin' ? <CeoInventorySupply /> : <Overview />
+      case 'ceo-compliance-legal':
+        return normalizedRole === 'super_admin' ? <CeoComplianceLegal /> : <Overview />
+      case 'ceo-system-settings':
+        return normalizedRole === 'super_admin' ? <CeoSystemSettings /> : <Overview />
       case 'patients':
         return <PatientManagement />
       case 'daily-operations':
@@ -189,7 +255,13 @@ export default function Dashboard() {
       case 'staff':
         return <StaffManagement />
       case 'payroll':
-        return <PayrollDashboard />
+        return (normalizedRole === 'branch_director' || normalizedRole === 'branch_admin')
+          ? <BranchDirectorSalaryDashboard />
+          : <PayrollDashboard />
+      case 'branch-notifications':
+        return (normalizedRole === 'branch_director' || normalizedRole === 'branch_admin')
+          ? <BranchNotificationCenter />
+          : <NotificationsTab />
       case 'staff-profile':
         return <MyProfileTab />
       case 'staff-salary':
@@ -224,6 +296,8 @@ export default function Dashboard() {
         return <BranchManagement />
       case 'ceo':
         return normalizedRole === 'super_admin' ? <CeoDashboard /> : <Overview />
+      case 'branch-details':
+        return normalizedRole === 'super_admin' ? <BranchDetailsDashboard /> : <Overview />
       default:
         if (isStaffRole(normalizedRole)) return <MyProfileTab />
         return <Overview />

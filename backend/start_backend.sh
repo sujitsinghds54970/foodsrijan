@@ -32,6 +32,9 @@ echo "📦 Installing/updating dependencies from requirements.txt..."
 "$PYTHON_BIN" -m pip install -q -r requirements.txt 2>&1 | grep -v "Requirement already satisfied" || true
 echo "✅ Dependencies installed successfully"
 
+echo "🧹 Cleaning orphan upload files..."
+"$PYTHON_BIN" cleanup_orphan_files.py || true
+
 # Set environment variables
 export PYTHONUNBUFFERED=1
 export PYTHONDONTWRITEBYTECODE=1

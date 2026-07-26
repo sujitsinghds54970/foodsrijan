@@ -47,8 +47,12 @@ from app.routes.patient.phase4 import router as patient_phase4_router
 from app.routes.overview import router as overview_router
 from app.routes.staff_self_service import router as staff_self_service_router
 from app.routes.payroll import router as payroll_router
+from app.routes.branch_payroll import router as branch_payroll_router
+from app.routes.branch_notifications import router as branch_notifications_router
 from app.routes.tasks import router as tasks_router
 from app.routes.ceo import router as ceo_router
+from app.routes.public import router as public_router
+from app.routes.search import router as search_router
 from app.utils.auth_system import require_role
 
 # Create FastAPI app
@@ -134,8 +138,12 @@ app.include_router(patient_phase4_router, tags=["Patient Phase 4"])
 app.include_router(patient_portal_v2_router, tags=["Patient Portal V2"])
 app.include_router(overview_router, prefix="/api/overview", tags=["Overview Dashboard"])
 app.include_router(payroll_router, prefix="/api", tags=["Payroll Management"])
+app.include_router(branch_payroll_router, prefix="/api/branch/payroll", tags=["Branch Payroll Command Center"])
+app.include_router(branch_notifications_router, prefix="/api", tags=["Branch Notifications"])
 app.include_router(tasks_router, prefix="/api", tags=["Task Management"])
 app.include_router(ceo_router, prefix="/api", tags=["CEO Security"])
+app.include_router(public_router, prefix="/api", tags=["Public"])
+app.include_router(search_router, tags=["Search/Autocomplete"])
 
 @app.get("/")
 async def root():

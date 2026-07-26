@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 
 interface PaymentsProps {
   activeTab: string
+  branchId?: number
 }
 
 interface Invoice {
@@ -24,7 +25,7 @@ interface Payment {
   created_at: string
 }
 
-export default function Payments({ activeTab }: PaymentsProps) {
+export default function Payments({ activeTab, branchId }: PaymentsProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(false)
@@ -40,7 +41,8 @@ export default function Payments({ activeTab }: PaymentsProps) {
   const fetchInvoices = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/payments/invoices')
+      const query = branchId ? `?branch_id=${branchId}` : ''
+      const response = await fetch(`/api/payments/invoices${query}`)
       const data = await response.json()
       if (data.success) {
         setInvoices(data.invoices || [])
@@ -53,7 +55,8 @@ export default function Payments({ activeTab }: PaymentsProps) {
 
   const fetchPayments = async () => {
     try {
-      const response = await fetch('/api/payments/payments')
+      const query = branchId ? `?branch_id=${branchId}` : ''
+      const response = await fetch(`/api/payments/payments${query}`)
       const data = await response.json()
       if (data.success) {
         setPayments(data.payments || [])
@@ -238,4 +241,3 @@ export default function Payments({ activeTab }: PaymentsProps) {
     </div>
   )
 }
-

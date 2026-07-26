@@ -191,3 +191,18 @@ class PayrollDispute(Base):
 
     payroll_transaction = relationship("PayrollTransaction")
     staff_profile = relationship("StaffProfile")
+
+
+class PayrollAuditLog(Base):
+    __tablename__ = "payroll_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    action = Column(String(40), nullable=False, index=True)
+    endpoint = Column(String(120), nullable=False)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    branch = relationship("Branch")
+    user = relationship("User")

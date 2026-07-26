@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,6 +11,7 @@ from app.models import Branch, User
 from app.models.branch_bank_details import BranchBankDetails
 from app.models.hr import DirectorAttendanceType, DirectorProfile, StaffAttendanceLog, StaffProfile
 from app.utils.auth_system import get_current_user
+from app.utils.schema_compat import ensure_branch_logo_column
 from app.utils.security import hash_password
 
 
@@ -211,6 +212,11 @@ def update_overview_profile(
 
     if payload.director_photo_url is not None:
         scope.branch.director_photo_url = payload.director_photo_url
+        ensure_branch_logo_column(db)
+        db.execute(
+            text("UPDATE branches SET logo_url = :logo_url WHERE id = :branch_id"),
+            {"logo_url": payload.director_photo_url, "branch_id": scope.branch_id},
+        )
 
     if payload.account_number is not None or payload.ifsc_code is not None:
         bank_details = db.query(BranchBankDetails).filter(BranchBankDetails.branch_id == scope.branch_id).first()

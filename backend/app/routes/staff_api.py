@@ -5,11 +5,11 @@ import traceback
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import User
+from app.models import Branch, User
 from app.models.staff import (
     AttendanceStatus,
     LeaveApprovalStatus,
@@ -19,6 +19,7 @@ from app.models.staff import (
     StaffSalaryDetail,
     StaffStatus,
 )
+from app.models.hr import BranchNotification, BranchNotificationType
 from app.schemas.staff import (
     StaffAttendanceCreateRequest,
     StaffBulkToggleDailyOpsRequest,
@@ -31,6 +32,8 @@ from app.schemas.staff import (
 )
 from app.utils.schema_compat import ensure_staff_daily_ops_column
 from app.utils.auth_system import get_current_user
+from app.utils.file_utils import replace_file, storage_relative_path_from_public_url
+from app.utils.onboarding_offer import run_offer_letter_workflow
 from app.utils.security import hash_password
 
 staff_router = APIRouter(prefix="/staff", tags=["Staff"])
@@ -56,6 +59,10 @@ def _assert_access(user: User) -> None:
 def _photo_url(photo_path: Optional[str], request: Optional[Request] = None) -> Optional[str]:
     if not photo_path:
         return None
+    if photo_path.startswith("http://") or photo_path.startswith("https://"):
+        return photo_path
+    if photo_path.startswith("/api/files/"):
+        return photo_path
     clean_path = photo_path.lstrip("/")
     # Build the full URL using request base URL if available
     if request:
@@ -86,6 +93,26 @@ def _generate_staff_id(db: Session, branch_id: int) -> str:
     return candidate
 
 
+def _ensure_branch_notifications_table(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS branch_notifications (
+                id INTEGER PRIMARY KEY,
+                branch_id INTEGER NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                title VARCHAR(200) NOT NULL,
+                message TEXT NOT NULL,
+                related_entity_id INTEGER,
+                is_read BOOLEAN NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    )
+    db.execute(text("CREATE INDEX IF NOT EXISTS ix_branch_notifications_branch_id ON branch_notifications(branch_id)"))
+
+
 def _build_staff_row(profile: StaffProfile, user: User, salary: Optional[StaffSalaryDetail] = None):
     return {
         "staff_profile_id": profile.id,
@@ -100,6 +127,7 @@ def _build_staff_row(profile: StaffProfile, user: User, salary: Optional[StaffSa
         "mobile": user.phone,
         "department": profile.department,
         "designation": user.role,
+        "role": (getattr(profile, "role", None) or user.role),
         "specialization": profile.specialization,
         "shift_timings": profile.shift_timings,
         "date_of_joining": profile.date_of_joining,
@@ -112,11 +140,17 @@ def _build_staff_row(profile: StaffProfile, user: User, salary: Optional[StaffSa
         "created_at": profile.created_at,
         "updated_at": profile.updated_at,
         "salary": {
-            "basic": float(salary.basic) if salary else 0,
-            "hra": float(salary.hra) if salary else 0,
-            "allowances": float(salary.allowances) if salary else 0,
-            "deductions": float(salary.deductions) if salary else 0,
-            "net_pay": float(salary.net_pay) if salary else 0,
+            "basic": float(salary.basic or 0) if salary else 0,
+            "da": 0,
+            "hra": float(salary.hra or 0) if salary else 0,
+            "shift_allowance": 0,
+            "ot": 0,
+            "incentives": float(salary.allowances or 0) if salary else 0,
+            "lop": 0,
+            "statutory_deductions": float(salary.deductions or 0) if salary else 0,
+            "allowances": float(salary.allowances or 0) if salary else 0,
+            "deductions": float(salary.deductions or 0) if salary else 0,
+            "net_pay": (float(salary.basic or 0) + float(salary.hra or 0) + float(salary.allowances or 0) - float(salary.deductions or 0)) if salary else 0,
             "bank_name": salary.bank_name if salary else None,
             "account_number": salary.account_number if salary else None,
             "ifsc_code": salary.ifsc_code if salary else None,
@@ -304,15 +338,65 @@ def create_staff(
         )
         db.add(salary)
 
+        _ensure_branch_notifications_table(db)
+        role_label = (
+            (payload.designation or "").strip()
+            or (payload.specialization or "").strip()
+            or "Staff"
+        )
+        db.add(
+            BranchNotification(
+                branch_id=branch_id,
+                type=BranchNotificationType.SYSTEM_ALERT,
+                title="New Staff Joined",
+                message=f"{payload.first_name.strip()} {payload.last_name.strip()} joined as {role_label}.",
+                related_entity_id=profile.id,
+                is_read=False,
+            )
+        )
+
         db.commit()
         db.refresh(profile)
         print(f"Staff member created successfully: {profile.id}")
+
+        onboarding_delivery = {"offer_email_sent": False, "offer_sms_sent": False}
+        try:
+            branch = db.query(Branch).filter(Branch.id == branch_id).first()
+            delivery_result = run_offer_letter_workflow(
+                user_data={
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "full_name": f"{(user.first_name or '').strip()} {(user.last_name or '').strip()}".strip(),
+                    "email": user.email,
+                    "phone": user.phone,
+                    "joining_date": profile.date_of_joining.strftime("%Y-%m-%d") if profile.date_of_joining else datetime.utcnow().strftime("%Y-%m-%d"),
+                    "reporting_manager": f"{(current_user.first_name or '').strip()} {(current_user.last_name or '').strip()}".strip() or current_user.username,
+                    "salary": f"INR {float(salary.net_pay or 0):,.2f}",
+                },
+                branch_data={
+                    "name": branch.name if branch else "VaidyaVihar Diagnostic",
+                    "address": branch.address if branch else "",
+                    "city": branch.city if branch else "",
+                    "state": branch.state if branch else "",
+                    "phone": branch.phone if branch else "",
+                    "email": branch.email if branch else "",
+                    "logo_url": getattr(branch, "logo_url", None) if branch else None,
+                    "director_photo_url": getattr(branch, "director_photo_url", None) if branch else None,
+                },
+                role=user.role or "staff",
+            )
+            onboarding_delivery["offer_email_sent"] = bool(delivery_result.get("email_sent", False))
+            onboarding_delivery["offer_sms_sent"] = bool(delivery_result.get("sms_sent", False))
+        except Exception as onboarding_exc:
+            print(f"OFFER_WORKFLOW_WARNING(staff_create): {onboarding_exc}")
 
         return {
             "message": "Staff created successfully",
             "temporary_password": raw_password,
             "username": username,
             "staff": _build_staff_row(profile, user, salary),
+            "offer_email_sent": onboarding_delivery["offer_email_sent"],
+            "offer_sms_sent": onboarding_delivery["offer_sms_sent"],
         }
     
     except HTTPException:
@@ -378,8 +462,13 @@ def update_staff(
         user.last_name = payload.last_name
     if payload.mobile is not None:
         user.phone = payload.mobile
-    if payload.designation is not None:
-        user.role = _staff_role_from_designation(payload.designation)
+    incoming_role = payload.role if payload.role is not None else payload.designation
+    if incoming_role is not None:
+        normalized_role = incoming_role.strip()
+        if not normalized_role:
+            raise HTTPException(status_code=400, detail="role/designation cannot be empty")
+        user.role = normalized_role
+        print(f"UPDATED ROLE TO: {normalized_role} for staff ID {staff_profile_id}")
 
     if payload.department is not None:
         profile.department = payload.department
@@ -516,14 +605,12 @@ def upload_staff_photo(
     if suffix not in {".jpg", ".jpeg", ".png", ".webp"}:
         raise HTTPException(status_code=400, detail="Only jpg, jpeg, png, webp are allowed")
 
-    STAFF_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"staff_{staff_profile_id}_{secrets.token_hex(8)}{suffix}"
-    destination = STAFF_UPLOADS_DIR / filename
+    new_photo_url = replace_file(profile.photo_path, file, "staff")
+    new_photo_path = storage_relative_path_from_public_url(new_photo_url)
+    if not new_photo_path:
+        raise HTTPException(status_code=500, detail="Unable to store uploaded photo")
 
-    with destination.open("wb") as output:
-        output.write(file.file.read())
-
-    profile.photo_path = f"staff/{filename}"
+    profile.photo_path = new_photo_path
     profile.updated_at = datetime.utcnow()
 
     db.commit()
@@ -549,23 +636,40 @@ def get_staff_salary(
     salary = db.query(StaffSalaryDetail).filter(StaffSalaryDetail.staff_profile_id == staff_profile_id).first()
     if not salary:
         return {
-            "basic": 0,
-            "hra": 0,
-            "allowances": 0,
-            "deductions": 0,
-            "net_pay": 0,
+            "basic": 0.0,
+            "da": 0.0,
+            "hra": 0.0,
+            "shift_allowance": 0.0,
+            "ot": 0.0,
+            "incentives": 0.0,
+            "lop": 0.0,
+            "statutory_deductions": 0.0,
+            "allowances": 0.0,
+            "deductions": 0.0,
+            "net_pay": 0.0,
             "bank_name": None,
             "account_number": None,
             "ifsc_code": None,
             "upi_id": None,
         }
 
+    basic = float(salary.basic or 0)
+    hra = float(salary.hra or 0)
+    allowances = float(salary.allowances or 0)
+    deductions = float(salary.deductions or 0)
+    net_pay = basic + hra + allowances - deductions
     return {
-        "basic": float(salary.basic or 0),
-        "hra": float(salary.hra or 0),
-        "allowances": float(salary.allowances or 0),
-        "deductions": float(salary.deductions or 0),
-        "net_pay": float(salary.net_pay or 0),
+        "basic": basic,
+        "da": 0.0,
+        "hra": hra,
+        "shift_allowance": 0.0,
+        "ot": 0.0,
+        "incentives": allowances,
+        "lop": 0.0,
+        "statutory_deductions": deductions,
+        "allowances": allowances,
+        "deductions": deductions,
+        "net_pay": net_pay,
         "bank_name": salary.bank_name,
         "account_number": salary.account_number,
         "ifsc_code": salary.ifsc_code,
@@ -573,6 +677,41 @@ def get_staff_salary(
     }
 
 
+def _build_salary_response(
+    salary: StaffSalaryDetail,
+    *,
+    da: float,
+    shift_allowance: float,
+    ot: float,
+    incentives: float,
+    lop: float,
+    statutory_deductions: float,
+) -> dict:
+    basic = float(salary.basic or 0)
+    hra = float(salary.hra or 0)
+    allowances = float(salary.allowances or 0)
+    deductions = float(salary.deductions or 0)
+    net_pay = float(salary.net_pay or 0)
+    return {
+        "basic": basic,
+        "da": da,
+        "hra": hra,
+        "shift_allowance": shift_allowance,
+        "ot": ot,
+        "incentives": incentives,
+        "lop": lop,
+        "statutory_deductions": statutory_deductions,
+        "allowances": allowances,
+        "deductions": deductions,
+        "net_pay": net_pay,
+        "bank_name": salary.bank_name,
+        "account_number": salary.account_number,
+        "ifsc_code": salary.ifsc_code,
+        "upi_id": salary.upi_id,
+    }
+
+
+@staff_router.put("/{staff_profile_id}/salary")
 @staff_router.post("/{staff_profile_id}/salary")
 def update_staff_salary(
     staff_profile_id: int,
@@ -590,11 +729,35 @@ def update_staff_salary(
         salary = StaffSalaryDetail(staff_profile_id=staff_profile_id)
         db.add(salary)
 
-    salary.basic = payload.basic
-    salary.hra = payload.hra
-    salary.allowances = payload.allowances
-    salary.deductions = payload.deductions
-    salary.net_pay = payload.net_pay if payload.net_pay is not None else (payload.basic + payload.hra + payload.allowances - payload.deductions)
+    basic = float(payload.basic or 0)
+    da = float(payload.da or 0)
+    hra = float(payload.hra or 0)
+    shift_allowance = float(payload.shift_allowance or 0)
+    ot = float(payload.ot or 0)
+    incentives = float(payload.incentives or 0)
+    lop = float(payload.lop or 0)
+    statutory_deductions = float(payload.statutory_deductions or 0)
+
+    detailed_allowances = da + shift_allowance + ot + incentives
+    detailed_deductions = lop + statutory_deductions
+    if detailed_allowances == 0 and float(payload.allowances or 0) > 0:
+        incentives = float(payload.allowances or 0)
+        detailed_allowances = incentives
+    if detailed_deductions == 0 and float(payload.deductions or 0) > 0:
+        statutory_deductions = float(payload.deductions or 0)
+        detailed_deductions = statutory_deductions
+    allowances = detailed_allowances if detailed_allowances > 0 else float(payload.allowances or 0)
+    deductions = detailed_deductions if detailed_deductions > 0 else float(payload.deductions or 0)
+
+    gross_pay = basic + da + hra + shift_allowance + ot + incentives
+    total_deductions = detailed_deductions if detailed_deductions > 0 else deductions
+    computed_net_pay = gross_pay - total_deductions
+
+    salary.basic = basic
+    salary.hra = hra
+    salary.allowances = allowances
+    salary.deductions = deductions
+    salary.net_pay = computed_net_pay
     salary.bank_name = payload.bank_name
     salary.account_number = payload.account_number
     salary.ifsc_code = payload.ifsc_code
@@ -604,17 +767,15 @@ def update_staff_salary(
 
     return {
         "message": "Salary updated",
-        "salary": {
-            "basic": float(salary.basic or 0),
-            "hra": float(salary.hra or 0),
-            "allowances": float(salary.allowances or 0),
-            "deductions": float(salary.deductions or 0),
-            "net_pay": float(salary.net_pay or 0),
-            "bank_name": salary.bank_name,
-            "account_number": salary.account_number,
-            "ifsc_code": salary.ifsc_code,
-            "upi_id": salary.upi_id,
-        },
+        "salary": _build_salary_response(
+            salary,
+            da=da,
+            shift_allowance=shift_allowance,
+            ot=ot,
+            incentives=incentives,
+            lop=lop,
+            statutory_deductions=statutory_deductions,
+        ),
     }
 
 

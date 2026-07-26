@@ -17,7 +17,13 @@ export interface StaffSummary {
 
 export interface StaffSalary {
   basic: number
+  da?: number
   hra: number
+  shift_allowance?: number
+  ot?: number
+  incentives?: number
+  lop?: number
+  statutory_deductions?: number
   allowances: number
   deductions: number
   net_pay: number

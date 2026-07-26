@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import BankPaymentSettings from '../branch-director/BankPaymentSettings'
 import BranchDirectorOverviewDashboard from '../overview/BranchDirectorOverviewDashboard'
@@ -95,6 +96,7 @@ const emptyForm = {
 
 export default function BranchManagement() {
   const { user, token } = useAuth()
+  const navigate = useNavigate()
   const [branches, setBranches] = useState<Branch[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -845,10 +847,16 @@ export default function BranchManagement() {
                     <td className="py-4 px-4">
                       <div className="flex justify-end gap-2 flex-wrap">
                         <button
-                          onClick={() => onViewBranch(b, 'overview')}
+                          onClick={() => {
+                            if (isSuperAdmin) {
+                              navigate(`/branch-details/${b.id}`)
+                              return
+                            }
+                            onViewBranch(b, 'overview')
+                          }}
                           className="px-4 py-2 rounded-lg bg-slate-500 text-white font-bold hover:bg-slate-600 transition-all hover:shadow-lg text-xs"
                         >
-                          🔍 Details
+                          {isSuperAdmin ? '🔍 View Branch Details' : '🔍 Details'}
                         </button>
                         <button
                           onClick={() => onEdit(b)}

@@ -36,8 +36,16 @@ type ActionMode = 'add' | 'consume' | 'edit'
 
 const columnHelper = createColumnHelper<InventoryItem>()
 
-export default function InventoryManagementModule() {
+interface InventoryManagementModuleProps {
+  branchId?: number
+}
+
+export default function InventoryManagementModule({ branchId }: InventoryManagementModuleProps) {
   const { user } = useAuth()
+  const forcedBranchId = Number(branchId)
+  const effectiveBranchId = Number.isFinite(forcedBranchId) && forcedBranchId > 0
+    ? forcedBranchId
+    : (user?.branch_id ? Number(user.branch_id) : undefined)
   const [activeTab, setActiveTab] = useState<TopTab>('Dashboard')
   const [items, setItems] = useState<InventoryItem[]>([])
   const [equipment, setEquipment] = useState<EquipmentItem[]>([])
@@ -45,6 +53,7 @@ export default function InventoryManagementModule() {
   const [alerts, setAlerts] = useState<AlertsPayload | null>(null)
   const [history, setHistory] = useState<ConsumptionHistoryRow[]>([])
   const [loading, setLoading] = useState(false)
+  const [inventoryLoadError, setInventoryLoadError] = useState(false)
 
   const [showItemForm, setShowItemForm] = useState(false)
   const [showSupplierForm, setShowSupplierForm] = useState(false)
@@ -59,42 +68,50 @@ export default function InventoryManagementModule() {
   const isManager = user?.role === 'branch_admin' || user?.role === 'branch_director' || user?.role === 'super_admin'
 
   const loadSuppliers = useCallback(async () => {
-    const rows = await listSuppliers()
+    const rows = await listSuppliers(effectiveBranchId)
     setSuppliers(rows)
-  }, [])
+  }, [effectiveBranchId])
 
   const loadAlerts = useCallback(async () => {
-    const payload = await getInventoryAlerts()
+    const payload = await getInventoryAlerts(effectiveBranchId)
     setAlerts(payload)
-  }, [])
+  }, [effectiveBranchId])
 
   const loadHistory = useCallback(async () => {
-    const rows = await getConsumptionHistory()
+    const rows = await getConsumptionHistory(effectiveBranchId)
     setHistory(rows)
-  }, [])
+  }, [effectiveBranchId])
 
   const loadDepartmentData = useCallback(async (department: Department) => {
     setLoading(true)
     try {
       const [itemRows, equipmentRows] = await Promise.all([
-        listInventoryByDepartment(department),
-        listEquipment(department),
+        listInventoryByDepartment(department, effectiveBranchId),
+        listEquipment(department, effectiveBranchId),
       ])
       setItems(itemRows)
       setEquipment(equipmentRows)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [effectiveBranchId])
 
   useEffect(() => {
     if (!isManager) {
       return
     }
 
-    loadSuppliers().catch(() => toast.error('Failed to load suppliers'))
-    loadAlerts().catch(() => toast.error('Failed to load inventory alerts'))
-    loadHistory().catch(() => toast.error('Failed to load consumption history'))
+    const loadDashboardData = async () => {
+      setInventoryLoadError(false)
+      const results = await Promise.allSettled([
+        loadSuppliers(),
+        loadAlerts(),
+        loadHistory(),
+      ])
+      setInventoryLoadError(results.some((result) => result.status === 'rejected'))
+    }
+
+    void loadDashboardData()
   }, [isManager, loadAlerts, loadHistory, loadSuppliers])
 
   useEffect(() => {
@@ -203,10 +220,10 @@ export default function InventoryManagementModule() {
     if (!selectedItem) return
     try {
       if (actionMode === 'add') {
-        await addStock(selectedItem.id, actionQty, actionNotes)
+        await addStock(selectedItem.id, actionQty, actionNotes, effectiveBranchId)
         toast.success('Stock added')
       } else {
-        await consumeStock(selectedItem.id, actionQty, actionNotes)
+        await consumeStock(selectedItem.id, actionQty, actionNotes, effectiveBranchId)
         toast.success('Stock consumed')
       }
       if (DEPARTMENTS.includes(activeTab as Department)) {
@@ -222,7 +239,7 @@ export default function InventoryManagementModule() {
   async function handleDelete(itemId: number) {
     if (!window.confirm('Delete this item?')) return
     try {
-      await deleteInventoryItem(itemId)
+      await deleteInventoryItem(itemId, effectiveBranchId)
       toast.success('Item deleted')
       if (DEPARTMENTS.includes(activeTab as Department)) {
         await loadDepartmentData(activeTab as Department)
@@ -257,6 +274,12 @@ export default function InventoryManagementModule() {
       </aside>
 
       <section className="col-span-12 md:col-span-9 xl:col-span-10 space-y-4">
+        {inventoryLoadError && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-semibold text-amber-800">Some inventory dashboard data is temporarily unavailable</p>
+            <p className="mt-1 text-xs text-amber-700">The branch inventory view is showing fallback values while unavailable services recover.</p>
+          </div>
+        )}
         {activeTab === 'Dashboard' && (
           <div className="space-y-4">
             <h1 className="text-2xl font-bold text-slate-900">Inventory Alerts & Control Center</h1>
@@ -393,7 +416,7 @@ export default function InventoryManagementModule() {
                               const serviceDate = window.prompt('Service date (YYYY-MM-DD):', new Date().toISOString().slice(0, 10))
                               if (!serviceDate) return
                               const notes = window.prompt('Service notes:', '') || ''
-                              await logEquipmentService(m.id, { service_date: serviceDate, notes })
+                              await logEquipmentService(m.id, { service_date: serviceDate, notes }, effectiveBranchId)
                               toast.success('Service log saved')
                               await loadDepartmentData(activeTab as Department)
                             }}
@@ -436,6 +459,7 @@ export default function InventoryManagementModule() {
       {showItemForm && (
         <ItemFormModal
           department={(DEPARTMENTS.includes(activeTab as Department) ? (activeTab as Department) : 'X-Ray')}
+          branchId={effectiveBranchId}
           suppliers={suppliers}
           item={selectedItem}
           onClose={() => {
@@ -455,6 +479,7 @@ export default function InventoryManagementModule() {
 
       {showSupplierForm && (
         <SupplierModal
+          branchId={effectiveBranchId}
           onClose={() => setShowSupplierForm(false)}
           onSaved={async () => {
             setShowSupplierForm(false)
@@ -465,6 +490,7 @@ export default function InventoryManagementModule() {
 
       {showEquipmentForm && DEPARTMENTS.includes(activeTab as Department) && (
         <EquipmentModal
+          branchId={effectiveBranchId}
           department={activeTab as Department}
           onClose={() => setShowEquipmentForm(false)}
           onSaved={async () => {
@@ -476,6 +502,7 @@ export default function InventoryManagementModule() {
 
       {showAuditForm && (
         <AuditModal
+          branchId={effectiveBranchId}
           items={items}
           onClose={() => setShowAuditForm(false)}
           onSaved={async () => {
@@ -492,12 +519,14 @@ export default function InventoryManagementModule() {
 }
 
 function ItemFormModal({
+  branchId,
   department,
   suppliers,
   item,
   onClose,
   onSaved,
 }: {
+  branchId?: number
   department: Department
   suppliers: Supplier[]
   item: InventoryItem | null
@@ -524,10 +553,10 @@ function ItemFormModal({
         supplier_id: form.supplier_id ? Number(form.supplier_id) : null,
       }
       if (item) {
-        await updateInventoryItem(item.id, payload)
+        await updateInventoryItem(item.id, payload, branchId)
         toast.success('Item updated')
       } else {
-        await createInventoryItem(payload)
+        await createInventoryItem(payload, branchId)
         toast.success('Item created')
       }
       await onSaved()
@@ -565,12 +594,12 @@ function ItemFormModal({
   )
 }
 
-function SupplierModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => Promise<void> }) {
+function SupplierModal({ branchId, onClose, onSaved }: { branchId?: number; onClose: () => void; onSaved: () => Promise<void> }) {
   const [form, setForm] = useState({ name: '', contact_person: '', phone: '', email: '', address: '', gstin: '' })
 
   async function submit() {
     try {
-      await createSupplier(form)
+      await createSupplier(form, branchId)
       toast.success('Supplier created')
       await onSaved()
     } catch (error: any) {
@@ -600,10 +629,12 @@ function SupplierModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
 }
 
 function EquipmentModal({
+  branchId,
   department,
   onClose,
   onSaved,
 }: {
+  branchId?: number
   department: Department
   onClose: () => void
   onSaved: () => Promise<void>
@@ -623,7 +654,7 @@ function EquipmentModal({
 
   async function submit() {
     try {
-      await createEquipment(form)
+      await createEquipment(form, branchId)
       toast.success('Machine saved')
       await onSaved()
     } catch (error: any) {
@@ -656,10 +687,12 @@ function EquipmentModal({
 }
 
 function AuditModal({
+  branchId,
   items,
   onClose,
   onSaved,
 }: {
+  branchId?: number
   items: InventoryItem[]
   onClose: () => void
   onSaved: () => Promise<void>
@@ -675,7 +708,7 @@ function AuditModal({
     }
 
     try {
-      await submitManualAudit({ item_id: Number(itemId), physical_qty: physicalQty, notes })
+      await submitManualAudit({ item_id: Number(itemId), physical_qty: physicalQty, notes }, branchId)
       toast.success('Audit logged')
       await onSaved()
     } catch (error: any) {
