@@ -8,6 +8,7 @@ backend/*.db-shm
 backend/*.db-wal
 
 # Frontend
+node_modules/
 frontend/vaidya-vihar-frontend/node_modules/
 frontend/vaidya-vihar-frontend/build/
 frontend/vaidya-vihar-frontend/dist/
