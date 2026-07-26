@@ -191,7 +191,12 @@ function AutocompleteCell({ value, onChange, fetchOptions, placeholder }: Autoco
   }, [debouncedSearchTerm, fetchOptions])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTypedValue(e.target.value)
+    const newValue = e.target.value
+    setTypedValue(newValue)
+    // Clear suggestion when user modifies text
+    if (newValue.length === 0) {
+      setSuggestion('')
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -221,14 +226,14 @@ function AutocompleteCell({ value, onChange, fetchOptions, placeholder }: Autoco
   }
 
   return (
-    <div className="relative w-full">
-      {/* Gray suggestion text behind the input */}
-      <span className="absolute inset-0 text-gray-400 pointer-events-none whitespace-pre overflow-hidden rounded px-2 py-1 text-sm">
+    <div className="relative w-full h-full">
+      {/* Gray suggestion text behind the input - pixel-perfect alignment */}
+      <span className="absolute inset-0 text-gray-400 pointer-events-none whitespace-pre overflow-hidden rounded px-2 py-1 text-sm font-normal leading-normal">
         {typedValue}
         <span className="text-gray-300">{suggestion}</span>
       </span>
       
-      {/* Actual input field on top */}
+      {/* Actual input field on top - matching styles with span for alignment */}
       <input
         ref={inputRef}
         type="text"
@@ -236,8 +241,9 @@ function AutocompleteCell({ value, onChange, fetchOptions, placeholder }: Autoco
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
-        placeholder={placeholder}
-        className="relative z-10 w-full px-2 py-1 border rounded text-sm bg-transparent text-gray-900 focus:outline-none focus:border-blue-500"
+        spellCheck={false}
+        placeholder=""
+        className="relative z-10 w-full h-full px-2 py-1 border rounded text-sm font-normal leading-normal bg-transparent text-gray-900 focus:outline-none focus:border-blue-500"
       />
     </div>
   )
