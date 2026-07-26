@@ -146,21 +146,22 @@ interface AutocompleteCellProps {
 function AutocompleteCell({ value, onChange, fetchOptions, placeholder }: AutocompleteCellProps) {
   const [typedValue, setTypedValue] = useState(String(value ?? ''))
   const [suggestion, setSuggestion] = useState('')
-  const debouncedSearchTerm = useDebounce(typedValue, 300)
+  const [isFocused, setIsFocused] = useState(false)
+  const debouncedSearchTerm = useDebounce(isFocused ? typedValue : '', 300)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Sync external value when not focused
   useEffect(() => {
-    const currentValue = String(value ?? '')
-    if (currentValue !== typedValue) {
+    if (!isFocused) {
+      const currentValue = String(value ?? '')
       setTypedValue(currentValue)
       setSuggestion('')
     }
-  }, [value])
+  }, [value, isFocused])
 
-  // Fetch suggestions when debounced input changes
+  // Fetch suggestions when debounced input changes and cell is focused
   useEffect(() => {
-    if (debouncedSearchTerm.length === 0) {
+    if (!isFocused || debouncedSearchTerm.length === 0) {
       setSuggestion('')
       return
     }
@@ -188,15 +189,11 @@ function AutocompleteCell({ value, onChange, fetchOptions, placeholder }: Autoco
     }
 
     loadSuggestion()
-  }, [debouncedSearchTerm, fetchOptions])
+  }, [debouncedSearchTerm, isFocused, fetchOptions])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
     setTypedValue(newValue)
-    // Clear suggestion when user modifies text
-    if (newValue.length === 0) {
-      setSuggestion('')
-    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -210,6 +207,8 @@ function AutocompleteCell({ value, onChange, fetchOptions, placeholder }: Autoco
       if (e.key === 'Tab') {
         // Tab should move to next field
         ;(e.target as HTMLInputElement).blur()
+      } else if (e.key === 'Enter') {
+        ;(e.target as HTMLInputElement).blur()
       }
     } else if (e.key === 'Backspace') {
       // Clear suggestion on backspace
@@ -217,7 +216,12 @@ function AutocompleteCell({ value, onChange, fetchOptions, placeholder }: Autoco
     }
   }
 
+  const handleFocus = () => {
+    setIsFocused(true)
+  }
+
   const handleBlur = () => {
+    setIsFocused(false)
     // Save the typed value on blur
     if (typedValue !== String(value ?? '')) {
       onChange(typedValue)
@@ -227,19 +231,22 @@ function AutocompleteCell({ value, onChange, fetchOptions, placeholder }: Autoco
 
   return (
     <div className="relative w-full h-full">
-      {/* Gray suggestion text behind the input - pixel-perfect alignment */}
-      <span className="absolute inset-0 text-gray-400 pointer-events-none whitespace-pre overflow-hidden rounded px-2 py-1 text-sm font-normal leading-normal">
-        {typedValue}
-        <span className="text-gray-300">{suggestion}</span>
-      </span>
+      {/* Gray suggestion text behind the input - ONLY show when focused */}
+      {isFocused && suggestion && (
+        <span className="absolute inset-0 text-gray-400 pointer-events-none whitespace-pre overflow-hidden rounded px-2 py-1 text-sm font-normal leading-normal">
+          {typedValue}
+          <span className="text-gray-300">{suggestion}</span>
+        </span>
+      )}
       
-      {/* Actual input field on top - matching styles with span for alignment */}
+      {/* Actual input field on top */}
       <input
         ref={inputRef}
         type="text"
         value={typedValue}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
+        onFocus={handleFocus}
         onBlur={handleBlur}
         spellCheck={false}
         placeholder=""
