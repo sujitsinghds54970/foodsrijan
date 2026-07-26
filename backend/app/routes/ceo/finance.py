@@ -1,4 +1,5 @@
-from datetime import datetime
+from collections import defaultdict
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -6,6 +7,13 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.database import engine, get_db
+from app.models import Branch
+from app.models.branch_lis import (
+    InstrumentCalibration as LISInstrumentCalibration,
+    OrderQueue as LISOrderQueue,
+    QCResult as LISQCResult,
+    Sample as LISSample,
+)
 from app.utils.auth_system import auth_guard
 
 router = APIRouter(
@@ -448,5 +456,181 @@ def get_finance_what_if_simulator(
             "revenue_impact": "Demand simulation driven by branch opening assumptions and historical city growth.",
             "cost_impact": "Modeled opex/payout uplift from staffing, rent, utilities, and discount effects.",
             "net_profit_impact": "Projected incremental P&L after discount and launch period effects.",
+        },
+    }
+
+
+def _lis_qc_status_label(failure_rate: float) -> str:
+    if failure_rate <= 2:
+        return "Good"
+    if failure_rate <= 7:
+        return "Watch"
+    return "Critical"
+
+
+def _lis_sample_pending(sample: LISSample) -> bool:
+    return sample.status not in {"Reported", "Rejected"}
+
+
+def _lis_average_tat_minutes(samples: list[LISSample]) -> float:
+    durations: list[float] = []
+    for sample in samples:
+        if sample.started_at and sample.completed_at:
+            durations.append((sample.completed_at - sample.started_at).total_seconds() / 60.0)
+        elif sample.registered_at and sample.reported_at:
+            durations.append((sample.reported_at - sample.registered_at).total_seconds() / 60.0)
+    if not durations:
+        return 0.0
+    return round(sum(durations) / len(durations), 2)
+
+
+@router.get("/lis-operations-overview")
+def get_finance_lis_operations_overview(db: Session = Depends(get_db)):
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    qc_start = now - timedelta(days=30)
+
+    branches = db.query(Branch).order_by(Branch.name.asc()).all()
+    orders = db.query(LISOrderQueue).all()
+    samples = db.query(LISSample).all()
+    qc_rows = db.query(LISQCResult).filter(LISQCResult.created_at >= qc_start).all()
+    calibrations = db.query(LISInstrumentCalibration).all()
+
+    orders_by_branch: dict[int, list[LISOrderQueue]] = defaultdict(list)
+    samples_by_branch: dict[int, list[LISSample]] = defaultdict(list)
+    qc_by_branch: dict[int, list[LISQCResult]] = defaultdict(list)
+    calibration_by_branch: dict[int, list[LISInstrumentCalibration]] = defaultdict(list)
+
+    for row in orders:
+        orders_by_branch[int(row.branch_id)].append(row)
+    for row in samples:
+        samples_by_branch[int(row.branch_id)].append(row)
+    for row in qc_rows:
+        qc_by_branch[int(row.branch_id)].append(row)
+    for row in calibrations:
+        calibration_by_branch[int(row.branch_id)].append(row)
+
+    branch_metrics: list[dict[str, Any]] = []
+    smart_alerts: list[dict[str, str]] = []
+    branch_overdue_count = 0
+
+    for branch in branches:
+        branch_orders = orders_by_branch.get(branch.id, [])
+        branch_samples = samples_by_branch.get(branch.id, [])
+        branch_qc = qc_by_branch.get(branch.id, [])
+        branch_calibrations = calibration_by_branch.get(branch.id, [])
+
+        today_test_volume = sum(1 for row in branch_orders if row.created_at and row.created_at >= today_start)
+        pending_samples = [row for row in branch_samples if _lis_sample_pending(row)]
+        reported_samples = sum(1 for row in branch_samples if row.status == "Reported")
+        rejected_count = sum(1 for row in branch_samples if row.status == "Rejected")
+        sample_rejection_rate = round((rejected_count / len(branch_samples) * 100.0), 2) if branch_samples else 0.0
+        average_tat_minutes = _lis_average_tat_minutes(branch_samples)
+
+        qc_failures = sum(1 for row in branch_qc if (row.qc_status or "").lower() == "failed")
+        qc_failure_rate = round((qc_failures / len(branch_qc) * 100.0), 2) if branch_qc else 0.0
+        qc_status = _lis_qc_status_label(qc_failure_rate)
+
+        overdue_calibrations = [
+            row
+            for row in branch_calibrations
+            if (row.next_due_at and row.next_due_at < now) or (row.calibration_status or "").strip().lower() in {"due", "overdue"}
+        ]
+        if overdue_calibrations:
+            branch_overdue_count += 1
+
+        health_score = 100
+        health_score -= min(20, int(len(pending_samples) * 0.8))
+        health_score -= min(20, int(max(average_tat_minutes - 180.0, 0.0) / 30))
+        health_score -= min(20, int(qc_failure_rate * 1.4))
+        health_score -= min(20, int(sample_rejection_rate * 1.2))
+        if overdue_calibrations:
+            health_score -= min(15, len(overdue_calibrations) * 3)
+        health_score = max(0, min(100, health_score))
+
+        branch_metrics.append(
+            {
+                "branch_id": branch.id,
+                "branch_name": branch.name,
+                "today_test_volume": today_test_volume,
+                "reported_samples": reported_samples,
+                "pending_samples": len(pending_samples),
+                "average_tat_minutes": average_tat_minutes,
+                "qc_failure_rate": qc_failure_rate,
+                "qc_status": qc_status,
+                "sample_rejection_rate": sample_rejection_rate,
+                "health_score": health_score,
+            }
+        )
+
+        if len(pending_samples) >= 25:
+            smart_alerts.append(
+                {
+                    "severity": "high",
+                    "title": f"{branch.name}: pending queue pressure",
+                    "message": f"{len(pending_samples)} samples are pending in LIS workflow.",
+                }
+            )
+        if qc_failure_rate > 7:
+            smart_alerts.append(
+                {
+                    "severity": "high",
+                    "title": f"{branch.name}: QC risk escalation",
+                    "message": f"QC failure rate is {qc_failure_rate:.1f}% over the last 30 days.",
+                }
+            )
+        if overdue_calibrations:
+            smart_alerts.append(
+                {
+                    "severity": "medium",
+                    "title": f"{branch.name}: calibration overdue",
+                    "message": f"{len(overdue_calibrations)} analyzer calibration entries need action.",
+                }
+            )
+
+    all_samples = samples
+    all_qc_rows = qc_rows
+    network_today_test_volume = sum(item["today_test_volume"] for item in branch_metrics)
+    network_pending_tests = sum(item["pending_samples"] for item in branch_metrics)
+    network_rejected = sum(1 for row in all_samples if row.status == "Rejected")
+    network_rejection_rate = round((network_rejected / len(all_samples) * 100.0), 2) if all_samples else 0.0
+    network_avg_tat = _lis_average_tat_minutes(all_samples)
+    network_qc_failures = sum(1 for row in all_qc_rows if (row.qc_status or "").lower() == "failed")
+    network_qc_failure_rate = round((network_qc_failures / len(all_qc_rows) * 100.0), 2) if all_qc_rows else 0.0
+
+    readiness_score = 100
+    readiness_score -= min(25, int(network_pending_tests * 0.6))
+    readiness_score -= min(25, int(network_qc_failure_rate * 1.4))
+    readiness_score -= min(20, branch_overdue_count * 5)
+    readiness_score -= min(15, int(max(network_avg_tat - 180.0, 0.0) / 40))
+    readiness_score = max(0, min(100, readiness_score))
+
+    return {
+        "is_mock": False,
+        "generated_at": now.isoformat(),
+        "network_summary": {
+            "today_test_volume": network_today_test_volume,
+            "average_tat_minutes": network_avg_tat,
+            "pending_tests": network_pending_tests,
+            "sample_rejection_rate": network_rejection_rate,
+            "qc_status": _lis_qc_status_label(network_qc_failure_rate),
+            "readiness_score": readiness_score,
+        },
+        "branch_metrics": branch_metrics,
+        "smart_alerts": smart_alerts[:12],
+        "table_reference": {
+            "branches": len(branches),
+            "lis_orders": len(orders),
+            "lis_samples": len(samples),
+            "qc_results_30d": len(qc_rows),
+            "calibration_logs": len(calibrations),
+            "generated_at": now.isoformat(),
+        },
+        "future_data_mapping": {
+            "today_test_volume": "branch_lis_order_queue created today",
+            "average_tat_minutes": "branch_lis_samples lifecycle timestamps",
+            "pending_tests": "branch_lis_samples statuses not Reported/Rejected",
+            "qc_status": "branch_lis_qc_results failure trend",
+            "readiness_score": "composite of pending, TAT, QC and calibration exposure",
         },
     }

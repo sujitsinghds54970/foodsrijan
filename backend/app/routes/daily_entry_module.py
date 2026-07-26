@@ -29,6 +29,7 @@ from app.utils.auth_system import get_current_user
 from app.utils.schema_compat import ensure_staff_daily_ops_column
 from app.services.qrcode_service import generate_qr_code
 from app.services.finance_integration import ensure_daily_entry_invoice, ensure_daily_entry_revenue
+from app.routes.branch_lis import enqueue_daily_ops_entry_to_lis
 from app.services.patient_portal_notify import notify_on_daily_entry_completion
 from fastapi.responses import FileResponse, StreamingResponse
 import csv
@@ -484,6 +485,12 @@ async def create_daily_entry(
 
             ensure_daily_entry_invoice(db, entry=db_entry, created_by=current_user.id)
             ensure_daily_entry_revenue(db, entry=db_entry, created_by=current_user.id)
+            enqueue_daily_ops_entry_to_lis(
+                db,
+                daily_entry_id=db_entry.id,
+                branch_id=branch_id,
+                created_by=current_user.id,
+            )
             db.commit()
             
             print(f"[CREATE ENTRY] Success! Entry ID: {db_entry.id}, Patient ID: {db_entry.auto_patient_id}")
@@ -541,6 +548,15 @@ async def create_daily_entry(
                     db.add(db_entry)
                     db.commit()
                     db.refresh(db_entry)
+                    ensure_daily_entry_invoice(db, entry=db_entry, created_by=current_user.id)
+                    ensure_daily_entry_revenue(db, entry=db_entry, created_by=current_user.id)
+                    enqueue_daily_ops_entry_to_lis(
+                        db,
+                        daily_entry_id=db_entry.id,
+                        branch_id=branch_id,
+                        created_by=current_user.id,
+                    )
+                    db.commit()
                     print(f"[CREATE ENTRY] Fallback success! Entry ID: {db_entry.id}, Patient ID: {db_entry.auto_patient_id}")
                     return db_entry
                 except Exception as fallback_error:

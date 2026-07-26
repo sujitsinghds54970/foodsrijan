@@ -1,140 +1,19 @@
-# Ignore Python caches and virtualenvs
-__pycache__/
-*.py[cod]
-*.so
-.venv/
-venv/
+# Backend
+backend/**pycache**/
+backend/.venv/
 backend/venv/
+backend/uploads/
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
 
-# Environment files
-.env
-.env.local
-
-# Node
-node_modules/
+# Frontend
 frontend/vaidya-vihar-frontend/node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Build outputs
-build/
-dist/
 frontend/vaidya-vihar-frontend/build/
-
-# Logs
-*.log
-
-# macOS
-.DS_Store
-
-# IDEs
-.vscode/
-.idea/
-
-# Testing / coverage
-.pytest_cache/
-.coverage
-coverage/
-
-# Python packaging
-*.egg-info/
-
-# Database files (keep but don't commit)
-*.db
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-.venv/
-venv/
-ENV/
-env/
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-*.db-wal
-*.db-shm
-vaidya_vihar.db
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Logs
-*.log
-logs/
-*.log.*
-
-# Node
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# Frontend build
-frontend/vaidya-vihar-frontend/build/
-frontend/vaidya-vihar-frontend/.next/
-frontend/vaidya-vihar-frontend/out/
-
-# Temporary files
-*.tmp
-*.temp
-*.bak
-*.swp
-.cache/
-
-# Deployment scripts (keep only essential ones)
-*.exp
-deployment_log.txt
-final_deployment.log
-
-# Docker
-.dockerignore
+frontend/vaidya-vihar-frontend/dist/
+frontend/vaidya-vihar-frontend/.env
 
 # OS
-Thumbs.db
 .DS_Store
 
-# Uploads
-backend/uploads/*
-!backend/uploads/.gitkeep
-
-# SSL Certificates
-nginx/ssl/*.pem
-nginx/ssl/*.key
-nginx/ssl/*.crt
-
-# Backup files
-*.backup
-backup_*.sql
+text

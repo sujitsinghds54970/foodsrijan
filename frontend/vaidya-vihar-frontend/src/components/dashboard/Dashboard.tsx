@@ -9,8 +9,8 @@ import StaffManagement from '../staff/StaffManagementModule'
 import InventoryManagement from './InventoryManagement'
 import Analytics from './Analytics'
 import Reports from './Reports'
-import LIS from './LIS'
-import Payments from './Payments'
+import BranchLISDashboard from '../branch/BranchLISDashboard'
+import BranchPaymentsDashboard from '../branch/BranchPaymentsDashboard'
 import Accounting from './Accounting'
 import Accounts from './Accounts'
 import HR from './HR'
@@ -281,9 +281,9 @@ export default function Dashboard() {
       case 'reports':
         return <Reports />
       case 'lis':
-        return <LIS activeTab={activeTab} />
+        return <BranchLISDashboard />
       case 'payments':
-        return <Payments activeTab={activeTab} />
+        return <BranchPaymentsDashboard />
       case 'accounting':
         return <Accounting activeTab={activeTab} />
       case 'accounts':

@@ -421,6 +421,25 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
     return fee + (fee * tax) / 100
   }, [parseNumber])
 
+  const pushEntryToLISQueue = useCallback(async (entry: DailyEntry) => {
+    try {
+      await axios.post(
+        `${API_BASE}/api/lis/orders`,
+        {
+          daily_entry_id: entry.id,
+          patient_name: entry.patient_name,
+          patient_code: entry.auto_patient_id,
+          doctor_name: entry.referred_doctor || null,
+        },
+        requestConfig
+      )
+    } catch (err: any) {
+      const statusCode = Number(err?.response?.status || 0)
+      if (statusCode === 409) return
+      toast.error(getErrorMessage(err, 'Daily entry saved, but LIS queue sync failed'))
+    }
+  }, [API_BASE, requestConfig, getErrorMessage])
+
   const showSingleUPIWarning = () => {
     if (upiWarningShownRef.current) return
     upiWarningShownRef.current = true
@@ -745,7 +764,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
     if (isAdding) return
     setIsAdding(true)
     try {
-      await axios.post(
+      const { data: createdEntry } = await axios.post<DailyEntry>(
         `${API_BASE}/api/daily-entries`,
         {
           patient_name: 'New Patient',
@@ -762,6 +781,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
         },
         requestConfig
       )
+      await pushEntryToLISQueue(createdEntry)
       toast.success('New entry added')
       restoreScrollYRef.current = window.scrollY
       restoreContainerScrollTopRef.current = scrollContainerRef.current?.scrollTop ?? null

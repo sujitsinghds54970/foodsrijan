@@ -315,3 +315,42 @@ class InsuranceClaim(Base):
     patient = relationship("Patient")
     invoice = relationship("Invoice")
 
+
+class ReconciliationLog(Base):
+    """Audit trail for reconciliation runs"""
+    __tablename__ = "reconciliation_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    triggered_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    run_type = Column(String, default="bulk")
+    total_transactions = Column(Integer, default=0)
+    reconciled_count = Column(Integer, default=0)
+    pending_count = Column(Integer, default=0)
+    discrepancy_count = Column(Integer, default=0)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    branch = relationship("Branch")
+    triggered_by = relationship("User")
+
+
+class PaymentReminder(Base):
+    """Reminder audit trail for SMS/email payment nudges"""
+    __tablename__ = "payment_reminders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
+    reminder_type = Column(String, default="due_24h")
+    channel = Column(String, nullable=False)
+    status = Column(String, default="queued")
+    scheduled_for = Column(DateTime, nullable=False)
+    sent_at = Column(DateTime, nullable=True)
+    message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    branch = relationship("Branch")
+    patient = relationship("Patient")
+    invoice = relationship("Invoice")

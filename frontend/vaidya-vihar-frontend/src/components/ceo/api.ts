@@ -807,6 +807,45 @@ export interface CeoFinanceWhatIfSimulatorResponse {
   future_data_mapping: Record<string, string>
 }
 
+export interface CeoFinanceLisOperationsOverviewResponse {
+  is_mock: boolean
+  generated_at: string
+  network_summary: {
+    today_test_volume: number
+    average_tat_minutes: number
+    pending_tests: number
+    sample_rejection_rate: number
+    qc_status: string
+    readiness_score: number
+  }
+  branch_metrics: Array<{
+    branch_id: number
+    branch_name: string
+    today_test_volume: number
+    reported_samples: number
+    pending_samples: number
+    average_tat_minutes: number
+    qc_failure_rate: number
+    qc_status: string
+    sample_rejection_rate: number
+    health_score: number
+  }>
+  smart_alerts: Array<{
+    severity: 'high' | 'medium' | 'low' | string
+    title: string
+    message: string
+  }>
+  table_reference: {
+    branches: number
+    lis_orders: number
+    lis_samples: number
+    qc_results_30d: number
+    calibration_logs: number
+    generated_at: string
+  }
+  future_data_mapping: Record<string, string>
+}
+
 export interface CeoDoctorNetworkHealthResponse {
   is_mock: boolean
   score: number
@@ -2803,6 +2842,11 @@ export async function getCeoFinanceBranchProfitabilityHeatmap(): Promise<CeoFina
 
 export async function getCeoFinanceWhatIfSimulation(params: { city: string; discount_percent: number }): Promise<CeoFinanceWhatIfSimulatorResponse> {
   const response = await axios.get(`${API_BASE}/api/ceo/finance/what-if-simulator`, { params })
+  return response.data
+}
+
+export async function getCeoFinanceLisOperationsOverview(): Promise<CeoFinanceLisOperationsOverviewResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/finance/lis-operations-overview`)
   return response.data
 }
 

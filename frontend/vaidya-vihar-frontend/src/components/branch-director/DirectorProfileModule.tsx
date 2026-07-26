@@ -14,8 +14,9 @@ import toast from 'react-hot-toast'
 import QRCode from 'react-qr-code'
 
 import { useAuth } from '../../contexts/AuthContext'
+import BranchPaymentsDashboard from './BranchPaymentsDashboard'
 
-type DirectorTab = 'profile' | 'staff' | 'attendance' | 'leave' | 'reports'
+type DirectorTab = 'profile' | 'staff' | 'attendance' | 'leave' | 'reports' | 'payments'
 
 type DirectorProfile = {
   user_id: number
@@ -638,6 +639,7 @@ export default function DirectorProfileModule() {
               { key: 'staff', label: 'Staff Management' },
               { key: 'attendance', label: 'Attendance' },
               { key: 'leave', label: 'Leave Requests' },
+              { key: 'payments', label: 'Payments' },
               { key: 'reports', label: 'Reports' },
             ].map(tab => (
               <button
@@ -1230,6 +1232,12 @@ export default function DirectorProfileModule() {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'payments' && (
+            <div className="premium-card p-6">
+              <BranchPaymentsDashboard />
             </div>
           )}
         </section>

@@ -28,7 +28,12 @@ from app.models.lis import (
     LabTestMaster, LISReportTemplate, GeneratedReport,
     QualityControl, InstrumentCalibration
 )
-from app.models.payment import Payment, Refund
+from app.models.branch_lis import (
+    TestCatalog, TestPanel, OrderQueue, Sample as BranchLISSample,
+    Worklist, InstrumentCalibration as BranchLISInstrumentCalibration, QCResult,
+    ProficiencyTestRun, LISReportArchive, WestgardRule
+)
+from app.models.payment import InsuranceClaim, Payment, PaymentReminder, ReconciliationLog, Refund
 from app.models.accounting import ExpenseEntry, ExpenseCategory, Transaction, Account
 from app.models.hr import (
     LeaveRequest,

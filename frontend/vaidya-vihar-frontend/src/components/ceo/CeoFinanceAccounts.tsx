@@ -26,6 +26,7 @@ import {
   CeoFinanceCostControlResponse,
   CeoFinanceDoctorReferralFinancialsResponse,
   CeoFinanceHealthScoreResponse,
+  CeoFinanceLisOperationsOverviewResponse,
   CeoFinancePredictiveAnalyticsResponse,
   CeoFinanceProfitabilityRevenueResponse,
   CeoFinanceReceivablesCycleResponse,
@@ -37,6 +38,7 @@ import {
   getCeoFinanceCostControl,
   getCeoFinanceDoctorReferralFinancials,
   getCeoFinanceHealthScore,
+  getCeoFinanceLisOperationsOverview,
   getCeoFinancePredictiveAnalytics,
   getCeoFinanceProfitabilityRevenue,
   getCeoFinanceReceivablesCycle,
@@ -67,6 +69,7 @@ const CeoFinanceAccounts = () => {
   const [doctorReferral, setDoctorReferral] = useState<CeoFinanceDoctorReferralFinancialsResponse | null>(null)
   const [cfoBriefing, setCfoBriefing] = useState<CeoFinanceCfoBriefingResponse | null>(null)
   const [branchHeatmap, setBranchHeatmap] = useState<CeoFinanceBranchProfitabilityHeatmapResponse | null>(null)
+  const [lisOverview, setLisOverview] = useState<CeoFinanceLisOperationsOverviewResponse | null>(null)
   const [whatIfResult, setWhatIfResult] = useState<CeoFinanceWhatIfSimulatorResponse | null>(null)
   const [whatIfCity, setWhatIfCity] = useState('Pune')
   const [whatIfDiscount, setWhatIfDiscount] = useState(5)
@@ -87,6 +90,7 @@ const CeoFinanceAccounts = () => {
           doctorReferralResp,
           cfoBriefingResp,
           branchHeatmapResp,
+          lisOverviewResp,
         ] = await Promise.all([
           getCeoFinanceHealthScore(),
           getCeoFinanceCashLiquidity(),
@@ -98,6 +102,7 @@ const CeoFinanceAccounts = () => {
           getCeoFinanceDoctorReferralFinancials(),
           getCeoFinanceCfoBriefing(),
           getCeoFinanceBranchProfitabilityHeatmap(),
+          getCeoFinanceLisOperationsOverview(),
         ])
         setHealth(healthResp)
         setLiquidity(liquidityResp)
@@ -109,6 +114,7 @@ const CeoFinanceAccounts = () => {
         setDoctorReferral(doctorReferralResp)
         setCfoBriefing(cfoBriefingResp)
         setBranchHeatmap(branchHeatmapResp)
+        setLisOverview(lisOverviewResp)
       } catch (error: any) {
         toast.error(error?.response?.data?.detail || 'Unable to load Finance & Accounts dashboard')
       } finally {
@@ -172,6 +178,84 @@ const CeoFinanceAccounts = () => {
                 <p className="font-bold text-slate-800">{item.value}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-xl font-bold text-slate-900">LIS Operations Analytics (Read-only Command Feed)</h2>
+        <div className="grid grid-cols-12 gap-4">
+          <div className={`${CARD_CLASS} col-span-12 md:col-span-3`}>
+            <p className="text-xs uppercase text-slate-500">Today&apos;s Test Volume</p>
+            <p className="mt-2 text-3xl font-black text-slate-900">{lisOverview?.network_summary.today_test_volume || 0}</p>
+          </div>
+          <div className={`${CARD_CLASS} col-span-12 md:col-span-3`}>
+            <p className="text-xs uppercase text-slate-500">Average TAT</p>
+            <p className="mt-2 text-3xl font-black text-indigo-700">{Number(lisOverview?.network_summary.average_tat_minutes || 0).toFixed(1)} min</p>
+          </div>
+          <div className={`${CARD_CLASS} col-span-12 md:col-span-3`}>
+            <p className="text-xs uppercase text-slate-500">Pending Tests</p>
+            <p className="mt-2 text-3xl font-black text-amber-700">{lisOverview?.network_summary.pending_tests || 0}</p>
+          </div>
+          <div className={`${CARD_CLASS} col-span-12 md:col-span-3`}>
+            <p className="text-xs uppercase text-slate-500">Lab Readiness Score</p>
+            <p className="mt-2 text-3xl font-black" style={{ color: getScoreColor(lisOverview?.network_summary.readiness_score || 0) }}>
+              {lisOverview?.network_summary.readiness_score || 0}
+            </p>
+          </div>
+
+          {(lisOverview?.smart_alerts || []).length > 0 && (
+            <div className="col-span-12 rounded-xl border border-rose-200 bg-rose-50 p-4">
+              <p className="text-sm font-semibold text-rose-700">Smart LIS Alerts</p>
+              <div className="mt-2 space-y-2">
+                {(lisOverview?.smart_alerts || []).slice(0, 4).map((alert, idx) => (
+                  <div key={`${alert.title}-${idx}`} className="rounded-md border border-rose-100 bg-white px-3 py-2 text-sm">
+                    <p className="font-semibold text-rose-700">{alert.title}</p>
+                    <p className="text-slate-700">{alert.message}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className={`${CARD_CLASS} col-span-12`}>
+            <p className="text-sm font-semibold text-slate-700">Branch LIS Metrics (CEO Read-only View)</p>
+            <div className="mt-3 overflow-x-auto rounded-md border border-slate-200">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-600">
+                  <tr>
+                    <th className="px-3 py-2">Branch</th>
+                    <th className="px-3 py-2">Volume</th>
+                    <th className="px-3 py-2">Pending</th>
+                    <th className="px-3 py-2">Avg TAT</th>
+                    <th className="px-3 py-2">QC Status</th>
+                    <th className="px-3 py-2">Rejection Rate</th>
+                    <th className="px-3 py-2">Health</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(lisOverview?.branch_metrics || []).map((row) => (
+                    <tr key={row.branch_id} className="border-t border-slate-100">
+                      <td className="px-3 py-2 font-semibold text-slate-800">{row.branch_name}</td>
+                      <td className="px-3 py-2">{row.today_test_volume}</td>
+                      <td className="px-3 py-2">{row.pending_samples}</td>
+                      <td className="px-3 py-2">{Number(row.average_tat_minutes || 0).toFixed(1)} min</td>
+                      <td className="px-3 py-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          row.qc_status === 'Good' ? 'bg-emerald-100 text-emerald-700' :
+                            row.qc_status === 'Watch' ? 'bg-amber-100 text-amber-700' :
+                              'bg-rose-100 text-rose-700'
+                        }`}>
+                          {row.qc_status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">{Number(row.sample_rejection_rate || 0).toFixed(1)}%</td>
+                      <td className="px-3 py-2 font-bold" style={{ color: getScoreColor(row.health_score || 0) }}>{row.health_score}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>

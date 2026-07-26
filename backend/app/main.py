@@ -24,7 +24,7 @@ from app.routes.activity_logs import router as activity_logs_router
 from app.routes.payment_routes import router as payment_router
 from app.routes.accounting_routes import router as accounting_router
 from app.routes.hr_routes import router as hr_router
-from app.routes.lis_routes import router as lis_router
+from app.routes.branch_lis import router as branch_lis_router
 from app.routes.patient_portal_routes import router as patient_portal_router
 from app.routes.doctor_portal_routes import router as doctor_portal_router
 from app.routes.doctor_portal_api import router as doctor_portal_api_router
@@ -53,6 +53,11 @@ from app.routes.tasks import router as tasks_router
 from app.routes.ceo import router as ceo_router
 from app.routes.public import router as public_router
 from app.routes.search import router as search_router
+from app.routes.branch_payments import (
+    router as branch_payments_router,
+    start_branch_payment_scheduler,
+    stop_branch_payment_scheduler,
+)
 from app.utils.auth_system import require_role
 
 # Create FastAPI app
@@ -119,7 +124,7 @@ app.include_router(legacy_compat_router, prefix="", tags=["Legacy Compatibility"
 app.include_router(payment_router, prefix="/api/payments", tags=["Payments"])
 app.include_router(accounting_router, prefix="/api/accounting", tags=["Accounting"])
 app.include_router(hr_router, prefix="/api/hr", tags=["HR & Payroll"])
-app.include_router(lis_router, prefix="/api/lis", tags=["LIS"])
+app.include_router(branch_lis_router, tags=["Branch LIS"])
 app.include_router(patient_portal_router, prefix="/api/patient-portal", tags=["Patient Portal"])
 app.include_router(doctor_portal_router, prefix="/api/doctor-portal", tags=["Doctor Portal"], dependencies=[Depends(require_role(["doctor"]))])
 app.include_router(doctor_portal_api_router, prefix="/api/doctor", tags=["Doctor Portal API"])
@@ -144,6 +149,17 @@ app.include_router(tasks_router, prefix="/api", tags=["Task Management"])
 app.include_router(ceo_router, prefix="/api", tags=["CEO Security"])
 app.include_router(public_router, prefix="/api", tags=["Public"])
 app.include_router(search_router, tags=["Search/Autocomplete"])
+app.include_router(branch_payments_router, tags=["Branch Payments Dashboard"])
+
+
+@app.on_event("startup")
+async def start_branch_payments_jobs():
+    start_branch_payment_scheduler()
+
+
+@app.on_event("shutdown")
+async def stop_branch_payments_jobs():
+    stop_branch_payment_scheduler()
 
 @app.get("/")
 async def root():
