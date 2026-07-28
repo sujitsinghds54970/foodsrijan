@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta
 import secrets
 import string
+import traceback
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, desc, text
+from sqlalchemy import and_, desc, func, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -38,6 +39,60 @@ def _ensure_branch_notifications_table(db: Session) -> None:
         )
     )
     db.execute(text("CREATE INDEX IF NOT EXISTS ix_branch_notifications_branch_id ON branch_notifications(branch_id)"))
+
+
+def _ensure_branch_schema(db: Session) -> None:
+    # Keep the branch module self-healing after a schema reset.
+    from app.database import Base
+
+    Base.metadata.create_all(bind=db.get_bind(), tables=[Branch.__table__, User.__table__, Modality.__table__, BranchNotification.__table__])
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS location VARCHAR(200) NOT NULL DEFAULT ''"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT ''"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS city VARCHAR(100) NOT NULL DEFAULT ''"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS state VARCHAR(100) NOT NULL DEFAULT ''"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS pincode VARCHAR(10) NOT NULL DEFAULT ''"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS phone VARCHAR(15) NOT NULL DEFAULT ''"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS email VARCHAR(100) NOT NULL DEFAULT ''"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS license_number VARCHAR(100)"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS branch_code VARCHAR(20)"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS opening_hours VARCHAR(500)"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS facilities TEXT"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS director_photo_url TEXT"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS logo_url TEXT"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS director_age VARCHAR(50)"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS director_credentials_username VARCHAR(100)"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS director_credentials_password VARCHAR(255)"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS established_date TIMESTAMP"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW()"))
+    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW()"))
+    db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_branches_branch_code ON branches(branch_code)"))
+    db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_branches_license_number ON branches(license_number)"))
+
+
+def _ensure_main_branch(db: Session) -> Branch:
+    branch = db.query(Branch).filter(Branch.id == 1).first()
+    if branch:
+        return branch
+
+    branch = Branch(
+        id=1,
+        name="Main Branch",
+        location="Bhabua",
+        address="Near Civil Court, Bhabua",
+        city="Bhabua",
+        state="Bihar",
+        pincode="821101",
+        phone="+91-9876543210",
+        email="main@vaidyavihar.com",
+        branch_code="MAIN001",
+        is_active=True,
+    )
+    db.add(branch)
+    db.flush()
+    return branch
 
 
 class BranchCreate(BaseModel):
@@ -127,16 +182,9 @@ class BranchStatistics(BaseModel):
     active_services: int
 
 def _generate_branch_code(db: Session, branch_name: str) -> str:
-    prefix = "".join(ch for ch in branch_name.upper() if ch.isalnum())[:3] or "BR"
-    last_branch = db.query(Branch).order_by(desc(Branch.id)).first()
-    if last_branch and last_branch.branch_code and len(last_branch.branch_code) >= 3:
-        try:
-            number = int(last_branch.branch_code[-3:]) + 1
-        except ValueError:
-            number = 1
-    else:
-        number = 1
-    return f"VV{prefix[:2]}{number:03d}"
+    prefix = "".join(ch for ch in branch_name.upper() if ch.isalnum())[:2] or "BR"
+    next_id = db.query(func.coalesce(func.max(Branch.id), 0)).scalar() or 0
+    return f"VV{prefix}{int(next_id) + 1:03d}"
 
 
 def _generate_admin_username(branch_name: str, branch_code: str) -> str:
@@ -144,173 +192,204 @@ def _generate_admin_username(branch_name: str, branch_code: str) -> str:
     return f"{base}_{branch_code.lower()}"[:30]
 
 
-def _generate_temp_password(length: int = 12) -> str:
+def _generate_temp_password(length: int = 16) -> str:
+    """Generate a temporary password for branch admin.
+    
+    Args:
+        length: Password length in characters. Defaults to 16.
+                Must not exceed 72 bytes (bcrypt's limit).
+    
+    Returns:
+        A random password string safe for bcrypt hashing.
+    
+    Important: bcrypt has a 72-byte limit on password inputs.
+    This function is designed to keep passwords well under that limit.
+    """
+    # Ensure password length never exceeds 60 chars to stay safe within bcrypt's 72-byte limit
+    max_length = 60
+    if length > max_length:
+        length = max_length
+    
     alphabet = string.ascii_letters + string.digits + "@#_-"
-    return "".join(secrets.choice(alphabet) for _ in range(length))
+    password = "".join(secrets.choice(alphabet) for _ in range(length))
+    
+    # Final safety check: truncate if somehow exceeds 72 bytes (should never happen)
+    if len(password.encode('utf-8')) > 72:
+        password = password[:60]
+    
+    return password
 
 
+@router.post("/branches", response_model=BranchCreateResponse)
 @router.post("/branches/", response_model=BranchCreateResponse)
 def create_branch(
     branch_data: BranchCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Check if user is super admin
-    if current_user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Only super admin can create branches")
-    branch_name = branch_data.name.strip()
-    location = branch_data.location.strip()
-    city = branch_data.city.strip()
-    state = branch_data.state.strip()
-    pincode = branch_data.pincode.strip()
-    phone = branch_data.phone.strip()
-    email = branch_data.email.strip() if branch_data.email else None
-    address = branch_data.address.strip()
-    license_number = branch_data.license_number.strip() if branch_data.license_number else None
-    opening_hours = branch_data.opening_hours.strip() if branch_data.opening_hours else None
-    facilities = branch_data.facilities.strip() if branch_data.facilities else None
-
-    existing_name = db.query(Branch).filter(Branch.name.ilike(branch_name)).first()
-    if existing_name:
-        raise HTTPException(status_code=400, detail="Branch with this name already exists")
-
-    if license_number:
-        existing_license = db.query(Branch).filter(Branch.license_number == license_number).first()
-        if existing_license:
-            raise HTTPException(status_code=400, detail="Branch with this license number already exists")
-
-    branch_code = _generate_branch_code(db, branch_name)
-
-    db_branch = Branch(
-        name=branch_name,
-        location=location,
-        city=city,
-        state=state,
-        pincode=pincode,
-        phone=phone,
-        email=email or f"{branch_code.lower()}@vaidyavihar.local",
-        address=address,
-        license_number=license_number,
-        opening_hours=opening_hours,
-        facilities=facilities,
-        branch_code=branch_code,
-        is_active=True,
-    )
-    # attach modalities if provided
-    if branch_data.modalities:
-        for mname in [m.strip() for m in branch_data.modalities if m and m.strip()]:
-            modality = db.query(Modality).filter(Modality.name == mname).first()
-            if not modality:
-                modality = Modality(name=mname)
-                db.add(modality)
-                db.flush()
-            db_branch.modalities.append(modality)
-    db.add(db_branch)
-    db.flush()
-
-    username = _generate_admin_username(branch_data.name, branch_code)
-    email = f"{username}@vaidyavihar.com"
-    existing_user = db.query(User).filter((User.username == username) | (User.email == email)).first()
-    if existing_user:
-        username = f"{username}{db_branch.id}"
-        email = f"{username}@vaidyavihar.com"
-
-    temp_password = _generate_temp_password()
-    branch_admin = User(
-        username=username,
-        email=email,
-        hashed_password=hash_password(temp_password),
-        role="branch_admin",
-        branch_id=db_branch.id,
-        is_active=True,
-        first_name=branch_data.admin_first_name or "Branch",
-        last_name=branch_data.admin_last_name or "Admin",
-        phone=branch_data.admin_phone or branch_data.phone,
-    )
-    db.add(branch_admin)
-    _ensure_branch_notifications_table(db)
-    db.add(
-        BranchNotification(
-            branch_id=db_branch.id,
-            type=BranchNotificationType.SYSTEM_ALERT,
-            title="Branch Admin Assigned",
-            message=f"{branch_admin.first_name} {branch_admin.last_name} assigned as branch admin.",
-            related_entity_id=branch_admin.id,
-            is_read=False,
-        )
-    )
-    db.commit()
-    db.refresh(db_branch)
-
-    onboarding_delivery = {"offer_email_sent": False, "offer_sms_sent": False}
     try:
-        delivery_result = run_offer_letter_workflow(
-            user_data={
-                "first_name": branch_admin.first_name,
-                "last_name": branch_admin.last_name,
-                "full_name": f"{(branch_admin.first_name or '').strip()} {(branch_admin.last_name or '').strip()}".strip(),
-                "email": branch_admin.email,
-                "phone": branch_admin.phone,
-                "joining_date": datetime.utcnow().strftime("%Y-%m-%d"),
-                "reporting_manager": "Regional Operations Head",
-                "salary": "As per management compensation policy",
-            },
-            branch_data={
-                "name": db_branch.name,
-                "address": db_branch.address,
-                "city": db_branch.city,
-                "state": db_branch.state,
-                "phone": db_branch.phone,
-                "email": db_branch.email,
-                "logo_url": getattr(db_branch, "logo_url", None),
-                "director_photo_url": getattr(db_branch, "director_photo_url", None),
-            },
-            role=branch_admin.role or "branch_admin",
+        _ensure_branch_schema(db)
+
+        # Check if user is super admin
+        if current_user.role != "super_admin":
+            raise HTTPException(status_code=403, detail="Only super admin can create branches")
+
+        branch_name = branch_data.name.strip()
+        location = branch_data.location.strip()
+        city = branch_data.city.strip()
+        state = branch_data.state.strip()
+        pincode = branch_data.pincode.strip()
+        phone = branch_data.phone.strip()
+        email = branch_data.email.strip() if branch_data.email else None
+        address = branch_data.address.strip()
+        license_number = branch_data.license_number.strip() if branch_data.license_number else None
+        opening_hours = branch_data.opening_hours.strip() if branch_data.opening_hours else None
+        facilities = branch_data.facilities.strip() if branch_data.facilities else None
+
+        existing_name = db.query(Branch).filter(Branch.name.ilike(branch_name)).first()
+        if existing_name:
+            raise HTTPException(status_code=400, detail="Branch with this name already exists")
+
+        if license_number:
+            existing_license = db.query(Branch).filter(Branch.license_number == license_number).first()
+            if existing_license:
+                raise HTTPException(status_code=400, detail="Branch with this license number already exists")
+
+        branch_code = _generate_branch_code(db, branch_name)
+
+        db_branch = Branch(
+            name=branch_name,
+            location=location,
+            city=city,
+            state=state,
+            pincode=pincode,
+            phone=phone,
+            email=email or f"{branch_code.lower()}@vaidyavihar.local",
+            address=address,
+            license_number=license_number,
+            opening_hours=opening_hours,
+            facilities=facilities,
+            branch_code=branch_code,
+            is_active=True,
         )
-        onboarding_delivery["offer_email_sent"] = bool(delivery_result.get("email_sent", False))
-        onboarding_delivery["offer_sms_sent"] = bool(delivery_result.get("sms_sent", False))
-    except Exception as onboarding_exc:
-        print(f"OFFER_WORKFLOW_WARNING(branch_create): {onboarding_exc}")
+        if branch_data.modalities:
+            for mname in [m.strip() for m in branch_data.modalities if m and m.strip()]:
+                modality = db.query(Modality).filter(Modality.name == mname).first()
+                if not modality:
+                    modality = Modality(name=mname)
+                    db.add(modality)
+                    db.flush()
+                db_branch.modalities.append(modality)
+        db.add(db_branch)
+        db.flush()
 
-    auth_guard.log_activity(
-        db=db,
-        user=current_user,
-        action="create",
-        entity_type="branch",
-        entity_id=db_branch.id,
-        branch_id=db_branch.id,
-        description=f"Created branch {db_branch.name} and branch admin {branch_admin.username}",
-    )
+        username = _generate_admin_username(branch_data.name, branch_code)
+        email = f"{username}@vaidyavihar.com"
+        existing_user = db.query(User).filter((User.username == username) | (User.email == email)).first()
+        if existing_user:
+            username = f"{username}{db_branch.id}"
+            email = f"{username}@vaidyavihar.com"
 
-    result = {
-        "id": db_branch.id,
-        "name": db_branch.name,
-        "location": db_branch.location,
-        "city": db_branch.city,
-        "state": db_branch.state,
-        "pincode": db_branch.pincode,
-        "phone": db_branch.phone,
-        "email": db_branch.email,
-        "address": db_branch.address,
-        "license_number": db_branch.license_number,
-        "opening_hours": db_branch.opening_hours,
-        "facilities": db_branch.facilities,
-        "branch_code": db_branch.branch_code,
-        "is_active": db_branch.is_active,
-        "created_at": db_branch.created_at,
-        "updated_at": db_branch.updated_at,
-        "modalities": [m.name for m in (db_branch.modalities or [])],
-        "branch_admin_credentials": {
-            "username": branch_admin.username,
-            "email": branch_admin.email,
-            "password": temp_password,
-            "role": branch_admin.role,
-        },
-        "offer_email_sent": onboarding_delivery["offer_email_sent"],
-        "offer_sms_sent": onboarding_delivery["offer_sms_sent"],
-    }
-    print("CREATE_RESPONSE:", result)
-    return result
+        temp_password = _generate_temp_password()
+        branch_admin = User(
+            username=username,
+            email=email,
+            hashed_password=hash_password(temp_password),
+            role="branch_admin",
+            branch_id=db_branch.id,
+            is_active=True,
+            first_name=branch_data.admin_first_name or "Branch",
+            last_name=branch_data.admin_last_name or "Admin",
+            phone=branch_data.admin_phone or branch_data.phone,
+        )
+        db.add(branch_admin)
+        _ensure_branch_notifications_table(db)
+        db.add(
+            BranchNotification(
+                branch_id=db_branch.id,
+                type=BranchNotificationType.SYSTEM_ALERT,
+                title="Branch Admin Assigned",
+                message=f"{branch_admin.first_name} {branch_admin.last_name} assigned as branch admin.",
+                related_entity_id=branch_admin.id,
+                is_read=False,
+            )
+        )
+        db.commit()
+        db.refresh(db_branch)
+
+        onboarding_delivery = {"offer_email_sent": False, "offer_sms_sent": False}
+        try:
+            delivery_result = run_offer_letter_workflow(
+                user_data={
+                    "first_name": branch_admin.first_name,
+                    "last_name": branch_admin.last_name,
+                    "full_name": f"{(branch_admin.first_name or '').strip()} {(branch_admin.last_name or '').strip()}".strip(),
+                    "email": branch_admin.email,
+                    "phone": branch_admin.phone,
+                    "joining_date": datetime.utcnow().strftime("%Y-%m-%d"),
+                    "reporting_manager": "Regional Operations Head",
+                    "salary": "As per management compensation policy",
+                },
+                branch_data={
+                    "name": db_branch.name,
+                    "address": db_branch.address,
+                    "city": db_branch.city,
+                    "state": db_branch.state,
+                    "phone": db_branch.phone,
+                    "email": db_branch.email,
+                    "logo_url": getattr(db_branch, "logo_url", None),
+                    "director_photo_url": getattr(db_branch, "director_photo_url", None),
+                },
+                role=branch_admin.role or "branch_admin",
+            )
+            onboarding_delivery["offer_email_sent"] = bool(delivery_result.get("email_sent", False))
+            onboarding_delivery["offer_sms_sent"] = bool(delivery_result.get("sms_sent", False))
+        except Exception as onboarding_exc:
+            print(f"OFFER_WORKFLOW_WARNING(branch_create): {onboarding_exc}")
+
+        auth_guard.log_activity(
+            db=db,
+            user=current_user,
+            action="create",
+            entity_type="branch",
+            entity_id=db_branch.id,
+            branch_id=db_branch.id,
+            description=f"Created branch {db_branch.name} and branch admin {branch_admin.username}",
+        )
+
+        result = {
+            "id": db_branch.id,
+            "name": db_branch.name,
+            "location": db_branch.location,
+            "city": db_branch.city,
+            "state": db_branch.state,
+            "pincode": db_branch.pincode,
+            "phone": db_branch.phone,
+            "email": db_branch.email,
+            "address": db_branch.address,
+            "license_number": db_branch.license_number,
+            "opening_hours": db_branch.opening_hours,
+            "facilities": db_branch.facilities,
+            "branch_code": db_branch.branch_code,
+            "is_active": db_branch.is_active,
+            "created_at": db_branch.created_at,
+            "updated_at": db_branch.updated_at,
+            "modalities": [m.name for m in (db_branch.modalities or [])],
+            "branch_admin_credentials": {
+                "username": branch_admin.username,
+                "email": branch_admin.email,
+                "password": temp_password,
+                "role": branch_admin.role,
+            },
+            "offer_email_sent": onboarding_delivery["offer_email_sent"],
+            "offer_sms_sent": onboarding_delivery["offer_sms_sent"],
+        }
+        print("CREATE_RESPONSE:", result)
+        return result
+    except Exception as exc:
+        traceback.print_exc()
+        print(f"⚠️ [BRANCH_CREATE] Failed to create branch: {exc}")
+        raise
 
 
 @router.get("/branches/")
@@ -325,8 +404,11 @@ def get_branches(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _ensure_branch_schema(db)
     # Super admins can see all branches, others see only their own
     if current_user.role == "super_admin":
+        _ensure_main_branch(db)
+        db.commit()
         query = db.query(Branch)
     else:
         if not current_user.branch_id:

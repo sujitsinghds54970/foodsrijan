@@ -30,6 +30,7 @@ DOCTOR_PORTAL_TOKENS: Dict[str, Dict[str, object]] = {}
 
 
 def _ensure_tables() -> None:
+    """Ensure tables exist. Call this lazily only when needed, not at import time."""
     Base.metadata.create_all(
         bind=engine,
         tables=[
@@ -38,9 +39,6 @@ def _ensure_tables() -> None:
             DoctorShareLink.__table__,
         ],
     )
-
-
-_ensure_tables()
 
 
 def _require_branch_director(current_user: User) -> None:

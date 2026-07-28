@@ -1,13 +1,15 @@
 from copy import deepcopy
 from datetime import datetime
 import json
+import traceback
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
-from app.database import engine, get_db
+from app.database import Base, engine, get_db
+from app.models import SystemSettings
 from app.utils.auth_system import auth_guard
 from app.utils.file_utils import replace_file
 
@@ -36,6 +38,10 @@ def _table_reference_snapshot(db: Session) -> dict[str, Any]:
             counts[key] = 0
     counts["generated_at"] = datetime.utcnow().isoformat()
     return counts
+
+
+def _ensure_settings_tables() -> None:
+    Base.metadata.create_all(bind=engine, tables=[SystemSettings.__table__])
 
 
 def _recent_audit_logs(db: Session, limit: int = 10) -> list[dict[str, Any]]:
@@ -474,6 +480,7 @@ def _normalize_branding_payload(payload: dict[str, Any], request: Request) -> di
 @router.get("/branding")
 def get_settings_branding(request: Request, db: Session = Depends(get_db)):
     try:
+        _ensure_settings_tables()
         payload = _normalize_branding_payload(SETTINGS_STORE["branding"], request)
         payload["is_mock"] = True
         payload["table_reference"] = _table_reference_snapshot(db)
@@ -486,6 +493,7 @@ def get_settings_branding(request: Request, db: Session = Depends(get_db)):
         }
         return payload
     except Exception as exc:
+        traceback.print_exc()
         print(f"⚠️ [CEO_SETTINGS_BRANDING_GET] Falling back due to: {exc}")
         fallback = _normalize_branding_payload(SETTINGS_STORE.get("branding", {}), request)
         fallback["is_mock"] = True
@@ -503,55 +511,61 @@ async def update_settings_branding(
     uploaded_logo: UploadFile | None = File(default=None),
     tagline: str | None = Form(default=None),
 ):
-    content_type = (request.headers.get("content-type") or "").lower()
-    incoming_payload: dict[str, Any] = deepcopy(SETTINGS_STORE.get("branding", {}))
+    try:
+        _ensure_settings_tables()
+        content_type = (request.headers.get("content-type") or "").lower()
+        incoming_payload: dict[str, Any] = deepcopy(SETTINGS_STORE.get("branding", {}))
 
-    if "application/json" in content_type:
-        body = await request.json()
-        if not isinstance(body, dict):
-            raise HTTPException(status_code=400, detail="Invalid JSON payload for branding update")
-        incoming_payload = body
-    elif payload:
-        try:
-            parsed = json.loads(payload)
-        except json.JSONDecodeError as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid branding payload JSON: {exc.msg}") from exc
-        if not isinstance(parsed, dict):
-            raise HTTPException(status_code=400, detail="Invalid branding payload")
-        incoming_payload = parsed
+        if "application/json" in content_type:
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise HTTPException(status_code=400, detail="Invalid JSON payload for branding update")
+            incoming_payload = body
+        elif payload:
+            try:
+                parsed = json.loads(payload)
+            except json.JSONDecodeError as exc:
+                raise HTTPException(status_code=400, detail=f"Invalid branding payload JSON: {exc.msg}") from exc
+            if not isinstance(parsed, dict):
+                raise HTTPException(status_code=400, detail="Invalid branding payload")
+            incoming_payload = parsed
 
-    normalized_payload = _normalize_branding_payload(incoming_payload, request)
+        normalized_payload = _normalize_branding_payload(incoming_payload, request)
 
-    if tagline is not None:
-        next_tagline = tagline.strip()
-        normalized_payload["tagline"] = next_tagline
-        company_profile = dict(normalized_payload.get("company_profile") or {})
-        company_profile["tagline"] = next_tagline
-        normalized_payload["company_profile"] = company_profile
+        if tagline is not None:
+            next_tagline = tagline.strip()
+            normalized_payload["tagline"] = next_tagline
+            company_profile = dict(normalized_payload.get("company_profile") or {})
+            company_profile["tagline"] = next_tagline
+            normalized_payload["company_profile"] = company_profile
 
-    if uploaded_logo is not None:
-        current_logo_url = (
-            normalized_payload.get("logo_url")
-            or (normalized_payload.get("branding_asset_manager") or {}).get("primary_logo_web")
-            or ""
-        )
-        new_logo_url = replace_file(current_logo_url, uploaded_logo, "ceo/branding")
-        asset_manager = dict(normalized_payload.get("branding_asset_manager") or {})
-        asset_manager["primary_logo_web"] = new_logo_url
-        if not asset_manager.get("primary_logo_app"):
-            asset_manager["primary_logo_app"] = new_logo_url
-        normalized_payload["branding_asset_manager"] = asset_manager
-        normalized_payload["logo_url"] = new_logo_url
+        if uploaded_logo is not None:
+            current_logo_url = (
+                normalized_payload.get("logo_url")
+                or (normalized_payload.get("branding_asset_manager") or {}).get("primary_logo_web")
+                or ""
+            )
+            new_logo_url = replace_file(current_logo_url, uploaded_logo, "ceo/branding")
+            asset_manager = dict(normalized_payload.get("branding_asset_manager") or {})
+            asset_manager["primary_logo_web"] = new_logo_url
+            if not asset_manager.get("primary_logo_app"):
+                asset_manager["primary_logo_app"] = new_logo_url
+            normalized_payload["branding_asset_manager"] = asset_manager
+            normalized_payload["logo_url"] = new_logo_url
 
-    SETTINGS_STORE["branding"] = normalized_payload
-    return {
-        "updated": True,
-        "section": "branding",
-        "saved_at": datetime.utcnow().isoformat(),
-        "is_mock": True,
-        "payload": deepcopy(SETTINGS_STORE["branding"]),
-        "table_reference": _table_reference_snapshot(db),
-    }
+        SETTINGS_STORE["branding"] = normalized_payload
+        return {
+            "updated": True,
+            "section": "branding",
+            "saved_at": datetime.utcnow().isoformat(),
+            "is_mock": True,
+            "payload": deepcopy(SETTINGS_STORE["branding"]),
+            "table_reference": _table_reference_snapshot(db),
+        }
+    except Exception as exc:
+        traceback.print_exc()
+        print(f"⚠️ [CEO_SETTINGS_BRANDING_PUT] Failed to update branding: {exc}")
+        raise
 
 
 @router.get("/security")

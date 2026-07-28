@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import shutil
+import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -120,6 +121,7 @@ def _sanitize_meta(meta: dict[str, Any]) -> dict[str, Any]:
 
 
 def _ensure_ceo_tables() -> None:
+    """Ensure CEO tables exist. Call lazily only when needed, not at import time."""
     inspector = inspect(engine)
     existing = set(inspector.get_table_names())
     required = {
@@ -155,9 +157,6 @@ def _ensure_ceo_tables() -> None:
                 """
             )
         )
-
-
-_ensure_ceo_tables()
 
 
 def _request_base_url(request: Request) -> str:
@@ -676,7 +675,12 @@ def _table_columns(db: Session, table_name: str) -> set[str]:
         return set()
 
 
+def _ensure_ceo_configuration_tables() -> None:
+    Base.metadata.create_all(bind=engine, tables=[SystemSettings.__table__])
+
+
 def _find_or_create_security_profile(db: Session, user: User) -> CeoSecurityProfile:
+    _ensure_ceo_tables()
     profile = db.query(CeoSecurityProfile).filter(CeoSecurityProfile.user_id == user.id).first()
     if profile:
         return profile
@@ -1564,6 +1568,7 @@ def get_ceo_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(_set_actor),
 ):
+    _ensure_ceo_configuration_tables()
     profile = _setting_json(
         db,
         CEO_PROFILE_SETTING_KEY,
@@ -1608,78 +1613,84 @@ async def update_ceo_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(_set_actor),
 ):
-    payload = _setting_json(
-        db,
-        CEO_PROFILE_SETTING_KEY,
-        DEFAULT_PROFILE,
-        description="CEO profile details",
-    )
-    next_payload = json.loads(json.dumps(payload))
+    try:
+        _ensure_ceo_configuration_tables()
+        payload = _setting_json(
+            db,
+            CEO_PROFILE_SETTING_KEY,
+            DEFAULT_PROFILE,
+            description="CEO profile details",
+        )
+        next_payload = json.loads(json.dumps(payload))
 
-    if request.headers.get("content-type", "").lower().startswith("application/json"):
-        incoming_raw = await request.json()
-        incoming = incoming_raw if isinstance(incoming_raw, dict) else {}
-        full_name = incoming.get("full_name", full_name)
-        mobile = incoming.get("mobile", mobile)
-        email = incoming.get("email", email)
-        bio = incoming.get("bio", bio)
+        if request.headers.get("content-type", "").lower().startswith("application/json"):
+            incoming_raw = await request.json()
+            incoming = incoming_raw if isinstance(incoming_raw, dict) else {}
+            full_name = incoming.get("full_name", full_name)
+            mobile = incoming.get("mobile", mobile)
+            email = incoming.get("email", email)
+            bio = incoming.get("bio", bio)
 
-    if full_name is not None:
-        normalized_name = full_name.strip()
-        if normalized_name:
-            name_parts = normalized_name.split()
-            current_user.first_name = name_parts[0]
-            current_user.last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+        if full_name is not None:
+            normalized_name = full_name.strip()
+            if normalized_name:
+                name_parts = normalized_name.split()
+                current_user.first_name = name_parts[0]
+                current_user.last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
 
-    if mobile is not None:
-        current_user.phone = mobile.strip()
+        if mobile is not None:
+            current_user.phone = mobile.strip()
 
-    if email is not None:
-        normalized_email = email.strip()
-        if normalized_email and normalized_email != current_user.email:
-            existing = db.query(User).filter(User.email == normalized_email, User.id != current_user.id).first()
-            if existing:
-                raise HTTPException(status_code=400, detail="Email already in use")
-            current_user.email = normalized_email
+        if email is not None:
+            normalized_email = email.strip()
+            if normalized_email and normalized_email != current_user.email:
+                existing = db.query(User).filter(User.email == normalized_email, User.id != current_user.id).first()
+                if existing:
+                    raise HTTPException(status_code=400, detail="Email already in use")
+                current_user.email = normalized_email
 
-    if bio is not None:
-        next_payload["bio"] = bio.strip()
+        if bio is not None:
+            next_payload["bio"] = bio.strip()
 
-    if profile_photo is not None:
-        next_payload["profile_photo_url"] = _save_branding_asset(profile_photo, prefix="ceo_profile")
+        if profile_photo is not None:
+            next_payload["profile_photo_url"] = _save_branding_asset(profile_photo, prefix="ceo_profile")
 
-    db.commit()
-    saved_profile = _save_setting_json(
-        db,
-        CEO_PROFILE_SETTING_KEY,
-        next_payload,
-        description="CEO profile details",
-    )
-    branding = _setting_json(
-        db,
-        CEO_BRANDING_SETTING_KEY,
-        DEFAULT_BRANDING,
-        description="CEO overview branding and company identity",
-    )
-    branding_payload = _branding_for_response(request, branding)
-    return {
-        "updated": True,
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "first_name": current_user.first_name,
-        "last_name": current_user.last_name,
-        "full_name": f"{current_user.first_name} {current_user.last_name}".strip(),
-        "mobile": current_user.phone,
-        "bio": (saved_profile.get("bio") or "").strip(),
-        "profile_photo": (
-            _public_file_url(request, saved_profile.get("profile_photo_url"))
-            if (saved_profile.get("profile_photo_url") or "").strip()
-            else None
-        ),
-        "company_name": branding_payload.get("company_name"),
-        "company_logo": (branding_payload.get("assets") or {}).get("primary_logo_url"),
-    }
+        db.commit()
+        saved_profile = _save_setting_json(
+            db,
+            CEO_PROFILE_SETTING_KEY,
+            next_payload,
+            description="CEO profile details",
+        )
+        branding = _setting_json(
+            db,
+            CEO_BRANDING_SETTING_KEY,
+            DEFAULT_BRANDING,
+            description="CEO overview branding and company identity",
+        )
+        branding_payload = _branding_for_response(request, branding)
+        return {
+            "updated": True,
+            "id": current_user.id,
+            "username": current_user.username,
+            "email": current_user.email,
+            "first_name": current_user.first_name,
+            "last_name": current_user.last_name,
+            "full_name": f"{current_user.first_name} {current_user.last_name}".strip(),
+            "mobile": current_user.phone,
+            "bio": (saved_profile.get("bio") or "").strip(),
+            "profile_photo": (
+                _public_file_url(request, saved_profile.get("profile_photo_url"))
+                if (saved_profile.get("profile_photo_url") or "").strip()
+                else None
+            ),
+            "company_name": branding_payload.get("company_name"),
+            "company_logo": (branding_payload.get("assets") or {}).get("primary_logo_url"),
+        }
+    except Exception as exc:
+        traceback.print_exc()
+        print(f"⚠️ [CEO_PROFILE_PUT] Failed to update profile: {exc}")
+        raise
 
 
 @router.put("/branding")
@@ -1705,72 +1716,78 @@ async def update_ceo_branding(
     db: Session = Depends(get_db),
     current_user: User = Depends(_set_actor),
 ):
-    existing = _setting_json(
-        db,
-        CEO_BRANDING_SETTING_KEY,
-        DEFAULT_BRANDING,
-        description="CEO overview branding and company identity",
-    )
-    payload = json.loads(json.dumps(existing))
-    if request.headers.get("content-type", "").lower().startswith("application/json"):
-        incoming_raw = await request.json()
-        incoming = incoming_raw if isinstance(incoming_raw, dict) else {}
-        payload.update({key: value for key, value in incoming.items() if value is not None})
-        payload["contact_info"] = {**payload.get("contact_info", {}), **dict(incoming.get("contact_info") or {})}
-        payload["social_media_links"] = {**payload.get("social_media_links", {}), **dict(incoming.get("social_media_links") or {})}
-        payload["assets"] = {**payload.get("assets", {}), **dict(incoming.get("assets") or {})}
-    else:
-        flat_updates = {
-            "company_name": company_name,
-            "legal_name": legal_name,
-            "registration_number": registration_number,
-            "tagline": tagline,
-            "description": description,
-        }
-        for key, value in flat_updates.items():
-            if value is not None:
-                payload[key] = value.strip()
+    try:
+        _ensure_ceo_configuration_tables()
+        existing = _setting_json(
+            db,
+            CEO_BRANDING_SETTING_KEY,
+            DEFAULT_BRANDING,
+            description="CEO overview branding and company identity",
+        )
+        payload = json.loads(json.dumps(existing))
+        if request.headers.get("content-type", "").lower().startswith("application/json"):
+            incoming_raw = await request.json()
+            incoming = incoming_raw if isinstance(incoming_raw, dict) else {}
+            payload.update({key: value for key, value in incoming.items() if value is not None})
+            payload["contact_info"] = {**payload.get("contact_info", {}), **dict(incoming.get("contact_info") or {})}
+            payload["social_media_links"] = {**payload.get("social_media_links", {}), **dict(incoming.get("social_media_links") or {})}
+            payload["assets"] = {**payload.get("assets", {}), **dict(incoming.get("assets") or {})}
+        else:
+            flat_updates = {
+                "company_name": company_name,
+                "legal_name": legal_name,
+                "registration_number": registration_number,
+                "tagline": tagline,
+                "description": description,
+            }
+            for key, value in flat_updates.items():
+                if value is not None:
+                    payload[key] = value.strip()
 
-        contact_info = dict(payload.get("contact_info") or {})
-        if contact_address is not None:
-            contact_info["address"] = contact_address.strip()
-        if contact_phone is not None:
-            contact_info["phone"] = contact_phone.strip()
-        if contact_email is not None:
-            contact_info["email"] = contact_email.strip()
-        if contact_website is not None:
-            contact_info["website"] = contact_website.strip()
-        payload["contact_info"] = contact_info
+            contact_info = dict(payload.get("contact_info") or {})
+            if contact_address is not None:
+                contact_info["address"] = contact_address.strip()
+            if contact_phone is not None:
+                contact_info["phone"] = contact_phone.strip()
+            if contact_email is not None:
+                contact_info["email"] = contact_email.strip()
+            if contact_website is not None:
+                contact_info["website"] = contact_website.strip()
+            payload["contact_info"] = contact_info
 
-        social_links = dict(payload.get("social_media_links") or {})
-        if social_facebook is not None:
-            social_links["facebook"] = social_facebook.strip()
-        if social_instagram is not None:
-            social_links["instagram"] = social_instagram.strip()
-        if social_linkedin is not None:
-            social_links["linkedin"] = social_linkedin.strip()
-        if social_x is not None:
-            social_links["x"] = social_x.strip()
-        payload["social_media_links"] = social_links
+            social_links = dict(payload.get("social_media_links") or {})
+            if social_facebook is not None:
+                social_links["facebook"] = social_facebook.strip()
+            if social_instagram is not None:
+                social_links["instagram"] = social_instagram.strip()
+            if social_linkedin is not None:
+                social_links["linkedin"] = social_linkedin.strip()
+            if social_x is not None:
+                social_links["x"] = social_x.strip()
+            payload["social_media_links"] = social_links
 
-        assets = dict(payload.get("assets") or {})
-        if primary_logo is not None:
-            assets["primary_logo_url"] = _save_branding_asset(primary_logo, prefix="primary_logo")
-        if favicon is not None:
-            assets["favicon_url"] = _save_branding_asset(favicon, prefix="favicon")
-        if app_icon is not None:
-            assets["app_icon_url"] = _save_branding_asset(app_icon, prefix="app_icon")
-        if background_banner is not None:
-            assets["background_banner_url"] = _save_branding_asset(background_banner, prefix="background_banner")
-        payload["assets"] = assets
+            assets = dict(payload.get("assets") or {})
+            if primary_logo is not None:
+                assets["primary_logo_url"] = _save_branding_asset(primary_logo, prefix="primary_logo")
+            if favicon is not None:
+                assets["favicon_url"] = _save_branding_asset(favicon, prefix="favicon")
+            if app_icon is not None:
+                assets["app_icon_url"] = _save_branding_asset(app_icon, prefix="app_icon")
+            if background_banner is not None:
+                assets["background_banner_url"] = _save_branding_asset(background_banner, prefix="background_banner")
+            payload["assets"] = assets
 
-    saved = _save_setting_json(
-        db,
-        CEO_BRANDING_SETTING_KEY,
-        payload,
-        description="CEO overview branding and company identity",
-    )
-    return _branding_for_response(request, saved)
+        saved = _save_setting_json(
+            db,
+            CEO_BRANDING_SETTING_KEY,
+            payload,
+            description="CEO overview branding and company identity",
+        )
+        return _branding_for_response(request, saved)
+    except Exception as exc:
+        traceback.print_exc()
+        print(f"⚠️ [CEO_BRANDING_PUT] Failed to update branding: {exc}")
+        raise
 
 
 @router.get("/sessions")
