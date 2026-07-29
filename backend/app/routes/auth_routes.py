@@ -367,14 +367,17 @@ def public_register_user(
     db.refresh(db_user)
     
     # Log activity
-    auth_guard.log_activity(
-        db=db, 
-        user=db_user, 
-        action="self_register", 
-        entity_type="user", 
-        entity_id=db_user.id, 
-        description=f"User {db_user.username} self-registered as {db_user.role}"
-    )
+    try:
+        auth_guard.log_activity(
+            db=db,
+            user=db_user,
+            action="self_register",
+            entity_type="user",
+            entity_id=db_user.id,
+            description=f"User {db_user.username} self-registered as {db_user.role}"
+        )
+    except Exception as log_error:
+        print(f"⚠️ [PUBLIC_REGISTER] Failed to log activity: {log_error}")
     
     # Generate auth token for auto-login
     access_token = create_user_token(db_user)
@@ -456,14 +459,17 @@ def register_user(
     db.refresh(db_user)
     
     # Log activity
-    auth_guard.log_activity(
-        db=db, 
-        user=current_user, 
-        action="create", 
-        entity_type="user", 
-        entity_id=db_user.id, 
-        description=f"Created user {db_user.username}"
-    )
+    try:
+        auth_guard.log_activity(
+            db=db,
+            user=current_user,
+            action="create",
+            entity_type="user",
+            entity_id=db_user.id,
+            description=f"Created user {db_user.username}"
+        )
+    except Exception as log_error:
+        print(f"⚠️ [ADMIN_REGISTER] Failed to log activity: {log_error}")
     
     return UserResponse(
         id=db_user.id,
@@ -529,14 +535,17 @@ def logout(current_user: User = Depends(get_current_user), db: Session = Depends
     """User logout endpoint"""
     
     # Log activity
-    auth_guard.log_activity(
-        db=db, 
-        user=current_user, 
-        action="logout", 
-        entity_type="user", 
-        entity_id=current_user.id, 
-        description=f"User {current_user.username} logged out"
-    )
+    try:
+        auth_guard.log_activity(
+            db=db,
+            user=current_user,
+            action="logout",
+            entity_type="user",
+            entity_id=current_user.id,
+            description=f"User {current_user.username} logged out"
+        )
+    except Exception as log_error:
+        print(f"⚠️ [LOGOUT] Failed to log activity: {log_error}")
     
     return {"message": "Successfully logged out"}
 
@@ -589,14 +598,17 @@ def change_password(
     db.commit()
     
     # Log activity
-    auth_guard.log_activity(
-        db=db, 
-        user=current_user, 
-        action="password_change", 
-        entity_type="user", 
-        entity_id=current_user.id, 
-        description=f"User {current_user.username} changed password"
-    )
+    try:
+        auth_guard.log_activity(
+            db=db,
+            user=current_user,
+            action="password_change",
+            entity_type="user",
+            entity_id=current_user.id,
+            description=f"User {current_user.username} changed password"
+        )
+    except Exception as log_error:
+        print(f"⚠️ [CHANGE_PASSWORD] Failed to log activity: {log_error}")
     
     return {"message": "Password changed successfully"}
 

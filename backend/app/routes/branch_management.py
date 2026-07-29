@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 import secrets
-import string
 import traceback
 from typing import List, Optional
 
@@ -192,32 +191,14 @@ def _generate_admin_username(branch_name: str, branch_code: str) -> str:
     return f"{base}_{branch_code.lower()}"[:30]
 
 
-def _generate_temp_password(length: int = 16) -> str:
+def _generate_temp_password() -> str:
     """Generate a temporary password for branch admin.
-    
-    Args:
-        length: Password length in characters. Defaults to 16.
-                Must not exceed 72 bytes (bcrypt's limit).
-    
-    Returns:
-        A random password string safe for bcrypt hashing.
-    
-    Important: bcrypt has a 72-byte limit on password inputs.
-    This function is designed to keep passwords well under that limit.
+
+    Uses a short URL-safe token so the value always stays safely under
+    bcrypt's 72-byte limit.
     """
-    # Ensure password length never exceeds 60 chars to stay safe within bcrypt's 72-byte limit
-    max_length = 60
-    if length > max_length:
-        length = max_length
-    
-    alphabet = string.ascii_letters + string.digits + "@#_-"
-    password = "".join(secrets.choice(alphabet) for _ in range(length))
-    
-    # Final safety check: truncate if somehow exceeds 72 bytes (should never happen)
-    if len(password.encode('utf-8')) > 72:
-        password = password[:60]
-    
-    return password
+    password = secrets.token_urlsafe(12)
+    return password[:72]
 
 
 @router.post("/branches", response_model=BranchCreateResponse)
