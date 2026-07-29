@@ -16,6 +16,7 @@ from app.schemas.user import UserCreate, UserResponse, TokenResponse
 from app.utils.auth_system import auth_guard
 from app.utils.schema_compat import ensure_staff_daily_ops_column
 from app.utils.schema_compat import ensure_branch_logo_column
+from app.utils.schema_compat import table_exists
 
 router = APIRouter()
 
@@ -35,10 +36,7 @@ def _build_user_photo_payload(db: Session, user: User) -> dict:
     profile = db.query(StaffProfile).filter(StaffProfile.user_id == user.id).first()
     photo_url = _public_file_url(profile.photo_path) if profile else None
     if not photo_url and user.role == "super_admin":
-        has_settings_table = db.execute(
-            text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='system_settings' LIMIT 1")
-        ).scalar()
-        if has_settings_table:
+        if table_exists(db, "system_settings"):
             profile_row = db.execute(
                 text("SELECT setting_value FROM system_settings WHERE setting_key = 'ceo_profile' LIMIT 1")
             ).scalar()
@@ -58,10 +56,7 @@ def _build_user_photo_payload(db: Session, user: User) -> dict:
 
 
 def _fetch_company_logo_url(db: Session) -> Optional[str]:
-    has_settings_table = db.execute(
-        text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='system_settings' LIMIT 1")
-    ).scalar()
-    if not has_settings_table:
+    if not table_exists(db, "system_settings"):
         return None
 
     branding_row = db.execute(
@@ -112,10 +107,7 @@ def _fetch_branch_logo_url(db: Session, branch_id: int) -> Optional[str]:
     if normalized_logo:
         return _public_file_url(normalized_logo)
 
-    has_settings_table = db.execute(
-        text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='system_settings' LIMIT 1")
-    ).scalar()
-    if not has_settings_table:
+    if not table_exists(db, "system_settings"):
         return None
 
     branding_row = db.execute(

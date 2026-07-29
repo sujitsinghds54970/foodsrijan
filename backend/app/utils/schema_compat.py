@@ -1,5 +1,12 @@
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
+
+
+def table_exists(db: Session, table_name: str) -> bool:
+    bind = db.get_bind()
+    if bind is None:
+        return False
+    return inspect(bind).has_table(table_name)
 
 
 def ensure_staff_daily_ops_column(db: Session) -> None:

@@ -51,6 +51,7 @@ from app.models.appointment import Appointment
 from app.models.calendar_day import CalendarDay
 from app.models.release_day import ReleaseDay
 from app.models.ceo import CeoAuditLog, CeoBreakGlassGrant, CeoSecurityProfile, CeoWebAuthnCredential
+from app.models.hr import StaffProfile
 import json
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Float, DECIMAL, JSON
 from sqlalchemy.orm import relationship

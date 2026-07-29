@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Branch
+from app.utils.schema_compat import table_exists
 
 router = APIRouter()
 
@@ -29,6 +30,13 @@ def _to_public_file_url(request: Request, path: Optional[str]) -> Optional[str]:
 
 @router.get("/public/branding")
 def get_public_branding(request: Request, db: Session = Depends(get_db)):
+    if not table_exists(db, "system_settings"):
+        return {
+            "primary_logo_url": None,
+            "company_name": "VaidyaVihar Diagnostic",
+            "tagline": "",
+        }
+
     branding_row = db.execute(
         text(
             """
@@ -83,6 +91,9 @@ def get_public_branding(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/public/branches")
 def get_public_branches(db: Session = Depends(get_db)):
+    if not table_exists(db, "branches"):
+        return []
+
     branches = (
         db.query(Branch)
         .filter(Branch.is_active == True)
