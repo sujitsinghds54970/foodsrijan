@@ -3,6 +3,14 @@ backend/**pycache**/
 backend/.venv/
 backend/venv/
 backend/uploads/
+*.db
+backend/backend.log
+.vscode
+.do
+Procfile
+docker-compose*.yml
+
+text
 backend/*.db
 backend/*.db-shm
 backend/*.db-wal
