@@ -7,6 +7,7 @@ from datetime import datetime
 
 # Import your existing routers and components
 from app.routes.auth_routes import router as auth_router
+from app.routes.auth_otp import router as auth_otp_router
 from app.routes.patient_management import router as patient_router
 from app.routes.inventory_management import router as inventory_router
 from app.routes.export_routes import router as export_router
@@ -99,6 +100,7 @@ app.add_middleware(
 
 # Include routers - Existing
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(auth_otp_router, tags=["OTP Authentication"])
 # IMPORTANT: daily_entry_module_router MUST be registered before patient_router
 # to ensure /api/daily-entries/grid is matched before /api/daily-entries/{entry_id}
 app.include_router(daily_entry_module_router, tags=["Daily Entry Module"])
