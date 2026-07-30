@@ -5,7 +5,8 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, desc, func, text
+from sqlalchemy import and_, desc, func, inspect, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -45,28 +46,36 @@ def _ensure_branch_schema(db: Session) -> None:
     from app.database import Base
 
     Base.metadata.create_all(bind=db.get_bind(), tables=[Branch.__table__, User.__table__, Modality.__table__, BranchNotification.__table__])
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS location VARCHAR(200) NOT NULL DEFAULT ''"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT ''"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS city VARCHAR(100) NOT NULL DEFAULT ''"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS state VARCHAR(100) NOT NULL DEFAULT ''"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS pincode VARCHAR(10) NOT NULL DEFAULT ''"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS phone VARCHAR(15) NOT NULL DEFAULT ''"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS email VARCHAR(100) NOT NULL DEFAULT ''"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS license_number VARCHAR(100)"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS branch_code VARCHAR(20)"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS opening_hours VARCHAR(500)"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS facilities TEXT"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS director_photo_url TEXT"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS logo_url TEXT"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS director_age VARCHAR(50)"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS director_credentials_username VARCHAR(100)"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS director_credentials_password VARCHAR(255)"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS established_date TIMESTAMP"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NOT NULL DEFAULT NOW()"))
-    db.execute(text("ALTER TABLE branches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW()"))
+    inspector = inspect(db.get_bind())
+    existing_columns = {column["name"] for column in inspector.get_columns("branches")}
+
+    def add_column(column_name: str, ddl: str) -> None:
+        if column_name not in existing_columns:
+            db.execute(text(ddl))
+            existing_columns.add(column_name)
+
+    add_column("location", "ALTER TABLE branches ADD COLUMN location VARCHAR(200) NOT NULL DEFAULT ''")
+    add_column("address", "ALTER TABLE branches ADD COLUMN address TEXT NOT NULL DEFAULT ''")
+    add_column("city", "ALTER TABLE branches ADD COLUMN city VARCHAR(100) NOT NULL DEFAULT ''")
+    add_column("state", "ALTER TABLE branches ADD COLUMN state VARCHAR(100) NOT NULL DEFAULT ''")
+    add_column("pincode", "ALTER TABLE branches ADD COLUMN pincode VARCHAR(10) NOT NULL DEFAULT ''")
+    add_column("phone", "ALTER TABLE branches ADD COLUMN phone VARCHAR(15) NOT NULL DEFAULT ''")
+    add_column("email", "ALTER TABLE branches ADD COLUMN email VARCHAR(100) NOT NULL DEFAULT ''")
+    add_column("license_number", "ALTER TABLE branches ADD COLUMN license_number VARCHAR(100)")
+    add_column("branch_code", "ALTER TABLE branches ADD COLUMN branch_code VARCHAR(20)")
+    add_column("opening_hours", "ALTER TABLE branches ADD COLUMN opening_hours VARCHAR(500)")
+    add_column("facilities", "ALTER TABLE branches ADD COLUMN facilities TEXT")
+    add_column("director_photo_url", "ALTER TABLE branches ADD COLUMN director_photo_url TEXT")
+    add_column("logo_url", "ALTER TABLE branches ADD COLUMN logo_url TEXT")
+    add_column("director_age", "ALTER TABLE branches ADD COLUMN director_age VARCHAR(50)")
+    add_column("director_credentials_username", "ALTER TABLE branches ADD COLUMN director_credentials_username VARCHAR(100)")
+    add_column("director_credentials_password", "ALTER TABLE branches ADD COLUMN director_credentials_password VARCHAR(255)")
+    add_column("latitude", "ALTER TABLE branches ADD COLUMN latitude DOUBLE PRECISION")
+    add_column("longitude", "ALTER TABLE branches ADD COLUMN longitude DOUBLE PRECISION")
+    add_column("established_date", "ALTER TABLE branches ADD COLUMN established_date TIMESTAMP")
+    add_column("is_active", "ALTER TABLE branches ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE")
+    add_column("created_at", "ALTER TABLE branches ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP")
+    add_column("updated_at", "ALTER TABLE branches ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP")
     db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_branches_branch_code ON branches(branch_code)"))
     db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_branches_license_number ON branches(license_number)"))
 
@@ -414,9 +423,11 @@ def get_branches(
     branches = query.order_by(desc(Branch.created_at)).offset(skip).limit(limit).all()
 
     results = []
-    from app.models import DailyEntry, Patient, Staff
+    from app.models import DailyEntry, Patient
+    from app.models.hr import StaffProfile
 
     current_month = datetime.now().replace(day=1)
+    stats_available = include_stats
     for branch in branches:
         b = {
             "id": branch.id,
@@ -439,14 +450,21 @@ def get_branches(
             "modalities": [m.name for m in (branch.modalities or [])],
         }
 
-        if include_stats:
-            b["total_staff"] = db.query(Staff).filter(Staff.branch_id == branch.id, Staff.is_active.is_(True)).count()
-            b["total_patients"] = db.query(Patient).filter(Patient.branch_id == branch.id, Patient.is_active.is_(True)).count()
-            monthly_entries = db.query(DailyEntry).filter(
-                DailyEntry.branch_id == branch.id,
-                DailyEntry.entry_date >= current_month,
-            ).all()
-            b["monthly_revenue"] = float(sum(float(e.total_amount) for e in monthly_entries))
+        if stats_available:
+            try:
+                b["total_staff"] = db.query(StaffProfile).filter(StaffProfile.branch_id == branch.id, StaffProfile.is_active.is_(True)).count()
+                b["total_patients"] = db.query(Patient).filter(Patient.branch_id == branch.id, Patient.is_active.is_(True)).count()
+                monthly_entries = db.query(DailyEntry).filter(
+                    DailyEntry.branch_id == branch.id,
+                    DailyEntry.entry_date >= current_month,
+                ).all()
+                b["monthly_revenue"] = float(sum(float(e.total_amount) for e in monthly_entries))
+            except OperationalError:
+                traceback.print_exc()
+                stats_available = False
+                b["total_staff"] = 0
+                b["total_patients"] = 0
+                b["monthly_revenue"] = 0.0
 
         results.append(b)
 
@@ -466,16 +484,25 @@ def get_branch(
     if current_user.role != "super_admin" and current_user.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this branch")
 
-    from app.models import DailyEntry, Patient, Staff
+    from app.models import DailyEntry, Patient
+    from app.models.hr import StaffProfile
 
-    monthly_revenue = float(
-        sum(
-            float(e.total_amount)
-            for e in db.query(DailyEntry)
-            .filter(DailyEntry.branch_id == branch.id, DailyEntry.entry_date >= datetime.now().replace(day=1))
-            .all()
+    try:
+        monthly_revenue = float(
+            sum(
+                float(e.total_amount)
+                for e in db.query(DailyEntry)
+                .filter(DailyEntry.branch_id == branch.id, DailyEntry.entry_date >= datetime.now().replace(day=1))
+                .all()
+            )
         )
-    )
+        total_staff = db.query(StaffProfile).filter(StaffProfile.branch_id == branch.id, StaffProfile.is_active.is_(True)).count()
+        total_patients = db.query(Patient).filter(Patient.branch_id == branch.id, Patient.is_active.is_(True)).count()
+    except OperationalError:
+        traceback.print_exc()
+        monthly_revenue = 0.0
+        total_staff = 0
+        total_patients = 0
 
     return {
         "id": branch.id,
@@ -496,8 +523,8 @@ def get_branch(
         "updated_at": branch.updated_at,
         "logo_url": branch.logo_url,
         "modalities": [m.name for m in (branch.modalities or [])],
-        "total_staff": db.query(Staff).filter(Staff.branch_id == branch.id, Staff.is_active.is_(True)).count(),
-        "total_patients": db.query(Patient).filter(Patient.branch_id == branch.id, Patient.is_active.is_(True)).count(),
+        "total_staff": total_staff,
+        "total_patients": total_patients,
         "monthly_revenue": monthly_revenue,
     }
 
@@ -576,58 +603,106 @@ def delete_branch(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Check if user is super admin
-    if current_user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Only super admin can delete branches")
-    
-    branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    if not branch:
-        raise HTTPException(status_code=404, detail="Branch not found")
-
-    branch_name = branch.name
-    
     try:
-        # Cascading hard delete with transaction
-        from app.models import Patient, Staff, User, DailyEntry, InventoryItem, Asset
+        # Check if user is super admin
+        if current_user.role != "super_admin":
+            raise HTTPException(status_code=403, detail="Only super admin can delete branches")
         
-        # Delete all associated records
-        db.query(Staff).filter(Staff.branch_id == branch_id).delete(synchronize_session=False)
-        db.query(Patient).filter(Patient.branch_id == branch_id).delete(synchronize_session=False)
-        db.query(DailyEntry).filter(DailyEntry.branch_id == branch_id).delete(synchronize_session=False)
-        db.query(InventoryItem).filter(InventoryItem.branch_id == branch_id).delete(synchronize_session=False)
-        
-        # Delete assets if Asset model exists
+        branch = db.query(Branch).filter(Branch.id == branch_id).first()
+        if not branch:
+            raise HTTPException(status_code=404, detail="Branch not found")
+
+        branch_name = branch.name
+
+        # Archive instead of hard-delete to avoid schema drift in legacy tables.
+        from app.models import Patient, User, DailyEntry, InventoryItem
+        from app.models.hr import StaffProfile
+
         try:
-            db.query(Asset).filter(Asset.branch_id == branch_id).delete(synchronize_session=False)
-        except:
-            pass
+            staff_count = db.query(StaffProfile).filter(StaffProfile.branch_id == branch_id).count()
+        except Exception as e:
+            print(f"Warning: Could not count staff: {e}")
+            staff_count = 0
+            
+        try:
+            patient_count = db.query(Patient).filter(Patient.branch_id == branch_id).count()
+        except Exception as e:
+            print(f"Warning: Could not count patients: {e}")
+            # Fallback: use raw SQL without patient_id column
+            try:
+                patient_count = db.query(func.count(Patient.id)).filter(Patient.branch_id == branch_id).scalar() or 0
+            except:
+                patient_count = 0
+                
+        try:
+            user_count = db.query(User).filter(User.branch_id == branch_id).count()
+        except Exception as e:
+            print(f"Warning: Could not count users: {e}")
+            user_count = 0
+            
+        try:
+            entry_count = db.query(DailyEntry).filter(DailyEntry.branch_id == branch_id).count()
+        except Exception as e:
+            print(f"Warning: Could not count entries: {e}")
+            entry_count = 0
+            
+        try:
+            inventory_count = db.query(InventoryItem).filter(InventoryItem.branch_id == branch_id).count()
+        except Exception as e:
+            print(f"Warning: Could not count inventory: {e}")
+            inventory_count = 0
+
+        total_dependencies = staff_count + patient_count + user_count + entry_count + inventory_count
+        branch.is_active = False
         
-        # Delete branch admin users
-        db.query(User).filter(User.branch_id == branch_id).delete(synchronize_session=False)
-        
-        # Delete the branch itself
-        db.delete(branch)
-        
-        # Commit transaction
+        try:
+            db.query(StaffProfile).filter(StaffProfile.branch_id == branch_id).update({"is_active": False})
+        except Exception as e:
+            print(f"Warning: Could not update staff: {e}")
+            
+        try:
+            db.query(Patient).filter(Patient.branch_id == branch_id).update({"is_active": False})
+        except Exception as e:
+            print(f"Warning: Could not update patients: {e}")
+            
+        try:
+            db.query(User).filter(User.branch_id == branch_id).update({"is_active": False})
+        except Exception as e:
+            print(f"Warning: Could not update users: {e}")
+            
+        try:
+            db.query(InventoryItem).filter(InventoryItem.branch_id == branch_id).update({"is_active": False})
+        except Exception as e:
+            print(f"Warning: Could not update inventory: {e}")
+            
         db.commit()
-        
+
         auth_guard.log_activity(
             db=db,
             user=current_user,
-            action="delete",
+            action="archive" if total_dependencies > 0 else "delete",
             entity_type="branch",
-            entity_id=branch_id,
-            description=f"Permanently deleted branch {branch_name} and all associated data",
+            entity_id=branch.id,
+            branch_id=branch.id,
+            description=f"Archived branch {branch_name} and {total_dependencies} associated records" if total_dependencies > 0 else f"Deleted branch {branch_name}",
         )
-        
-        return {"message": "Branch permanently deleted along with all associated data"}
-        
+
+        return {
+            "message": "Branch and associated data archived successfully" if total_dependencies > 0 else "Branch deleted successfully",
+            "archived_records": {
+                "staff": staff_count,
+                "patients": patient_count,
+                "users": user_count,
+                "entries": entry_count,
+                "inventory": inventory_count,
+            },
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete branch: {str(e)}"
-        )
+        print(f"DELETE_BRANCH_ERROR: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to delete branch: {str(e)}")
 
 
 @router.delete("/branches/{branch_id}/permanent")
@@ -646,9 +721,10 @@ def delete_branch_permanent(
         raise HTTPException(status_code=404, detail="Branch not found")
 
     # Check for dependencies
-    from app.models import Patient, Staff, User, DailyEntry, InventoryItem
+    from app.models import Patient, User, DailyEntry, InventoryItem
+    from app.models.hr import StaffProfile
     
-    staff_count = db.query(Staff).filter(Staff.branch_id == branch_id).count()
+    staff_count = db.query(StaffProfile).filter(StaffProfile.branch_id == branch_id).count()
     patient_count = db.query(Patient).filter(Patient.branch_id == branch_id).count()
     user_count = db.query(User).filter(User.branch_id == branch_id).count()
     entry_count = db.query(DailyEntry).filter(DailyEntry.branch_id == branch_id).count()
@@ -661,7 +737,7 @@ def delete_branch_permanent(
         branch.is_active = False
         
         # Archive associated records
-        db.query(Staff).filter(Staff.branch_id == branch_id).update({"is_active": False})
+        db.query(StaffProfile).filter(StaffProfile.branch_id == branch_id).update({"is_active": False})
         db.query(Patient).filter(Patient.branch_id == branch_id).update({"is_active": False})
         db.query(User).filter(User.branch_id == branch_id).update({"is_active": False})
         db.query(InventoryItem).filter(InventoryItem.branch_id == branch_id).update({"is_active": False})
@@ -804,6 +880,112 @@ def reset_branch_admin_credentials(
     return response_data
 
 
+@router.get("/branches/{branch_id}/admin-credentials/current")
+def get_branch_admin_credentials(
+    branch_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admin can access branch admin credentials")
+
+    branch = db.query(Branch).filter(Branch.id == branch_id).first()
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+
+    branch_admin = (
+        db.query(User)
+        .filter(User.branch_id == branch_id, User.role == "branch_admin")
+        .order_by(desc(User.id))
+        .first()
+    )
+    if not branch_admin:
+        raise HTTPException(status_code=404, detail="Branch admin user not found")
+
+    return {
+        "branch_id": branch.id,
+        "branch_name": branch.name,
+        "branch_admin_credentials": {
+            "username": branch_admin.username,
+            "email": branch_admin.email,
+            "role": branch_admin.role,
+        },
+    }
+
+
+@router.put("/branches/{branch_id}/admin-credentials")
+def update_branch_admin_credentials(
+    branch_id: int,
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        if current_user.role != "super_admin":
+            raise HTTPException(status_code=403, detail="Only super admin can update branch admin credentials")
+
+        branch = db.query(Branch).filter(Branch.id == branch_id).first()
+        if not branch:
+            raise HTTPException(status_code=404, detail="Branch not found")
+
+        branch_admin = (
+            db.query(User)
+            .filter(User.branch_id == branch_id, User.role == "branch_admin")
+            .order_by(desc(User.id))
+            .first()
+        )
+        if not branch_admin:
+            raise HTTPException(status_code=404, detail="Branch admin user not found")
+
+        username = str(payload.get("username") or "").strip()
+        password = str(payload.get("password") or "").strip()
+        if not username:
+            raise HTTPException(status_code=422, detail="username is required")
+        if not password:
+            raise HTTPException(status_code=422, detail="password is required")
+
+        existing_user = (
+            db.query(User)
+            .filter(User.username == username, User.id != branch_admin.id)
+            .first()
+        )
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Username already exists")
+
+        branch_admin.username = username
+        branch_admin.hashed_password = hash_password(password)
+        db.commit()
+        db.refresh(branch_admin)
+
+        auth_guard.log_activity(
+            db=db,
+            user=current_user,
+            action="update",
+            entity_type="user",
+            entity_id=branch_admin.id,
+            branch_id=branch_id,
+            description=f"Updated branch admin credentials for branch {branch.name}",
+        )
+
+        print(f"CREDENTIALS_UPDATE_SUCCESS: branch_id={branch_id}, username={branch_admin.username}")
+        return {
+            "branch_id": branch.id,
+            "branch_name": branch.name,
+            "branch_admin_credentials": {
+                "username": branch_admin.username,
+                "email": branch_admin.email,
+                "password": password,
+                "role": branch_admin.role,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"UPDATE_CREDENTIALS_ERROR: branch_id={branch_id}, error={str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to update credentials: {str(e)}")
+
+
 @router.get("/branches/{branch_id}/statistics")
 def get_branch_statistics(
     branch_id: int,
@@ -819,40 +1001,61 @@ def get_branch_statistics(
     if current_user.role != "super_admin" and current_user.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this branch")
 
-    from app.models import DailyEntry, InventoryItem, Patient, Staff
+    from app.database import Base
+    from app.models import DailyEntry, InventoryItem, Patient
+    from app.models.hr import StaffProfile
 
-    start_date = datetime(year, month, 1)
-    end_date = datetime(year + 1, 1, 1) - timedelta(days=1) if month == 12 else datetime(year, month + 1, 1) - timedelta(days=1)
-
-    total_staff = db.query(Staff).filter(Staff.branch_id == branch_id, Staff.is_active.is_(True)).count()
-    total_patients = db.query(Patient).filter(Patient.branch_id == branch_id, Patient.is_active.is_(True)).count()
-    daily_entries = db.query(DailyEntry).filter(
-        DailyEntry.branch_id == branch_id,
-        DailyEntry.entry_date >= start_date,
-        DailyEntry.entry_date <= end_date,
-    ).all()
-
-    monthly_revenue = float(sum(float(entry.total_amount) for entry in daily_entries))
-    total_appointments = len(daily_entries)
-    pending_payments = float(
-        sum(float(entry.total_amount) - float(entry.amount_paid or 0) for entry in daily_entries if entry.payment_status != "paid")
+    Base.metadata.create_all(
+        bind=db.get_bind(),
+        tables=[DailyEntry.__table__, InventoryItem.__table__, Patient.__table__, StaffProfile.__table__],
     )
 
-    inventory_items = db.query(InventoryItem).filter(
-        InventoryItem.branch_id == branch_id,
-        InventoryItem.is_active.is_(True),
-    ).all()
-    inventory_value = float(sum(float(item.current_stock or 0) * float(item.purchase_price or 0) for item in inventory_items))
-    active_services = len({entry.test_names for entry in daily_entries if entry.test_names})
+    try:
+        start_date = datetime(year, month, 1)
+        end_date = datetime(year + 1, 1, 1) - timedelta(days=1) if month == 12 else datetime(year, month + 1, 1) - timedelta(days=1)
 
-    return BranchStatistics(
-        branch_id=branch.id,
-        branch_name=branch.name,
-        total_staff=total_staff,
-        total_patients=total_patients,
-        monthly_revenue=monthly_revenue,
-        total_appointments=total_appointments,
-        pending_payments=pending_payments,
-        inventory_value=inventory_value,
-        active_services=active_services,
-    )
+        total_staff = db.query(StaffProfile).filter(StaffProfile.branch_id == branch_id, StaffProfile.is_active.is_(True)).count()
+        total_patients = db.query(Patient).filter(Patient.branch_id == branch_id, Patient.is_active.is_(True)).count()
+        daily_entries = db.query(DailyEntry).filter(
+            DailyEntry.branch_id == branch_id,
+            DailyEntry.entry_date >= start_date,
+            DailyEntry.entry_date <= end_date,
+        ).all()
+
+        monthly_revenue = float(sum(float(entry.total_amount) for entry in daily_entries))
+        total_appointments = len(daily_entries)
+        pending_payments = float(
+            sum(float(entry.total_amount) - float(entry.amount_paid or 0) for entry in daily_entries if entry.payment_status != "paid")
+        )
+
+        inventory_items = db.query(InventoryItem).filter(
+            InventoryItem.branch_id == branch_id,
+            InventoryItem.is_active.is_(True),
+        ).all()
+        inventory_value = float(sum(float(item.current_stock or 0) * float(item.purchase_price or 0) for item in inventory_items))
+        active_services = len({entry.test_names for entry in daily_entries if entry.test_names})
+
+        return BranchStatistics(
+            branch_id=branch.id,
+            branch_name=branch.name,
+            total_staff=total_staff,
+            total_patients=total_patients,
+            monthly_revenue=monthly_revenue,
+            total_appointments=total_appointments,
+            pending_payments=pending_payments,
+            inventory_value=inventory_value,
+            active_services=active_services,
+        )
+    except OperationalError:
+        traceback.print_exc()
+        return BranchStatistics(
+            branch_id=branch.id,
+            branch_name=branch.name,
+            total_staff=0,
+            total_patients=0,
+            monthly_revenue=0.0,
+            total_appointments=0,
+            pending_payments=0.0,
+            inventory_value=0.0,
+            active_services=0,
+        )
