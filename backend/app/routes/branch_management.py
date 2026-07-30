@@ -683,7 +683,11 @@ def delete_branch(
             print(f"Warning: Could not update patients: {e}")
             
         try:
-            db.query(User).filter(User.branch_id == branch_id).update({"is_active": False})
+            # Do NOT deactivate the current user (prevent logout on branch delete)
+            db.query(User).filter(
+                User.branch_id == branch_id,
+                User.id != current_user.id  # Exclude current user
+            ).update({"is_active": False})
         except Exception as e:
             print(f"Warning: Could not update users: {e}")
             
