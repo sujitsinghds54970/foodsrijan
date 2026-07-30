@@ -206,7 +206,8 @@ def _generate_temp_password() -> str:
     Uses a short URL-safe token so the value always stays safely under
     bcrypt's 72-byte limit.
     """
-    password = secrets.token_urlsafe(12)
+    password = secrets.token_urlsafe(16)
+    # Ensure password is never longer than 72 bytes (bcrypt limit)
     return password[:72]
 
 
@@ -281,10 +282,12 @@ def create_branch(
             email = f"{username}@vaidyavihar.com"
 
         temp_password = _generate_temp_password()
+        # Ensure password is truncated to 72 bytes before hashing
+        temp_password_safe = temp_password[:72]
         branch_admin = User(
             username=username,
             email=email,
-            hashed_password=hash_password(temp_password),
+            hashed_password=hash_password(temp_password_safe),
             role="branch_admin",
             branch_id=db_branch.id,
             is_active=True,
@@ -382,6 +385,7 @@ def create_branch(
         raise
 
 
+@router.get("/branches")
 @router.get("/branches/")
 def get_branches(
     skip: int = Query(0, ge=0),
