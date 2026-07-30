@@ -81,26 +81,39 @@ def _ensure_branch_schema(db: Session) -> None:
 
 
 def _ensure_main_branch(db: Session) -> Branch:
+    # Try to find by name first (more reliable than ID since ID might differ)
+    branch = db.query(Branch).filter(Branch.name == "Main Branch").first()
+    if branch:
+        return branch
+
+    # If not found by name, try by ID
     branch = db.query(Branch).filter(Branch.id == 1).first()
     if branch:
         return branch
 
-    branch = Branch(
-        id=1,
-        name="Main Branch",
-        location="Bhabua",
-        address="Near Civil Court, Bhabua",
-        city="Bhabua",
-        state="Bihar",
-        pincode="821101",
-        phone="+91-9876543210",
-        email="main@vaidyavihar.com",
-        branch_code="MAIN001",
-        is_active=True,
-    )
-    db.add(branch)
-    db.flush()
-    return branch
+    # Create only if neither ID nor name exist
+    try:
+        branch = Branch(
+            id=1,
+            name="Main Branch",
+            location="Bhabua",
+            address="Near Civil Court, Bhabua",
+            city="Bhabua",
+            state="Bihar",
+            pincode="821101",
+            phone="+91-9876543210",
+            email="main@vaidyavihar.com",
+            branch_code="MAIN001",
+            is_active=True,
+        )
+        db.add(branch)
+        db.flush()
+        return branch
+    except Exception:
+        # If insert fails due to unique constraint or ID conflict, 
+        # re-query and return existing branch
+        db.rollback()
+        return db.query(Branch).filter(Branch.name == "Main Branch").first() or db.query(Branch).filter(Branch.id == 1).first()
 
 
 class BranchCreate(BaseModel):
