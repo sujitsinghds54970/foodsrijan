@@ -1,19 +1,19 @@
 import React, { useEffect, useState } from 'react'
 
-import PatientDashboard from '../patient/PatientDashboard'
-import PatientB2CPhase1 from '../patient/PatientB2CPhase1'
-import PatientPremiumPhase4 from '../patient/PatientPremiumPhase4'
+import CustomerDashboard from '../customers/CustomerDashboard'
+import CustomerB2CPhase1 from '../customers/CustomerB2CPhase1'
+import CustomerPremiumPhase4 from '../customers/CustomerPremiumPhase4'
 
-interface PatientPortalProps {
+interface CustomerPortalProps {
   activeTab: string
 }
 
 const PATIENT_PORTAL_STORAGE_KEY = 'patient_portal_token'
 const PATIENT_PORTAL_SESSION_EVENT = 'patient-portal-session-changed'
 
-export default function PatientPortal({ activeTab }: PatientPortalProps) {
+export default function CustomerPortal({ activeTab }: CustomerPortalProps) {
   const active = activeTab === 'patient-portal'
-  const [hasPatientSession, setHasPatientSession] = useState(
+  const [hasCustomerSession, setHasCustomerSession] = useState(
     typeof window !== 'undefined' && Boolean(localStorage.getItem(PATIENT_PORTAL_STORAGE_KEY))
   )
 
@@ -21,7 +21,7 @@ export default function PatientPortal({ activeTab }: PatientPortalProps) {
     if (typeof window === 'undefined') return
 
     const syncSession = () => {
-      setHasPatientSession(Boolean(localStorage.getItem(PATIENT_PORTAL_STORAGE_KEY)))
+      setHasCustomerSession(Boolean(localStorage.getItem(PATIENT_PORTAL_STORAGE_KEY)))
     }
 
     syncSession()
@@ -34,15 +34,15 @@ export default function PatientPortal({ activeTab }: PatientPortalProps) {
     }
   }, [])
 
-  if (!hasPatientSession) {
-    return <PatientDashboard active={active} />
+  if (!hasCustomerSession) {
+    return <CustomerDashboard active={active} />
   }
 
   return (
     <div className="space-y-6">
-      <PatientDashboard active={active} />
-      <PatientB2CPhase1 active={active} />
-      <PatientPremiumPhase4 active={active} />
+      <CustomerDashboard active={active} />
+      <CustomerB2CPhase1 active={active} />
+      <CustomerPremiumPhase4 active={active} />
     </div>
   )
 }

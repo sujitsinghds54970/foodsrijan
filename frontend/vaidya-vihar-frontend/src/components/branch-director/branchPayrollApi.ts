@@ -8,7 +8,7 @@ import {
   BranchPayrollReadiness,
   BranchPayrollStaffUpdatePayload,
   BranchPayrollSimulationResponse,
-  BranchPayrollStatutoryReport,
+  BranchPayrollStatutoryOrder,
   PayrollAnomalyItem,
   PayrollTwoFactorState,
   PayrollWellnessData,
@@ -79,8 +79,8 @@ export const branchPayrollApi = {
     return response.data
   },
 
-  async getStatutoryReport(payroll_run_id?: number): Promise<BranchPayrollStatutoryReport> {
-    const response = await axios.get(`${API_BASE}/api/branch/payroll/reports/statutory`, {
+  async getStatutoryOrder(payroll_run_id?: number): Promise<BranchPayrollStatutoryOrder> {
+    const response = await axios.get(`${API_BASE}/api/branch/payroll/orders/statutory`, {
       params: payroll_run_id ? { payroll_run_id } : {},
     })
     return response.data
@@ -113,13 +113,13 @@ export const branchPayrollApi = {
     return response.data
   },
 
-  payrollReportUrl(format: 'pdf' | 'excel' | 'csv', payroll_run_id?: number): string {
+  payrollOrderUrl(format: 'pdf' | 'excel' | 'csv', payroll_run_id?: number): string {
     const query = payroll_run_id ? `?format=${format}&payroll_run_id=${payroll_run_id}` : `?format=${format}`
-    return `${API_BASE}/api/branch/payroll/reports/payroll${query}`
+    return `${API_BASE}/api/branch/payroll/orders/payroll${query}`
   },
 
   bankFileUrl(payroll_run_id?: number): string {
     const query = payroll_run_id ? `?payroll_run_id=${payroll_run_id}` : ''
-    return `${API_BASE}/api/branch/payroll/reports/bank-file${query}`
+    return `${API_BASE}/api/branch/payroll/orders/bank-file${query}`
   },
 }

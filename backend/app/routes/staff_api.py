@@ -10,14 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Branch, User
-from app.models.staff import (
+from app.models.hr import (
     AttendanceStatus,
-    LeaveApprovalStatus,
+    LeaveStatus as LeaveApprovalStatus,
     StaffAttendanceLog,
     StaffLeaveRequest,
     StaffProfile,
     StaffSalaryDetail,
-    StaffStatus,
+    DirectorStaffStatus as StaffStatus,
 )
 from app.models.hr import BranchNotification, BranchNotificationType
 from app.schemas.staff import (

@@ -1,12 +1,12 @@
 """
-STAFF MANAGEMENT MODULE - PART 2
-Attendance, Salary, Performance, Scheduling, and Reporting Functions
+StaffEmployee MANAGEMENT MODULE - PART 2
+Attendance, Salary, Performance, Scheduling, and Ordering Functions
 
 This file contains the implementation of remaining functions that are too large
-to fit in a single file. Import and integrate with staff_management.py
+to fit in a single file. Import and integrate with StaffEmployee_management.py
 """
 
-# These implementations should be added to the StaffManagementSystem class in staff_management.py
+# These implementations should be added to the StaffManagementSystem class in StaffEmployee_management.py
 
 # ==================== ATTENDANCE FUNCTIONS IMPLEMENTATION ====================
 
@@ -15,8 +15,8 @@ def mark_attendance_impl(self, employee_id: str, check_in_time: datetime,
                    location: Optional[str] = None) -> str:
     """Mark attendance implementation"""
     try:
-        # Verify staff exists
-        staff = self.get_staff_details(employee_id)
+        # Verify StaffEmployee exists
+        StaffEmployee = self.get_StaffEmployee_details(employee_id)
         
         attendance_date = check_in_time.date()
         year = attendance_date.year
@@ -30,7 +30,7 @@ def mark_attendance_impl(self, employee_id: str, check_in_time: datetime,
         attendance_id = f"ATT-{self.branch_code}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
         
         # Calculate late minutes and overtime
-        work_schedule = staff.get('work_schedule', {})
+        work_schedule = StaffEmployee.get('work_schedule', {})
         standard_start = work_schedule.get('start_time', '09:00')
         standard_end = work_schedule.get('end_time', '18:00')
         
@@ -90,8 +90,8 @@ def apply_leave_impl(self, employee_id: str, leave_type: str,
                from_date: date, to_date: date, reason: str) -> str:
     """Apply for leave implementation"""
     try:
-        # Verify staff exists
-        staff = self.get_staff_details(employee_id)
+        # Verify StaffEmployee exists
+        StaffEmployee = self.get_StaffEmployee_details(employee_id)
         
         # Calculate days
         days_count = (to_date - from_date).days + 1
@@ -201,8 +201,8 @@ def get_leave_balance_impl(self, employee_id: str) -> Dict[str, float]:
 def create_salary_structure_impl(self, employee_id: str, components: Dict[str, float]) -> bool:
     """Create salary structure implementation"""
     try:
-        # Verify staff exists
-        staff = self.get_staff_details(employee_id)
+        # Verify StaffEmployee exists
+        StaffEmployee = self.get_StaffEmployee_details(employee_id)
         
         # Calculate gross and net salary
         basic = components.get('basic_salary', 0)
@@ -273,14 +273,14 @@ def process_monthly_salary_impl(self, year: int, month: int,
                           department_filter: Optional[str] = None) -> Dict[str, Any]:
     """Process monthly salary implementation"""
     try:
-        # Get all active staff
+        # Get all active StaffEmployee
         filters = {'is_active': True}
         if department_filter:
             filters['department'] = department_filter
         
-        all_staff = self.get_all_staff(filters)
+        all_StaffEmployee = self.get_all_StaffEmployee(filters)
         
-        if all_staff.empty:
+        if all_StaffEmployee.empty:
             return {'processed': 0, 'total_amount': 0, 'details': []}
         
         salary_path = self._get_excel_file_path('salary', year=year)
@@ -293,8 +293,8 @@ def process_monthly_salary_impl(self, year: int, month: int,
         total_amount = 0
         details = []
         
-        for _, staff in all_staff.iterrows():
-            employee_id = staff['employee_id']
+        for _, StaffEmployee in all_StaffEmployee.iterrows():
+            employee_id = StaffEmployee['employee_id']
             
             # Check if already processed
             existing = monthly_salary_df[
@@ -368,7 +368,7 @@ def process_monthly_salary_impl(self, year: int, month: int,
             total_amount += net
             details.append({
                 'employee_id': employee_id,
-                'name': staff['full_name'],
+                'name': StaffEmployee['full_name'],
                 'net_salary': net
             })
         
@@ -425,20 +425,20 @@ def calculate_pf_contribution_impl(self, basic_salary: float) -> Dict[str, float
 # ==================== EXAMPLE USAGE AND TESTING ====================
 
 def example_usage_complete():
-    """Complete example usage of the staff management system"""
+    """Complete example usage of the StaffEmployee management system"""
     
     # Initialize system
     branch_config = BranchConfig(
         branch_id="BR001",
         branch_name="Main Branch",
         branch_code="MAIN",
-        base_data_path="./data/staff"
+        base_data_path="./data/StaffEmployee"
     )
     
     sms = StaffManagementSystem(branch_config)
     
-    # Example 1: Add new staff member
-    staff_data = {
+    # Example 1: Add new StaffEmployee member
+    StaffEmployee_data = {
         'full_name': 'Dr. Rajesh Kumar',
         'date_of_birth': date(1985, 5, 15),
         'gender': 'Male',
@@ -466,8 +466,8 @@ def example_usage_complete():
         }
     }
     
-    employee_id = sms.add_staff_member(staff_data)
-    print(f"Added staff: {employee_id}")
+    employee_id = sms.add_StaffEmployee_member(StaffEmployee_data)
+    print(f"Added StaffEmployee: {employee_id}")
     
     # Example 2: Create salary structure
     salary_components = {
@@ -502,12 +502,12 @@ def example_usage_complete():
     )
     print(f"Leave applied: {leave_id}")
     
-    # Example 5: Get staff details
-    details = sms.get_staff_details(employee_id)
-    print(f"Staff details: {details['full_name']}, {details['designation']}")
+    # Example 5: Get StaffEmployee details
+    details = sms.get_StaffEmployee_details(employee_id)
+    print(f"StaffEmployee details: {details['full_name']}, {details['designation']}")
     
-    # Example 6: Search staff
-    results = sms.search_staff("Rajesh", "name")
+    # Example 6: Search StaffEmployee
+    results = sms.search_StaffEmployee("Rajesh", "name")
     print(f"Search results: {len(results)} found")
     
     # Example 7: Get upcoming birthdays
@@ -521,5 +521,5 @@ def example_usage_complete():
 
 
 if __name__ == "__main__":
-    print("Staff Management Module - Part 2")
-    print("This file contains implementation functions to be integrated with staff_management.py")
+    print("StaffEmployee Management Module - Part 2")
+    print("This file contains implementation functions to be integrated with StaffEmployee_management.py")

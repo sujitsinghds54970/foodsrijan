@@ -316,8 +316,8 @@ export default function InventoryManagementModule({ branchId }: InventoryManagem
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="text-left text-slate-500 border-b">
-                    <th className="py-2">Patient ID</th>
-                    <th className="py-2">Test</th>
+                    <th className="py-2">Customer ID</th>
+                    <th className="py-2">MenuItem</th>
                     <th className="py-2">Item Deducted</th>
                     <th className="py-2">Quantity</th>
                     <th className="py-2">Date</th>

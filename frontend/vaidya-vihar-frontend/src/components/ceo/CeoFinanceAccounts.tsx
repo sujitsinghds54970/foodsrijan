@@ -24,7 +24,7 @@ import {
   CeoFinanceCfoBriefingResponse,
   CeoFinanceComplianceTaxationResponse,
   CeoFinanceCostControlResponse,
-  CeoFinanceDoctorReferralFinancialsResponse,
+  CeoFinanceStaffReferralFinancialsResponse,
   CeoFinanceHealthScoreResponse,
   CeoFinanceLisOperationsOverviewResponse,
   CeoFinancePredictiveAnalyticsResponse,
@@ -36,7 +36,7 @@ import {
   getCeoFinanceCfoBriefing,
   getCeoFinanceComplianceTaxation,
   getCeoFinanceCostControl,
-  getCeoFinanceDoctorReferralFinancials,
+  getCeoFinanceStaffReferralFinancials,
   getCeoFinanceHealthScore,
   getCeoFinanceLisOperationsOverview,
   getCeoFinancePredictiveAnalytics,
@@ -66,7 +66,7 @@ const CeoFinanceAccounts = () => {
   const [costControl, setCostControl] = useState<CeoFinanceCostControlResponse | null>(null)
   const [compliance, setCompliance] = useState<CeoFinanceComplianceTaxationResponse | null>(null)
   const [predictive, setPredictive] = useState<CeoFinancePredictiveAnalyticsResponse | null>(null)
-  const [doctorReferral, setDoctorReferral] = useState<CeoFinanceDoctorReferralFinancialsResponse | null>(null)
+  const [doctorReferral, setStaffReferral] = useState<CeoFinanceStaffReferralFinancialsResponse | null>(null)
   const [cfoBriefing, setCfoBriefing] = useState<CeoFinanceCfoBriefingResponse | null>(null)
   const [branchHeatmap, setBranchHeatmap] = useState<CeoFinanceBranchProfitabilityHeatmapResponse | null>(null)
   const [lisOverview, setLisOverview] = useState<CeoFinanceLisOperationsOverviewResponse | null>(null)
@@ -99,7 +99,7 @@ const CeoFinanceAccounts = () => {
           getCeoFinanceCostControl(),
           getCeoFinanceComplianceTaxation(),
           getCeoFinancePredictiveAnalytics(),
-          getCeoFinanceDoctorReferralFinancials(),
+          getCeoFinanceStaffReferralFinancials(),
           getCeoFinanceCfoBriefing(),
           getCeoFinanceBranchProfitabilityHeatmap(),
           getCeoFinanceLisOperationsOverview(),
@@ -111,7 +111,7 @@ const CeoFinanceAccounts = () => {
         setCostControl(costControlResp)
         setCompliance(complianceResp)
         setPredictive(predictiveResp)
-        setDoctorReferral(doctorReferralResp)
+        setStaffReferral(doctorReferralResp)
         setCfoBriefing(cfoBriefingResp)
         setBranchHeatmap(branchHeatmapResp)
         setLisOverview(lisOverviewResp)
@@ -186,7 +186,7 @@ const CeoFinanceAccounts = () => {
         <h2 className="text-xl font-bold text-slate-900">LIS Operations Analytics (Read-only Command Feed)</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 md:col-span-3`}>
-            <p className="text-xs uppercase text-slate-500">Today&apos;s Test Volume</p>
+            <p className="text-xs uppercase text-slate-500">Today&apos;s MenuItem Volume</p>
             <p className="mt-2 text-3xl font-black text-slate-900">{lisOverview?.network_summary.today_test_volume || 0}</p>
           </div>
           <div className={`${CARD_CLASS} col-span-12 md:col-span-3`}>
@@ -194,8 +194,8 @@ const CeoFinanceAccounts = () => {
             <p className="mt-2 text-3xl font-black text-indigo-700">{Number(lisOverview?.network_summary.average_tat_minutes || 0).toFixed(1)} min</p>
           </div>
           <div className={`${CARD_CLASS} col-span-12 md:col-span-3`}>
-            <p className="text-xs uppercase text-slate-500">Pending Tests</p>
-            <p className="mt-2 text-3xl font-black text-amber-700">{lisOverview?.network_summary.pending_tests || 0}</p>
+            <p className="text-xs uppercase text-slate-500">Pending MenuItems</p>
+            <p className="mt-2 text-3xl font-black text-amber-700">{lisOverview?.network_summary.pending_menu_items || 0}</p>
           </div>
           <div className={`${CARD_CLASS} col-span-12 md:col-span-3`}>
             <p className="text-xs uppercase text-slate-500">Lab Readiness Score</p>
@@ -476,15 +476,15 @@ const CeoFinanceAccounts = () => {
               <p className="mt-1 text-3xl font-black text-emerald-700">{Number(profitability?.ebitda.margin_percent || 0).toFixed(1)}%</p>
             </div>
             <div className="mt-3 rounded-lg border border-slate-200 p-4 text-sm">
-              <p className="text-xs uppercase text-slate-500">Avg Revenue per Patient</p>
+              <p className="text-xs uppercase text-slate-500">Avg Revenue per Customer</p>
               <p className="text-xl font-bold text-slate-900">{toCurrency(profitability?.revenue_per_unit.avg_revenue_per_patient || 0)}</p>
-              <p className="mt-2 text-xs uppercase text-slate-500">Avg Revenue per Test</p>
+              <p className="mt-2 text-xs uppercase text-slate-500">Avg Revenue per MenuItem</p>
               <p className="text-xl font-bold text-slate-900">{toCurrency(profitability?.revenue_per_unit.avg_revenue_per_test || 0)}</p>
             </div>
           </div>
 
           <div className={`${CARD_CLASS} col-span-12`}>
-            <p className="text-sm font-semibold text-slate-700">Test-wise Profitability</p>
+            <p className="text-sm font-semibold text-slate-700">MenuItem-wise Profitability</p>
             <div className="mt-3 h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -512,7 +512,7 @@ const CeoFinanceAccounts = () => {
         <h2 className="text-xl font-bold text-slate-900">Accounts Receivable &amp; Revenue Cycle (The Collections Engine)</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-7`}>
-            <p className="text-sm font-semibold text-slate-700">AR Aging Report</p>
+            <p className="text-sm font-semibold text-slate-700">AR Aging Order</p>
             <div className="mt-3 h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={receivables?.ar_aging || []}>
@@ -611,11 +611,11 @@ const CeoFinanceAccounts = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 md:col-span-4`}>
-            <p className="text-xs uppercase text-slate-500">Cost per Test</p>
+            <p className="text-xs uppercase text-slate-500">Cost per MenuItem</p>
             <p className="mt-2 text-3xl font-black text-slate-900">{toCurrency(costControl?.cost_per_unit.avg_cost_per_test || 0)}</p>
           </div>
           <div className={`${CARD_CLASS} col-span-12 md:col-span-4`}>
-            <p className="text-xs uppercase text-slate-500">Cost per Patient</p>
+            <p className="text-xs uppercase text-slate-500">Cost per Customer</p>
             <p className="mt-2 text-3xl font-black text-slate-900">{toCurrency(costControl?.cost_per_unit.avg_cost_per_patient || 0)}</p>
           </div>
           <div className={`${CARD_CLASS} col-span-12 md:col-span-4`}>
@@ -799,7 +799,7 @@ const CeoFinanceAccounts = () => {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-bold text-slate-900">Doctor &amp; Referral Financials</h2>
+        <h2 className="text-xl font-bold text-slate-900">Staff &amp; Referral Financials</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-8`}>
             <p className="text-sm font-semibold text-slate-700">Referral Revenue Breakdown</p>
@@ -823,12 +823,12 @@ const CeoFinanceAccounts = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12`}>
-            <p className="text-sm font-semibold text-slate-700">Doctor Commission &amp; Incentive Tracking</p>
+            <p className="text-sm font-semibold text-slate-700">Staff Commission &amp; Incentive Tracking</p>
             <div className="mt-3 overflow-x-auto rounded-md border border-slate-200">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                   <tr>
-                    <th className="px-3 py-2">Doctor</th>
+                    <th className="px-3 py-2">Staff</th>
                     <th className="px-3 py-2">Referred Revenue</th>
                     <th className="px-3 py-2">Commission %</th>
                     <th className="px-3 py-2">Commission Earned</th>
@@ -849,12 +849,12 @@ const CeoFinanceAccounts = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12`}>
-            <p className="text-sm font-semibold text-slate-700">Doctor-wise Profitability</p>
+            <p className="text-sm font-semibold text-slate-700">Staff-wise Profitability</p>
             <div className="mt-3 overflow-x-auto rounded-md border border-slate-200">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                   <tr>
-                    <th className="px-3 py-2">Doctor</th>
+                    <th className="px-3 py-2">Staff</th>
                     <th className="px-3 py-2">Revenue</th>
                     <th className="px-3 py-2">Referral Cost</th>
                     <th className="px-3 py-2">Service Cost</th>

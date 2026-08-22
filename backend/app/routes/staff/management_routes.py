@@ -36,8 +36,8 @@ from app.utils.security import hash_password
 
 router = APIRouter()
 UPLOADS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "uploads"
-STAFF_ACCESS_ROLES = ["branch_admin", "branch_director"]
-STAFF_ROLE_CHOICES = {"Technician", "Receptionist", "Lab Assistant", "Radiologist"}
+StaffEmployee_ACCESS_ROLES = ["branch_admin", "branch_director"]
+StaffEmployee_ROLE_CHOICES = {"Technician", "Receptionist", "Lab Assistant", "Radiologist"}
 
 
 class StaffCreatePayload(BaseModel):
@@ -92,7 +92,7 @@ class LeaveApplyPayload(BaseModel):
     start_date: datetime
     end_date: datetime
     reason: Optional[str] = None
-    staff_profile_id: Optional[int] = None
+    StaffEmployee_profile_id: Optional[int] = None
 
 
 class LeaveDecisionPayload(BaseModel):
@@ -117,13 +117,13 @@ class StaffCredentialsUpdatePayload(BaseModel):
     auto_generate_password: bool = False
 
 
-def _assert_staff_scope(user: User) -> None:
-    if user.role not in STAFF_ACCESS_ROLES:
+def _assert_StaffEmployee_scope(user: User) -> None:
+    if user.role not in StaffEmployee_ACCESS_ROLES:
         raise HTTPException(status_code=403, detail="Access denied")
 
 
 def _assert_director_scope(user: User) -> None:
-    _assert_staff_scope(user)
+    _assert_StaffEmployee_scope(user)
 
 
 def _assert_branch_access(user: User, branch_id: int) -> None:
@@ -135,10 +135,10 @@ def _generate_username(first_name: str, last_name: str) -> str:
     return f"{first_name.lower()}.{last_name.lower()}.{secrets.token_hex(2)}"
 
 
-def _generate_staff_id(db: Session, branch_id: int) -> str:
+def _generate_StaffEmployee_id(db: Session, branch_id: int) -> str:
     seq = db.query(StaffProfile).filter(StaffProfile.branch_id == branch_id).count() + 1
     candidate = f"ST{branch_id:03d}{seq:04d}"
-    while db.query(StaffProfile).filter(StaffProfile.staff_id == candidate).first():
+    while db.query(StaffProfile).filter(StaffProfile.staff_employee_id == candidate).first():
         seq += 1
         candidate = f"ST{branch_id:03d}{seq:04d}"
     return candidate
@@ -195,7 +195,7 @@ def _ensure_director_notification(db: Session, branch_id: int, title: str, messa
 
 
 @router.post("/")
-def create_staff(
+def create_StaffEmployee(
     payload: StaffCreatePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -209,7 +209,7 @@ def create_staff(
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    if payload.role not in STAFF_ROLE_CHOICES:
+    if payload.role not in StaffEmployee_ROLE_CHOICES:
         raise HTTPException(status_code=400, detail="role must be one of Technician, Receptionist, Lab Assistant, Radiologist")
 
     username = _generate_username(payload.first_name, payload.last_name)
@@ -232,14 +232,14 @@ def create_staff(
     db.add(user)
     db.flush()
 
-    # Contract requirement: generated login should be `staff_<id>`.
+    # Contract requirement: generated login should be `StaffEmployee_<id>`.
     user.username = f"staff_{user.id}"
 
     profile = StaffProfile(
         user_id=user.id,
         branch_id=target_branch_id,
         created_by=current_user.id,
-        staff_id=_generate_staff_id(db, target_branch_id),
+        staff_employee_id=_generate_StaffEmployee_id(db, target_branch_id),
         department=payload.department,
         specialization=payload.specialization,
         shift_timings=payload.shift_timing,
@@ -253,22 +253,22 @@ def create_staff(
     db.add(profile)
     db.flush()
 
-    db.add(StaffSalaryDetail(staff_profile_id=profile.id, basic=0, hra=0, allowances=0, deductions=0, net_pay=0))
+    db.add(StaffSalaryDetail(StaffEmployee_profile_id=profile.id, basic=0, hra=0, allowances=0, deductions=0, net_pay=0))
 
     _ensure_director_notification(
         db,
         branch_id=target_branch_id,
-        title="Staff Created",
-        message=f"{profile.staff_id} was created by {current_user.username}.",
+        title="StaffEmployee Created",
+        message=f"{profile.staff_employee_id} was created by {current_user.username}.",
     )
 
     db.commit()
 
     return {
-        "message": "Staff created successfully",
-        "staff": {
+        "message": "StaffEmployee created successfully",
+        "StaffEmployee": {
             "staff_profile_id": profile.id,
-            "staff_id": profile.staff_id,
+            "staff_id": profile.staff_employee_id,
             "name": f"{user.first_name} {user.last_name}",
             "department": profile.department,
             "status": profile.status.value,
@@ -289,7 +289,7 @@ def create_staff(
 
 
 @router.get("/")
-def list_staff(
+def list_StaffEmployee(
     branch_id: Optional[int] = Query(None),
     role: Optional[str] = Query(None),
     department: Optional[str] = Query(None),
@@ -298,7 +298,7 @@ def list_staff(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
     target_branch_id = current_user.branch_id
     if not target_branch_id:
@@ -323,7 +323,7 @@ def list_staff(
                 User.first_name.ilike(like),
                 User.last_name.ilike(like),
                 User.email.ilike(like),
-                StaffProfile.staff_id.ilike(like),
+                StaffProfile.staff_employee_id.ilike(like),
                 StaffProfile.department.ilike(like),
             )
         )
@@ -334,7 +334,7 @@ def list_staff(
             "id": sp.id,
             "branch_id": sp.branch_id,
             "photo_url": sp.photo_path,
-            "staff_id": sp.staff_id,
+            "staff_id": sp.staff_employee_id,
             "name": f"{u.first_name} {u.last_name}",
             "full_name": f"{u.first_name} {u.last_name}",
             "username": u.username,
@@ -354,32 +354,32 @@ def list_staff(
     ]
 
 
-@router.get("/{staff_profile_id}")
-def get_staff_profile(
-    staff_profile_id: int,
+@router.get("/{StaffEmployee_profile_id}")
+def get_StaffEmployee_profile(
+    StaffEmployee_profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
-    row = db.query(StaffProfile, User).join(User, StaffProfile.user_id == User.id).filter(StaffProfile.id == staff_profile_id).first()
+    row = db.query(StaffProfile, User).join(User, StaffProfile.user_id == User.id).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not row:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
 
     profile, user = row
     _assert_branch_access(current_user, profile.branch_id)
 
-    if current_user.role == "staff" and current_user.id != profile.user_id:
-        raise HTTPException(status_code=403, detail="Staff can only view own profile")
+    if current_user.role == "StaffEmployee" and current_user.id != profile.user_id:
+        raise HTTPException(status_code=403, detail="StaffEmployee can only view own profile")
 
-    salary = db.query(StaffSalaryDetail).filter(StaffSalaryDetail.staff_profile_id == profile.id).first()
-    docs = db.query(StaffDocument).filter(StaffDocument.staff_profile_id == profile.id).order_by(StaffDocument.created_at.desc()).all()
+    salary = db.query(StaffSalaryDetail).filter(StaffSalaryDetail.StaffEmployee_profile_id == profile.id).first()
+    docs = db.query(StaffDocument).filter(StaffDocument.StaffEmployee_profile_id == profile.id).order_by(StaffDocument.created_at.desc()).all()
 
     return {
         "id": profile.id,
         "user_id": user.id,
         "branch_id": profile.branch_id,
-        "staff_id": profile.staff_id,
+        "staff_id": profile.staff_employee_id,
         "photo_url": profile.photo_path,
         "full_name": f"{user.first_name} {user.last_name}",
         "username": user.username,
@@ -420,18 +420,18 @@ def get_staff_profile(
     }
 
 
-@router.put("/{staff_profile_id}")
-def update_staff(
-    staff_profile_id: int,
+@router.put("/{StaffEmployee_profile_id}")
+def update_StaffEmployee(
+    StaffEmployee_profile_id: int,
     payload: StaffUpdatePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _assert_director_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
     user = db.query(User).filter(User.id == profile.user_id).first()
@@ -447,7 +447,7 @@ def update_staff(
     if payload.mobile is not None:
         user.phone = payload.mobile
     if payload.role is not None:
-        if payload.role not in STAFF_ROLE_CHOICES:
+        if payload.role not in StaffEmployee_ROLE_CHOICES:
             raise HTTPException(status_code=400, detail="role must be one of Technician, Receptionist, Lab Assistant, Radiologist")
         user.role = payload.role
 
@@ -475,20 +475,20 @@ def update_staff(
         user.is_active = profile.is_active
 
     db.commit()
-    return {"message": "Staff profile updated"}
+    return {"message": "StaffEmployee profile updated"}
 
 
-@router.delete("/{staff_profile_id}")
-def deactivate_staff(
-    staff_profile_id: int,
+@router.delete("/{StaffEmployee_profile_id}")
+def deactivate_StaffEmployee(
+    StaffEmployee_profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _assert_director_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
     user = db.query(User).filter(User.id == profile.user_id).first()
@@ -498,21 +498,21 @@ def deactivate_staff(
         user.is_active = False
 
     db.commit()
-    return {"message": "Staff deactivated"}
+    return {"message": "StaffEmployee deactivated"}
 
 
-@router.post("/{staff_profile_id}/photo")
-def upload_staff_photo(
-    staff_profile_id: int,
+@router.post("/{StaffEmployee_profile_id}/photo")
+def upload_StaffEmployee_photo(
+    StaffEmployee_profile_id: int,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _assert_director_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
     profile.photo_path = _save_uploaded_file(file, "staff_photos")
@@ -520,18 +520,18 @@ def upload_staff_photo(
     return {"photo_url": _resolve_photo_url(profile.photo_path)}
 
 
-@router.put("/{staff_profile_id}/credentials")
-def update_staff_credentials(
-    staff_profile_id: int,
+@router.put("/{StaffEmployee_profile_id}/credentials")
+def update_StaffEmployee_credentials(
+    StaffEmployee_profile_id: int,
     payload: StaffCredentialsUpdatePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _assert_director_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
     user = db.query(User).filter(User.id == profile.user_id).first()
@@ -558,7 +558,7 @@ def update_staff_credentials(
     db.commit()
 
     return {
-        "message": "Staff credentials updated",
+        "message": "StaffEmployee credentials updated",
         "credentials": {
             "username": user.username,
             "password": generated_password,
@@ -566,22 +566,22 @@ def update_staff_credentials(
     }
 
 
-@router.get("/{staff_profile_id}/salary")
+@router.get("/{StaffEmployee_profile_id}/salary")
 def get_salary(
-    staff_profile_id: int,
+    StaffEmployee_profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _assert_director_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
-    salary = db.query(StaffSalaryDetail).filter(StaffSalaryDetail.staff_profile_id == staff_profile_id).first()
+    salary = db.query(StaffSalaryDetail).filter(StaffSalaryDetail.StaffEmployee_profile_id == StaffEmployee_profile_id).first()
     if not salary:
-        salary = StaffSalaryDetail(staff_profile_id=staff_profile_id, basic=0, hra=0, allowances=0, deductions=0, net_pay=0)
+        salary = StaffSalaryDetail(StaffEmployee_profile_id=StaffEmployee_profile_id, basic=0, hra=0, allowances=0, deductions=0, net_pay=0)
         db.add(salary)
         db.commit()
         db.refresh(salary)
@@ -599,23 +599,23 @@ def get_salary(
     }
 
 
-@router.put("/{staff_profile_id}/salary")
+@router.put("/{StaffEmployee_profile_id}/salary")
 def upsert_salary(
-    staff_profile_id: int,
+    StaffEmployee_profile_id: int,
     payload: SalaryUpdatePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _assert_director_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
-    salary = db.query(StaffSalaryDetail).filter(StaffSalaryDetail.staff_profile_id == staff_profile_id).first()
+    salary = db.query(StaffSalaryDetail).filter(StaffSalaryDetail.StaffEmployee_profile_id == StaffEmployee_profile_id).first()
     if not salary:
-        salary = StaffSalaryDetail(staff_profile_id=staff_profile_id)
+        salary = StaffSalaryDetail(StaffEmployee_profile_id=StaffEmployee_profile_id)
         db.add(salary)
 
     month = payload.month or datetime.utcnow().month
@@ -632,7 +632,7 @@ def upsert_salary(
     salary.upi_id = payload.upi_id
 
     db.add(StaffSalaryRecord(
-        staff_profile_id=staff_profile_id,
+        StaffEmployee_profile_id=StaffEmployee_profile_id,
         branch_id=profile.branch_id,
         month=month,
         year=year,
@@ -648,9 +648,9 @@ def upsert_salary(
     return {"message": "Salary details saved", "net_pay": float(salary.net_pay or 0)}
 
 
-@router.get("/{staff_profile_id}/salary-records")
+@router.get("/{StaffEmployee_profile_id}/salary-records")
 def list_salary_records(
-    staff_profile_id: int,
+    StaffEmployee_profile_id: int,
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None, ge=2020),
     db: Session = Depends(get_db),
@@ -658,12 +658,12 @@ def list_salary_records(
 ):
     _assert_director_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
-    q = db.query(StaffSalaryRecord).filter(StaffSalaryRecord.staff_profile_id == staff_profile_id)
+    q = db.query(StaffSalaryRecord).filter(StaffSalaryRecord.StaffEmployee_profile_id == StaffEmployee_profile_id)
     if month:
         q = q.filter(StaffSalaryRecord.month == month)
     if year:
@@ -686,9 +686,9 @@ def list_salary_records(
     ]
 
 
-@router.post("/{staff_profile_id}/attendance/clock")
+@router.post("/{StaffEmployee_profile_id}/attendance/clock")
 def attendance_clock(
-    staff_profile_id: int,
+    StaffEmployee_profile_id: int,
     action: str = Form(...),
     latitude: Optional[str] = Form(None),
     longitude: Optional[str] = Form(None),
@@ -696,22 +696,22 @@ def attendance_clock(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
-    if current_user.role == "staff" and current_user.id != profile.user_id:
-        raise HTTPException(status_code=403, detail="Staff can mark own attendance only")
+    if current_user.role == "StaffEmployee" and current_user.id != profile.user_id:
+        raise HTTPException(status_code=403, detail="StaffEmployee can mark own attendance only")
 
     today = date.today()
     day_start = datetime.combine(today, datetime.min.time())
     day_end = datetime.combine(today, datetime.max.time())
 
     record = db.query(StaffAttendanceLog).filter(
-        StaffAttendanceLog.staff_profile_id == staff_profile_id,
+        StaffAttendanceLog.StaffEmployee_profile_id == StaffEmployee_profile_id,
         StaffAttendanceLog.attendance_date >= day_start,
         StaffAttendanceLog.attendance_date <= day_end,
     ).first()
@@ -722,7 +722,7 @@ def attendance_clock(
     if action == "in":
         if not record:
             record = StaffAttendanceLog(
-                staff_profile_id=staff_profile_id,
+                StaffEmployee_profile_id=StaffEmployee_profile_id,
                 branch_id=profile.branch_id,
                 attendance_date=now,
                 attendance_type=DirectorAttendanceType.PRESENT,
@@ -751,7 +751,7 @@ def attendance_clock(
         db,
         branch_id=profile.branch_id,
         title="Attendance Event",
-        message=f"{profile.staff_id} clocked {action} at {now.strftime('%H:%M')}.",
+        message=f"{profile.staff_employee_id} clocked {action} at {now.strftime('%H:%M')}.",
     )
 
     db.commit()
@@ -763,36 +763,36 @@ def attendance_clock(
     }
 
 
-@router.get("/{staff_profile_id}/attendance/monthly")
+@router.get("/{StaffEmployee_profile_id}/attendance/monthly")
 def monthly_attendance(
-    staff_profile_id: int,
+    StaffEmployee_profile_id: int,
     month: int,
     year: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
-    if current_user.role == "staff" and current_user.id != profile.user_id:
-        raise HTTPException(status_code=403, detail="Staff can only view own attendance")
+    if current_user.role == "StaffEmployee" and current_user.id != profile.user_id:
+        raise HTTPException(status_code=403, detail="StaffEmployee can only view own attendance")
 
     start = datetime(year, month, 1)
     _, last_day = calendar.monthrange(year, month)
     end = datetime(year, month, last_day, 23, 59, 59)
 
     logs = db.query(StaffAttendanceLog).filter(
-        StaffAttendanceLog.staff_profile_id == staff_profile_id,
+        StaffAttendanceLog.StaffEmployee_profile_id == StaffEmployee_profile_id,
         StaffAttendanceLog.attendance_date >= start,
         StaffAttendanceLog.attendance_date <= end,
     ).all()
 
     leaves = db.query(StaffLeaveRequest).filter(
-        StaffLeaveRequest.staff_profile_id == staff_profile_id,
+        StaffLeaveRequest.StaffEmployee_profile_id == StaffEmployee_profile_id,
         StaffLeaveRequest.status == LeaveStatus.APPROVED,
         StaffLeaveRequest.start_date <= end,
         StaffLeaveRequest.end_date >= start,
@@ -843,18 +843,18 @@ def apply_leave(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
-    if current_user.role == "staff":
+    if current_user.role == "StaffEmployee":
         profile = db.query(StaffProfile).filter(StaffProfile.user_id == current_user.id).first()
         if not profile:
-            raise HTTPException(status_code=404, detail="Staff profile missing")
+            raise HTTPException(status_code=404, detail="StaffEmployee profile missing")
     else:
-        if not payload.staff_profile_id:
+        if not payload.StaffEmployee_profile_id:
             raise HTTPException(status_code=400, detail="staff_profile_id is required")
-        profile = db.query(StaffProfile).filter(StaffProfile.id == payload.staff_profile_id).first()
+        profile = db.query(StaffProfile).filter(StaffProfile.id == payload.StaffEmployee_profile_id).first()
         if not profile:
-            raise HTTPException(status_code=404, detail="Staff not found")
+            raise HTTPException(status_code=404, detail="StaffEmployee not found")
 
     _assert_branch_access(current_user, profile.branch_id)
 
@@ -863,7 +863,7 @@ def apply_leave(
         raise HTTPException(status_code=400, detail="Invalid leave date range")
 
     leave = StaffLeaveRequest(
-        staff_profile_id=profile.id,
+        StaffEmployee_profile_id=profile.id,
         branch_id=profile.branch_id,
         leave_type=payload.leave_type.lower(),
         start_date=payload.start_date,
@@ -878,7 +878,7 @@ def apply_leave(
         db,
         branch_id=profile.branch_id,
         title="New Leave Request",
-        message=f"{profile.staff_id} requested {payload.leave_type} leave.",
+        message=f"{profile.staff_employee_id} requested {payload.leave_type} leave.",
     )
 
     db.commit()
@@ -892,7 +892,7 @@ def list_leave_requests(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
     target_branch_id = current_user.branch_id
     if not target_branch_id:
         raise HTTPException(status_code=400, detail="Branch assignment missing")
@@ -901,7 +901,7 @@ def list_leave_requests(
 
     query = db.query(StaffLeaveRequest, StaffProfile).join(
         StaffProfile,
-        StaffLeaveRequest.staff_profile_id == StaffProfile.id,
+        StaffLeaveRequest.StaffEmployee_profile_id == StaffProfile.id,
     ).filter(StaffLeaveRequest.branch_id == target_branch_id)
 
     if status:
@@ -911,8 +911,8 @@ def list_leave_requests(
     return [
         {
             "id": req.id,
-            "staff_profile_id": req.staff_profile_id,
-            "staff_id": profile.staff_id,
+            "staff_profile_id": req.StaffEmployee_profile_id,
+            "staff_id": profile.staff_employee_id,
             "leave_type": req.leave_type,
             "start_date": req.start_date,
             "end_date": req.end_date,
@@ -949,30 +949,30 @@ def decide_leave(
     return {"message": "Leave status updated", "status": req.status.value}
 
 
-@router.get("/leave/balance/{staff_profile_id}")
+@router.get("/leave/balance/{StaffEmployee_profile_id}")
 def leave_balance(
-    staff_profile_id: int,
+    StaffEmployee_profile_id: int,
     year: int = Query(default=datetime.utcnow().year),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
 
     _assert_branch_access(current_user, profile.branch_id)
 
-    if current_user.role == "staff" and current_user.id != profile.user_id:
-        raise HTTPException(status_code=403, detail="Staff can only view own leave balance")
+    if current_user.role == "StaffEmployee" and current_user.id != profile.user_id:
+        raise HTTPException(status_code=403, detail="StaffEmployee can only view own leave balance")
 
     quota = {"casual": 12, "sick": 12, "earned": 15, "unpaid": 999}
     used = {k: 0 for k in quota}
     pending = {k: 0 for k in quota}
 
     approved_rows = db.query(StaffLeaveRequest).filter(
-        StaffLeaveRequest.staff_profile_id == staff_profile_id,
+        StaffLeaveRequest.StaffEmployee_profile_id == StaffEmployee_profile_id,
         StaffLeaveRequest.status == LeaveStatus.APPROVED,
         StaffLeaveRequest.start_date >= datetime(year, 1, 1),
         StaffLeaveRequest.end_date <= datetime(year, 12, 31, 23, 59, 59),
@@ -983,7 +983,7 @@ def leave_balance(
             used[key] += row.total_days
 
     pending_rows = db.query(StaffLeaveRequest).filter(
-        StaffLeaveRequest.staff_profile_id == staff_profile_id,
+        StaffLeaveRequest.StaffEmployee_profile_id == StaffEmployee_profile_id,
         StaffLeaveRequest.status == LeaveStatus.PENDING,
         StaffLeaveRequest.start_date >= datetime(year, 1, 1),
         StaffLeaveRequest.end_date <= datetime(year, 12, 31, 23, 59, 59),
@@ -1005,23 +1005,23 @@ def leave_balance(
     ]
 
 
-@router.post("/{staff_profile_id}/performance-notes")
+@router.post("/{StaffEmployee_profile_id}/performance-notes")
 def add_performance_note(
-    staff_profile_id: int,
+    StaffEmployee_profile_id: int,
     payload: PerformanceNotePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _assert_director_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
 
     _assert_branch_access(current_user, profile.branch_id)
 
     row = StaffPerformanceNote(
-        staff_profile_id=staff_profile_id,
+        StaffEmployee_profile_id=StaffEmployee_profile_id,
         director_user_id=current_user.id,
         note=payload.note,
     )
@@ -1030,22 +1030,22 @@ def add_performance_note(
     return {"message": "Performance note added"}
 
 
-@router.get("/{staff_profile_id}/performance-notes")
+@router.get("/{StaffEmployee_profile_id}/performance-notes")
 def list_performance_notes(
-    staff_profile_id: int,
+    StaffEmployee_profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
 
     _assert_branch_access(current_user, profile.branch_id)
 
     rows = db.query(StaffPerformanceNote).filter(
-        StaffPerformanceNote.staff_profile_id == staff_profile_id
+        StaffPerformanceNote.StaffEmployee_profile_id == StaffEmployee_profile_id
     ).order_by(StaffPerformanceNote.created_at.desc()).all()
 
     return [
@@ -1058,25 +1058,25 @@ def list_performance_notes(
     ]
 
 
-@router.post("/{staff_profile_id}/documents")
-def upload_staff_document(
-    staff_profile_id: int,
+@router.post("/{StaffEmployee_profile_id}/documents")
+def upload_StaffEmployee_document(
+    StaffEmployee_profile_id: int,
     file: UploadFile = File(...),
     document_type: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
 
     _assert_branch_access(current_user, profile.branch_id)
 
     rel_path = _save_uploaded_file(file, "staff_documents")
     row = StaffDocument(
-        staff_profile_id=staff_profile_id,
+        StaffEmployee_profile_id=StaffEmployee_profile_id,
         uploaded_by=current_user.id,
         file_name=file.filename or "document",
         file_path=rel_path,
@@ -1087,22 +1087,22 @@ def upload_staff_document(
     return {"message": "Document uploaded", "document_id": row.id, "file_path": rel_path}
 
 
-@router.get("/{staff_profile_id}/documents")
-def list_staff_documents(
-    staff_profile_id: int,
+@router.get("/{StaffEmployee_profile_id}/documents")
+def list_StaffEmployee_documents(
+    StaffEmployee_profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
 
     _assert_branch_access(current_user, profile.branch_id)
 
     rows = db.query(StaffDocument).filter(
-        StaffDocument.staff_profile_id == staff_profile_id
+        StaffDocument.StaffEmployee_profile_id == StaffEmployee_profile_id
     ).order_by(StaffDocument.created_at.desc()).all()
 
     return [
@@ -1117,10 +1117,10 @@ def list_staff_documents(
     ]
 
 
-@router.get("/reports/attendance/csv")
+@router.get("/orders/attendance/csv")
 def export_attendance_csv(
     branch_id: Optional[int] = Query(None),
-    staff_profile_id: Optional[int] = Query(None),
+    StaffEmployee_profile_id: Optional[int] = Query(None),
     month: int = Query(..., ge=1, le=12),
     year: int = Query(..., ge=2020),
     db: Session = Depends(get_db),
@@ -1139,15 +1139,15 @@ def export_attendance_csv(
     end = datetime(year, month, last_day, 23, 59, 59)
 
     query = db.query(StaffAttendanceLog, StaffProfile, User).join(
-        StaffProfile, StaffAttendanceLog.staff_profile_id == StaffProfile.id
+        StaffProfile, StaffAttendanceLog.StaffEmployee_profile_id == StaffProfile.id
     ).join(User, StaffProfile.user_id == User.id).filter(
         StaffAttendanceLog.branch_id == target_branch_id,
         StaffAttendanceLog.attendance_date >= start,
         StaffAttendanceLog.attendance_date <= end,
     )
 
-    if staff_profile_id:
-        query = query.filter(StaffAttendanceLog.staff_profile_id == staff_profile_id)
+    if StaffEmployee_profile_id:
+        query = query.filter(StaffAttendanceLog.StaffEmployee_profile_id == StaffEmployee_profile_id)
 
     rows = query.order_by(StaffAttendanceLog.attendance_date.asc()).all()
 
@@ -1168,7 +1168,7 @@ def export_attendance_csv(
 
     for log, profile, user in rows:
         writer.writerow([
-            profile.staff_id,
+            profile.staff_employee_id,
             f"{user.first_name} {user.last_name}",
             log.attendance_date.date().isoformat(),
             log.attendance_type.value,
@@ -1189,19 +1189,19 @@ def export_attendance_csv(
     )
 
 
-@router.get("/{staff_profile_id}/performance/metrics")
+@router.get("/{StaffEmployee_profile_id}/performance/metrics")
 def performance_metrics(
-    staff_profile_id: int,
+    StaffEmployee_profile_id: int,
     month: int = Query(..., ge=1, le=12),
     year: int = Query(..., ge=2020),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
     start = datetime(year, month, 1)
@@ -1210,7 +1210,7 @@ def performance_metrics(
 
     rows = db.query(
         func.date(DailyEntryModule.created_at).label("entry_date"),
-        func.count(DailyEntryModule.id).label("tests_completed"),
+        func.count(DailyEntryModule.id).label("menu_items_completed"),
     ).filter(
         DailyEntryModule.branch_id == profile.branch_id,
         DailyEntryModule.created_by == profile.user_id,
@@ -1221,41 +1221,41 @@ def performance_metrics(
     daily = [
         {
             "date": str(row.entry_date),
-            "tests_completed": int(row.tests_completed or 0),
+            "menu_items_completed": int(row.menu_items_completed or 0),
         }
         for row in rows
     ]
 
-    total_tests = sum(item["tests_completed"] for item in daily)
+    total_menu_items = sum(item["menu_items_completed"] for item in daily)
     active_days = len(daily)
-    avg_per_day = round(total_tests / active_days, 2) if active_days else 0
+    avg_per_day = round(total_menu_items / active_days, 2) if active_days else 0
 
     return {
         "month": month,
         "year": year,
-        "total_tests": total_tests,
+        "total_menu_items": total_menu_items,
         "active_days": active_days,
-        "average_tests_per_active_day": avg_per_day,
+        "average_menu_items_per_active_day": avg_per_day,
         "daily": daily,
     }
 
 
-@router.post("/{staff_profile_id}/roster")
+@router.post("/{StaffEmployee_profile_id}/roster")
 def upsert_weekly_roster(
-    staff_profile_id: int,
+    StaffEmployee_profile_id: int,
     payload: WeeklyRosterPayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     _assert_director_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
     existing = db.query(StaffWeeklyRoster).filter(
-        StaffWeeklyRoster.staff_profile_id == staff_profile_id,
+        StaffWeeklyRoster.StaffEmployee_profile_id == StaffEmployee_profile_id,
         StaffWeeklyRoster.week_start_date == payload.week_start_date,
         StaffWeeklyRoster.week_end_date == payload.week_end_date,
     ).first()
@@ -1266,7 +1266,7 @@ def upsert_weekly_roster(
         existing.notes = payload.notes
     else:
         db.add(StaffWeeklyRoster(
-            staff_profile_id=staff_profile_id,
+            StaffEmployee_profile_id=StaffEmployee_profile_id,
             branch_id=profile.branch_id,
             week_start_date=payload.week_start_date,
             week_end_date=payload.week_end_date,
@@ -1279,21 +1279,21 @@ def upsert_weekly_roster(
     return {"message": "Weekly roster saved"}
 
 
-@router.get("/{staff_profile_id}/roster")
+@router.get("/{StaffEmployee_profile_id}/roster")
 def list_weekly_roster(
-    staff_profile_id: int,
+    StaffEmployee_profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
-    profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
+    profile = db.query(StaffProfile).filter(StaffProfile.id == StaffEmployee_profile_id).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Staff not found")
+        raise HTTPException(status_code=404, detail="StaffEmployee not found")
     _assert_branch_access(current_user, profile.branch_id)
 
     rows = db.query(StaffWeeklyRoster).filter(
-        StaffWeeklyRoster.staff_profile_id == staff_profile_id
+        StaffWeeklyRoster.StaffEmployee_profile_id == StaffEmployee_profile_id
     ).order_by(StaffWeeklyRoster.week_start_date.desc()).all()
 
     return [
@@ -1315,7 +1315,7 @@ def list_director_notifications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
     q = db.query(DirectorNotification).filter(
         DirectorNotification.branch_id == current_user.branch_id,
@@ -1343,7 +1343,7 @@ def mark_notification_read(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _assert_staff_scope(current_user)
+    _assert_StaffEmployee_scope(current_user)
 
     row = db.query(DirectorNotification).filter(
         DirectorNotification.id == notification_id,

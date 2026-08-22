@@ -6,7 +6,7 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
-class TestCatalog(Base):
+class MenuItemCatalog(Base):
     __tablename__ = "branch_lis_test_catalog"
     __table_args__ = (UniqueConstraint("branch_id", "test_code", name="uq_branch_lis_test_code"),)
 
@@ -24,14 +24,14 @@ class TestCatalog(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class TestPanel(Base):
+class MenuItemPanel(Base):
     __tablename__ = "branch_lis_test_panels"
 
     id = Column(Integer, primary_key=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
     panel_name = Column(String(160), nullable=False)
     description = Column(Text, nullable=True)
-    tests_json = Column(JSON, nullable=False, default=list)
+    menu_items_json = Column(JSON, nullable=False, default=list)
     is_active = Column(Boolean, nullable=False, default=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -47,7 +47,7 @@ class OrderQueue(Base):
     daily_entry_id = Column(Integer, ForeignKey("daily_entries_module.id"), nullable=True, index=True)
     source = Column(String(30), nullable=False, default="manual")
     order_number = Column(String(80), nullable=False, unique=True, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True, index=True)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
     patient_name = Column(String(200), nullable=False)
     patient_code = Column(String(80), nullable=True, index=True)
     doctor_name = Column(String(200), nullable=True)
@@ -55,7 +55,7 @@ class OrderQueue(Base):
     status = Column(String(30), nullable=False, default="Registered")
     expected_tat_minutes = Column(Integer, nullable=False, default=1440)
     due_at = Column(DateTime, nullable=True)
-    tests_json = Column(JSON, nullable=False, default=list)
+    menu_items_json = Column(JSON, nullable=False, default=list)
     notes = Column(Text, nullable=True)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -150,7 +150,7 @@ class WestgardRule(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class ProficiencyTestRun(Base):
+class ProficiencyMenuItemRun(Base):
     __tablename__ = "branch_lis_proficiency_test_runs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -165,7 +165,7 @@ class ProficiencyTestRun(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class LISReportArchive(Base):
+class LISOrderArchive(Base):
     __tablename__ = "branch_lis_report_archive"
 
     id = Column(Integer, primary_key=True, index=True)

@@ -146,7 +146,7 @@ def get_inventory_stock_consumption_analytics(db: Session = Depends(get_db)):
         "future_data_mapping": {
             "multi_location_stock": "SKU-level branch stock, reorder points, and inter-branch transfers from inventory ledgers.",
             "consumption_monitoring": "Actual issue quantities against expected demand models by item class.",
-            "reagent_movement": "User-wise movement logs linked to tests and order events.",
+            "reagent_movement": "User-wise movement logs linked to menu_items and order events.",
             "velocity_mix": "Consumption velocity segmentation by moving average usage and shelf age.",
             "stockout_alerts": "Critical SKU below reorder threshold events with escalation rules.",
             "min_max_levels": "Configured min/max policy with current stock compliance state.",

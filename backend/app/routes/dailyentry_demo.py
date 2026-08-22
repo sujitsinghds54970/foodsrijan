@@ -13,7 +13,7 @@ try:
     from app.services.dailyentry import (
         create_daily_entry_manager,
         DataValidationError,
-        PatientNotFoundError,
+        CustomerNotFoundError,
         DailyEntryError
     )
     DAILYENTRY_AVAILABLE = True
@@ -85,7 +85,7 @@ async def add_demo_patient(patient_data: dict):
         
         return {
             "success": True,
-            "message": "Patient added successfully",
+            "message": "Customer added successfully",
             "patient_id": record.patient_id,
             "patient_data": record.to_dict()
         }
@@ -94,20 +94,20 @@ async def add_demo_patient(patient_data: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/patients/today")
-async def get_todays_patients():
-    """Get all patients from today"""
+@router.get("/customers/today")
+async def get_todays_customers():
+    """Get all customers from today"""
     if not DAILYENTRY_AVAILABLE:
         raise HTTPException(status_code=503, detail="Daily entry module not available")
     
     try:
         manager = get_demo_manager()
-        patients = manager.get_todays_patients()
+        customers = manager.get_todays_customers()
         
         return {
             "success": True,
-            "count": len(patients),
-            "patients": [p.to_dict() for p in patients]
+            "count": len(customers),
+            "customers": [p.to_dict() for p in customers]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -147,14 +147,14 @@ async def get_daily_summary():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/search")
-async def search_patients(q: str):
-    """Search for patients"""
+async def search_customers(q: str):
+    """Search for customers"""
     if not DAILYENTRY_AVAILABLE:
         raise HTTPException(status_code=503, detail="Daily entry module not available")
     
     try:
         manager = get_demo_manager()
-        results = manager.search_patients(q)
+        results = manager.search_customers(q)
         
         return {
             "success": True,
@@ -194,12 +194,12 @@ async def add_sample_data():
     if not DAILYENTRY_AVAILABLE:
         raise HTTPException(status_code=503, detail="Daily entry module not available")
     
-    sample_patients = [
+    sample_customers = [
         {
             "patient_name": "John Doe",
             "age": 35,
             "gender": "Male",
-            "test_type": "Blood Test",
+            "test_type": "Blood MenuItem",
             "referring_doctor": "Dr. Smith",
             "status": "Pending",
             "contact_number": "9876543210",
@@ -229,19 +229,19 @@ async def add_sample_data():
     
     try:
         manager = get_demo_manager()
-        added_patients = []
+        added_customers = []
         
-        for patient_data in sample_patients:
+        for patient_data in sample_customers:
             record = manager.add_patient_record(patient_data, created_by="Demo System")
-            added_patients.append({
+            added_customers.append({
                 "patient_id": record.patient_id,
                 "name": record.patient_name
             })
         
         return {
             "success": True,
-            "message": f"Added {len(added_patients)} sample patients",
-            "patients": added_patients
+            "message": f"Added {len(added_customers)} sample customers",
+            "customers": added_customers
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

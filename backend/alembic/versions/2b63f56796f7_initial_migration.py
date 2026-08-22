@@ -82,7 +82,7 @@ def upgrade() -> None:
     sa.UniqueConstraint('item_code')
     )
     op.create_index(op.f('ix_inventory_items_id'), 'inventory_items', ['id'], unique=False)
-    op.create_table('patients',
+    op.create_table('customers',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('patient_id', sa.String(length=20), nullable=False),
     sa.Column('branch_id', sa.Integer(), nullable=False),
@@ -108,7 +108,7 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('patient_id')
     )
-    op.create_index(op.f('ix_patients_id'), 'patients', ['id'], unique=False)
+    op.create_index(op.f('ix_customers_id'), 'customers', ['id'], unique=False)
     op.create_table('users',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('username', sa.String(length=50), nullable=False),
@@ -159,7 +159,7 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['branch_id'], ['branches.id'], ),
-    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ),
+    sa.ForeignKeyConstraint(['patient_id'], ['customers.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_appointments_id'), 'appointments', ['id'], unique=False)
@@ -188,7 +188,7 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['branch_id'], ['branches.id'], ),
     sa.ForeignKeyConstraint(['created_by'], ['users.id'], ),
-    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ),
+    sa.ForeignKeyConstraint(['patient_id'], ['customers.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_daily_entries_id'), 'daily_entries', ['id'], unique=False)
@@ -213,7 +213,7 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['branch_id'], ['branches.id'], ),
-    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ),
+    sa.ForeignKeyConstraint(['patient_id'], ['customers.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('invoice_number')
     )
@@ -236,7 +236,7 @@ def upgrade() -> None:
     sa.Column('report_file_path', sa.String(length=500), nullable=True),
     sa.Column('is_pdf_generated', sa.Boolean(), nullable=True),
     sa.ForeignKeyConstraint(['branch_id'], ['branches.id'], ),
-    sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ),
+    sa.ForeignKeyConstraint(['patient_id'], ['customers.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_lab_results_id'), 'lab_results', ['id'], unique=False)
@@ -356,8 +356,8 @@ def downgrade() -> None:
     op.drop_table('activity_logs')
     op.drop_index(op.f('ix_users_id'), table_name='users')
     op.drop_table('users')
-    op.drop_index(op.f('ix_patients_id'), table_name='patients')
-    op.drop_table('patients')
+    op.drop_index(op.f('ix_customers_id'), table_name='customers')
+    op.drop_table('customers')
     op.drop_index(op.f('ix_inventory_items_id'), table_name='inventory_items')
     op.drop_table('inventory_items')
     op.drop_index(op.f('ix_system_settings_id'), table_name='system_settings')

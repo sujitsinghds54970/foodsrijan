@@ -12,7 +12,7 @@ class LabResult(Base):
     reference_range = Column(String, nullable=True)
 
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
 
     invoice = relationship("Invoice", back_populates="lab_results")
-    patient = relationship("Patient", back_populates="lab_results")
+    patient = relationship("Customer", back_populates="lab_results")

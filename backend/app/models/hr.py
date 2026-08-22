@@ -5,7 +5,7 @@ Leave management and HR module:
 - Leave types and policies
 - Leave requests and approvals
 - Leave balance tracking
-- Staff attendance
+- StaffEmployee attendance
 """
 
 from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Boolean, ForeignKey, Text, Enum as SQLEnum, DECIMAL, JSON
@@ -81,7 +81,7 @@ class BranchNotificationType(str, enum.Enum):
     EXPENSE_APPROVAL = "ExpenseApproval"
     SYSTEM_ALERT = "SystemAlert"
     TASK_ASSIGNED = "TaskAssigned"
-    STAFF_JOINED = "StaffJoined"
+    staff_joined = "StaffJoined"
 
 
 class AttendanceStatus(str, enum.Enum):
@@ -500,7 +500,7 @@ class StaffProfile(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    staff_id = Column(String(30), nullable=False, unique=True)
+    staff_employee_id = Column(String(30), nullable=False, unique=True)
     photo_path = Column(String, nullable=True)
     department = Column(String, nullable=True)
     specialization = Column(String, nullable=True)
@@ -518,15 +518,15 @@ class StaffProfile(Base):
     user = relationship("User", foreign_keys=[user_id])
     branch = relationship("Branch", foreign_keys=[branch_id])
     manager = relationship("User", foreign_keys=[reporting_manager_id])
-    attendance_disputes = relationship("AttendanceDispute", back_populates="staff_profile")
-    linked_devices = relationship("LinkedDevice", back_populates="staff_profile")
+    attendance_disputes = relationship("AttendanceDispute", back_populates="staff_employee_profile")
+    linked_devices = relationship("LinkedDevice", back_populates="staff_employee_profile")
 
 
 class StaffSalaryDetail(Base):
     __tablename__ = "staff_salary_details"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False, unique=True)
+    StaffEmployee_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False, unique=True)
     basic = Column(DECIMAL(12, 2), default=0)
     hra = Column(DECIMAL(12, 2), default=0)
     allowances = Column(DECIMAL(12, 2), default=0)
@@ -539,14 +539,14 @@ class StaffSalaryDetail(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    staff_profile = relationship("StaffProfile")
+    staff_employee_profile = relationship("StaffProfile")
 
 
 class StaffSalaryRecord(Base):
     __tablename__ = "staff_salary_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    StaffEmployee_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     month = Column(Integer, nullable=False)
     year = Column(Integer, nullable=False)
@@ -558,7 +558,7 @@ class StaffSalaryRecord(Base):
     generated_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     generated_at = Column(DateTime, default=datetime.utcnow)
 
-    staff_profile = relationship("StaffProfile")
+    staff_employee_profile = relationship("StaffProfile")
     branch = relationship("Branch", foreign_keys=[branch_id])
     generator = relationship("User", foreign_keys=[generated_by])
 
@@ -567,7 +567,7 @@ class StaffAttendanceLog(Base):
     __tablename__ = "staff_attendance_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    StaffEmployee_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     date = Column(Date, nullable=True)
     attendance_date = Column(DateTime, nullable=False)
@@ -588,7 +588,7 @@ class StaffAttendanceLog(Base):
     wfh_reason = Column(Text, nullable=True)
     task = Column(Text, nullable=True)
     task_status = Column(String(40), nullable=False, default="Pending")
-    staff_note = Column(Text, nullable=True)
+    StaffEmployee_note = Column(Text, nullable=True)
     attachments = Column(JSON, nullable=True)
     hr_remark = Column(Text, nullable=True)
     dispute_resolved = Column(Boolean, nullable=False, default=False)
@@ -597,7 +597,7 @@ class StaffAttendanceLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    staff_profile = relationship("StaffProfile")
+    staff_employee_profile = relationship("StaffProfile")
     branch = relationship("Branch")
 
 
@@ -605,7 +605,7 @@ class StaffLeaveRequest(Base):
     __tablename__ = "staff_leave_requests"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    StaffEmployee_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     leave_type = Column(String, nullable=False)
     start_date = Column(DateTime, nullable=False)
@@ -627,7 +627,7 @@ class StaffLeaveRequest(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    staff_profile = relationship("StaffProfile")
+    staff_employee_profile = relationship("StaffProfile")
     reviewer = relationship("User", foreign_keys=[reviewed_by])
     approver = relationship("User", foreign_keys=[approved_by])
     branch = relationship("Branch")
@@ -637,21 +637,21 @@ class AttendanceDispute(Base):
     __tablename__ = "attendance_disputes"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    StaffEmployee_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
     attendance_date = Column(Date, nullable=False)
     reason = Column(Text, nullable=False)
     status = Column(SQLEnum(AttendanceDisputeStatus), default=AttendanceDisputeStatus.OPEN, nullable=False)
     resolution_notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    staff_profile = relationship("StaffProfile", back_populates="attendance_disputes")
+    staff_employee_profile = relationship("StaffProfile", back_populates="attendance_disputes")
 
 
 class LinkedDevice(Base):
     __tablename__ = "linked_devices"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    StaffEmployee_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
     device_id = Column(String(120), nullable=False)
     device_type = Column(SQLEnum(LinkedDeviceType), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -659,20 +659,20 @@ class LinkedDevice(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    staff_profile = relationship("StaffProfile", back_populates="linked_devices")
+    staff_employee_profile = relationship("StaffProfile", back_populates="linked_devices")
 
 
 class StaffPerformanceNote(Base):
     __tablename__ = "staff_performance_notes"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    StaffEmployee_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
     director_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     note = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    staff_profile = relationship("StaffProfile")
+    staff_employee_profile = relationship("StaffProfile")
     director = relationship("User", foreign_keys=[director_user_id])
 
 
@@ -680,7 +680,7 @@ class StaffTask(Base):
     __tablename__ = "staff_tasks"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    StaffEmployee_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     assigned_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -695,7 +695,7 @@ class StaffTask(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    staff_profile = relationship("StaffProfile")
+    staff_employee_profile = relationship("StaffProfile")
     branch = relationship("Branch", foreign_keys=[branch_id])
     assigned_by_user = relationship("User", foreign_keys=[assigned_by])
     assigned_to_user = relationship("User", foreign_keys=[assigned_to])
@@ -733,7 +733,7 @@ class StaffNotification(Base):
     __tablename__ = "staff_notifications"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    StaffEmployee_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     message = Column(Text, nullable=False)
     link = Column(String, nullable=True)
@@ -741,7 +741,7 @@ class StaffNotification(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    staff_profile = relationship("StaffProfile")
+    staff_employee_profile = relationship("StaffProfile")
     branch = relationship("Branch", foreign_keys=[branch_id])
 
 
@@ -749,14 +749,14 @@ class StaffDocument(Base):
     __tablename__ = "staff_documents"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    StaffEmployee_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     file_name = Column(String, nullable=False)
     file_path = Column(String, nullable=False)
     document_type = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    staff_profile = relationship("StaffProfile")
+    staff_employee_profile = relationship("StaffProfile")
     uploader = relationship("User", foreign_keys=[uploaded_by])
 
 
@@ -764,7 +764,7 @@ class StaffWeeklyRoster(Base):
     __tablename__ = "staff_weekly_rosters"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
+    StaffEmployee_profile_id = Column(Integer, ForeignKey("staff_profiles.id"), nullable=False)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     week_start_date = Column(DateTime, nullable=False)
     week_end_date = Column(DateTime, nullable=False)
@@ -774,7 +774,7 @@ class StaffWeeklyRoster(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    staff_profile = relationship("StaffProfile")
+    staff_employee_profile = relationship("StaffProfile")
     branch = relationship("Branch", foreign_keys=[branch_id])
     creator = relationship("User", foreign_keys=[created_by])
 

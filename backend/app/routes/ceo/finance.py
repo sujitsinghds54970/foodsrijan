@@ -160,7 +160,7 @@ def get_finance_profitability_revenue(db: Session = Depends(get_db)):
         "test_profitability": [
             {"test_type": "MRI", "profitability": 36},
             {"test_type": "CT Scan", "profitability": 25},
-            {"test_type": "Blood Tests", "profitability": 22},
+            {"test_type": "Blood MenuItems", "profitability": 22},
             {"test_type": "Ultrasound", "profitability": 17},
         ],
         "revenue_per_unit": {
@@ -175,8 +175,8 @@ def get_finance_profitability_revenue(db: Session = Depends(get_db)):
         "future_data_mapping": {
             "consolidated_pnl": "Revenue from daily_entries; expenses from expense_entries + payroll_runs + inventory costs.",
             "branch_profitability": "Branch-level P&L roll-up from Branch + DailyEntry + Expense + PayrollRun.",
-            "test_profitability": "Test-level contribution margin from LIS test volumes and direct variable costs.",
-            "revenue_per_unit": "Revenue divided by unique patients/tests from operations and billing logs.",
+            "test_profitability": "MenuItem-level contribution margin from LIS test volumes and direct variable costs.",
+            "revenue_per_unit": "Revenue divided by unique customers/menu_items from operations and billing logs.",
             "ebitda": "Earnings before interest, taxes, depreciation, amortization from consolidated operating results.",
         },
     }
@@ -362,10 +362,10 @@ def get_finance_doctor_referral_financials(db: Session = Depends(get_db)):
         ],
         "table_reference": _table_reference_snapshot(db),
         "future_data_mapping": {
-            "referral_revenue": "Doctor-linked referral revenue from DailyEntry/LIS billing joins.",
+            "referral_revenue": "Staff-linked referral revenue from DailyEntry/LIS billing joins.",
             "commission_tracking": "Commission payouts from payroll_runs + doctor incentive schedules.",
             "referral_cost_ratio": "Total referral commissions divided by recognized referral-attributed revenue.",
-            "doctor_profitability": "Doctor-level margin from referral revenue minus referral and service delivery costs.",
+            "doctor_profitability": "Staff-level margin from referral revenue minus referral and service delivery costs.",
         },
     }
 
@@ -469,7 +469,7 @@ def _lis_qc_status_label(failure_rate: float) -> str:
 
 
 def _lis_sample_pending(sample: LISSample) -> bool:
-    return sample.status not in {"Reported", "Rejected"}
+    return sample.status not in {"Ordered", "Rejected"}
 
 
 def _lis_average_tat_minutes(samples: list[LISSample]) -> float:
@@ -522,7 +522,7 @@ def get_finance_lis_operations_overview(db: Session = Depends(get_db)):
 
         today_test_volume = sum(1 for row in branch_orders if row.created_at and row.created_at >= today_start)
         pending_samples = [row for row in branch_samples if _lis_sample_pending(row)]
-        reported_samples = sum(1 for row in branch_samples if row.status == "Reported")
+        reported_samples = sum(1 for row in branch_samples if row.status == "Ordered")
         rejected_count = sum(1 for row in branch_samples if row.status == "Rejected")
         sample_rejection_rate = round((rejected_count / len(branch_samples) * 100.0), 2) if branch_samples else 0.0
         average_tat_minutes = _lis_average_tat_minutes(branch_samples)
@@ -591,7 +591,7 @@ def get_finance_lis_operations_overview(db: Session = Depends(get_db)):
     all_samples = samples
     all_qc_rows = qc_rows
     network_today_test_volume = sum(item["today_test_volume"] for item in branch_metrics)
-    network_pending_tests = sum(item["pending_samples"] for item in branch_metrics)
+    network_pending_menu_items = sum(item["pending_samples"] for item in branch_metrics)
     network_rejected = sum(1 for row in all_samples if row.status == "Rejected")
     network_rejection_rate = round((network_rejected / len(all_samples) * 100.0), 2) if all_samples else 0.0
     network_avg_tat = _lis_average_tat_minutes(all_samples)
@@ -599,7 +599,7 @@ def get_finance_lis_operations_overview(db: Session = Depends(get_db)):
     network_qc_failure_rate = round((network_qc_failures / len(all_qc_rows) * 100.0), 2) if all_qc_rows else 0.0
 
     readiness_score = 100
-    readiness_score -= min(25, int(network_pending_tests * 0.6))
+    readiness_score -= min(25, int(network_pending_menu_items * 0.6))
     readiness_score -= min(25, int(network_qc_failure_rate * 1.4))
     readiness_score -= min(20, branch_overdue_count * 5)
     readiness_score -= min(15, int(max(network_avg_tat - 180.0, 0.0) / 40))
@@ -611,7 +611,7 @@ def get_finance_lis_operations_overview(db: Session = Depends(get_db)):
         "network_summary": {
             "today_test_volume": network_today_test_volume,
             "average_tat_minutes": network_avg_tat,
-            "pending_tests": network_pending_tests,
+            "pending_menu_items": network_pending_menu_items,
             "sample_rejection_rate": network_rejection_rate,
             "qc_status": _lis_qc_status_label(network_qc_failure_rate),
             "readiness_score": readiness_score,
@@ -629,7 +629,7 @@ def get_finance_lis_operations_overview(db: Session = Depends(get_db)):
         "future_data_mapping": {
             "today_test_volume": "branch_lis_order_queue created today",
             "average_tat_minutes": "branch_lis_samples lifecycle timestamps",
-            "pending_tests": "branch_lis_samples statuses not Reported/Rejected",
+            "pending_menu_items": "branch_lis_samples statuses not Ordered/Rejected",
             "qc_status": "branch_lis_qc_results failure trend",
             "readiness_score": "composite of pending, TAT, QC and calibration exposure",
         },

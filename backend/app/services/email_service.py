@@ -163,7 +163,7 @@ class EmailService:
                 <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
                     <p style="margin: 5px 0;"><strong>Date:</strong> {date}</p>
                     <p style="margin: 5px 0;"><strong>Time:</strong> {time}</p>
-                    <p style="margin: 5px 0;"><strong>Doctor:</strong> {doctor}</p>
+                    <p style="margin: 5px 0;"><strong>Staff:</strong> {doctor}</p>
                 </div>
                 <p>Please arrive 15 minutes before your scheduled time.</p>
                 <p style="margin-top: 30px; color: #6b7280;">Thank you for choosing VaidyaVihar Diagnostic!</p>
@@ -179,17 +179,17 @@ class EmailService:
         <html>
         <body style="font-family: Arial, sans-serif;">
             <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h2 style="color: #10b981;">Your Report is Ready!</h2>
+                <h2 style="color: #10b981;">Your Order is Ready!</h2>
                 <p>Hello {patient_name},</p>
                 <p>Your diagnostic report (ID: {report_id}) is ready for collection.</p>
                 <p>You can view and download your report by logging into our portal.</p>
-                <a href="http://localhost:3000/reports" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 10px;">View Report</a>
+                <a href="http://localhost:3000/orders" style="display: inline-block; background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 10px;">View Order</a>
                 <p style="margin-top: 30px; color: #6b7280;">Thank you for choosing VaidyaVihar Diagnostic!</p>
             </div>
         </body>
         </html>
         """
-        return self.send_email(email, "Your Report is Ready - VaidyaVihar Diagnostic", html)
+        return self.send_email(email, "Your Order is Ready - VaidyaVihar Diagnostic", html)
     
     def send_password_reset(self, email: str, first_name: str, reset_link: str) -> bool:
         """Send password reset email"""

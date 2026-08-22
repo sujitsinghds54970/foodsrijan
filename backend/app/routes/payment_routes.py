@@ -120,11 +120,11 @@ def _generate_auto_bill_pdf(entry: DailyEntryModule) -> str:
     y -= 30
 
     pdf.setFont("Helvetica", 11)
-    pdf.drawString(40, y, f"Patient ID: {entry.auto_patient_id}")
+    pdf.drawString(40, y, f"Customer ID: {entry.auto_patient_id}")
     y -= 20
-    pdf.drawString(40, y, f"Patient Name: {entry.patient_name}")
+    pdf.drawString(40, y, f"Customer Name: {entry.patient_name}")
     y -= 20
-    pdf.drawString(40, y, f"Test: {entry.test_name}")
+    pdf.drawString(40, y, f"MenuItem: {entry.test_name}")
     y -= 20
     pdf.drawString(40, y, f"Payment Method: {entry.payment_method}")
     y -= 20

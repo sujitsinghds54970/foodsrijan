@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 
-import { DoctorItem } from './types'
+import { StaffItem } from './types'
 
-export type DoctorFormValues = {
+export type StaffFormValues = {
   full_name: string
   mobile: string
   email?: string
@@ -25,12 +25,12 @@ export type DoctorFormValues = {
 
 type Props = {
   open: boolean
-  initialDoctor: DoctorItem | null
+  initialStaff: StaffItem | null
   onClose: () => void
-  onSubmit: (values: DoctorFormValues) => Promise<void>
+  onSubmit: (values: StaffFormValues) => Promise<void>
 }
 
-const defaultValues: DoctorFormValues = {
+const defaultValues: StaffFormValues = {
   full_name: '',
   mobile: '',
   email: '',
@@ -50,41 +50,41 @@ const defaultValues: DoctorFormValues = {
   portal_password: '',
 }
 
-export default function DoctorFormModal({ open, initialDoctor, onClose, onSubmit }: Props) {
+export default function StaffFormModal({ open, initialStaff, onClose, onSubmit }: Props) {
   const {
     register,
     handleSubmit,
     reset,
     formState: { isSubmitting },
-  } = useForm<DoctorFormValues>({ defaultValues })
+  } = useForm<StaffFormValues>({ defaultValues })
 
   useEffect(() => {
     if (!open) return
-    if (!initialDoctor) {
+    if (!initialStaff) {
       reset(defaultValues)
       return
     }
 
     reset({
-      full_name: initialDoctor.full_name || '',
-      mobile: initialDoctor.mobile || '',
-      email: initialDoctor.email || '',
-      address: initialDoctor.address || '',
-      city: initialDoctor.city || '',
-      specialization: initialDoctor.specialization || '',
-      degree: initialDoctor.degree || '',
-      hospital_clinic_affiliation: initialDoctor.hospital_clinic_affiliation || '',
-      years_of_experience: initialDoctor.years_of_experience,
-      bank_account_number: initialDoctor.bank_account_number || '',
-      ifsc_code: initialDoctor.ifsc_code || '',
-      upi_id: initialDoctor.upi_id || '',
-      commission_percentage: initialDoctor.commission_percentage || 0,
-      latitude: initialDoctor.latitude,
-      longitude: initialDoctor.longitude,
-      portal_username: initialDoctor.portal_username || '',
+      full_name: initialStaff.full_name || '',
+      mobile: initialStaff.mobile || '',
+      email: initialStaff.email || '',
+      address: initialStaff.address || '',
+      city: initialStaff.city || '',
+      specialization: initialStaff.specialization || '',
+      degree: initialStaff.degree || '',
+      hospital_clinic_affiliation: initialStaff.hospital_clinic_affiliation || '',
+      years_of_experience: initialStaff.years_of_experience,
+      bank_account_number: initialStaff.bank_account_number || '',
+      ifsc_code: initialStaff.ifsc_code || '',
+      upi_id: initialStaff.upi_id || '',
+      commission_percentage: initialStaff.commission_percentage || 0,
+      latitude: initialStaff.latitude,
+      longitude: initialStaff.longitude,
+      portal_username: initialStaff.portal_username || '',
       portal_password: '',
     })
-  }, [open, initialDoctor, reset])
+  }, [open, initialStaff, reset])
 
   if (!open) return null
 
@@ -92,7 +92,7 @@ export default function DoctorFormModal({ open, initialDoctor, onClose, onSubmit
     <div className="fixed inset-0 z-[110] bg-black/50 flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-5xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b sticky top-0 bg-white">
-          <h3 className="text-2xl font-black text-slate-900">{initialDoctor ? 'Edit Doctor' : 'Add Referring Doctor'}</h3>
+          <h3 className="text-2xl font-black text-slate-900">{initialStaff ? 'Edit Staff' : 'Add Referring Staff'}</h3>
         </div>
 
         <form
@@ -142,7 +142,7 @@ export default function DoctorFormModal({ open, initialDoctor, onClose, onSubmit
           </section>
 
           <section>
-            <h4 className="text-lg font-black text-slate-800 mb-3">Doctor Self-Service (Optional)</h4>
+            <h4 className="text-lg font-black text-slate-800 mb-3">Staff Self-Service (Optional)</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <input className="px-3 py-2 rounded-lg border" placeholder="Portal Username" {...register('portal_username')} />
               <input className="px-3 py-2 rounded-lg border" type="password" placeholder="Portal Password" {...register('portal_password')} />
@@ -152,7 +152,7 @@ export default function DoctorFormModal({ open, initialDoctor, onClose, onSubmit
           <div className="flex items-center justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700">Cancel</button>
             <button disabled={isSubmitting} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold">
-              {isSubmitting ? 'Saving...' : initialDoctor ? 'Save Changes' : 'Create Doctor'}
+              {isSubmitting ? 'Saving...' : initialStaff ? 'Save Changes' : 'Create Staff'}
             </button>
           </div>
         </form>

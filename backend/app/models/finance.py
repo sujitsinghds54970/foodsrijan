@@ -44,7 +44,7 @@ class FinanceInvoice(Base):
     id = Column(Integer, primary_key=True, index=True)
     invoice_number = Column(String(50), nullable=False, unique=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True, index=True)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=True, index=True)
     patient_name = Column(String(200), nullable=True)
     date = Column(DateTime, nullable=False, server_default=func.now(), index=True)
     total_amount = Column(DECIMAL(12, 2), nullable=False)
@@ -59,7 +59,7 @@ class FinanceInvoice(Base):
     updated_at = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 
     branch = relationship("Branch")
-    patient = relationship("Patient")
+    patient = relationship("Customer")
     creator = relationship("User")
 
 

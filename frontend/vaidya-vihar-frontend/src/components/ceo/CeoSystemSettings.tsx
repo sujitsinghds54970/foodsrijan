@@ -662,7 +662,7 @@ const CeoSystemSettings = () => {
             <p className="text-sm font-semibold text-slate-700">Branch-Level Pricing &amp; Discounts</p>
             <div className="mt-3 overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Branch</th><th className="pb-2 pr-4">Test</th><th className="pb-2 pr-4">Price</th><th className="pb-2 pr-4">Discount</th><th className="pb-2">Package</th></tr></thead>
+                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Branch</th><th className="pb-2 pr-4">MenuItem</th><th className="pb-2 pr-4">Price</th><th className="pb-2 pr-4">Discount</th><th className="pb-2">Package</th></tr></thead>
                 <tbody>
                   {(branchLocalization?.branch_level_pricing_discounts || []).map((row, idx) => (
                     <tr key={`${row.branch_name}-${row.test_code}-${idx}`} className="border-b border-slate-100">
@@ -685,10 +685,10 @@ const CeoSystemSettings = () => {
             </div>
           </div>
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-7`}>
-            <p className="text-sm font-semibold text-slate-700">Central Test Catalog</p>
+            <p className="text-sm font-semibold text-slate-700">Central MenuItem Catalog</p>
             <div className="mt-3 overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Code</th><th className="pb-2 pr-4">Test Name</th><th className="pb-2 pr-4">Category</th><th className="pb-2">Active</th></tr></thead>
+                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Code</th><th className="pb-2 pr-4">MenuItem Name</th><th className="pb-2 pr-4">Category</th><th className="pb-2">Active</th></tr></thead>
                 <tbody>
                   {(branchLocalization?.central_test_catalog || []).map((row) => (
                     <tr key={row.test_code} className="border-b border-slate-100">
@@ -735,8 +735,8 @@ const CeoSystemSettings = () => {
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-6`}>
             <p className="text-sm font-semibold text-slate-700">Data Retention Policy</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <input type="number" value={dataCompliance?.data_retention_policy.patient_data_retention_years || 0} onChange={(e) => setDataCompliance((s) => s ? { ...s, data_retention_policy: { ...s.data_retention_policy, patient_data_retention_years: Number(e.target.value) } } : s)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Patient data years" />
-              <input type="number" value={dataCompliance?.data_retention_policy.test_results_retention_years || 0} onChange={(e) => setDataCompliance((s) => s ? { ...s, data_retention_policy: { ...s.data_retention_policy, test_results_retention_years: Number(e.target.value) } } : s)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Test results years" />
+              <input type="number" value={dataCompliance?.data_retention_policy.patient_data_retention_years || 0} onChange={(e) => setDataCompliance((s) => s ? { ...s, data_retention_policy: { ...s.data_retention_policy, patient_data_retention_years: Number(e.target.value) } } : s)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Customer data years" />
+              <input type="number" value={dataCompliance?.data_retention_policy.test_results_retention_years || 0} onChange={(e) => setDataCompliance((s) => s ? { ...s, data_retention_policy: { ...s.data_retention_policy, test_results_retention_years: Number(e.target.value) } } : s)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="MenuItem results years" />
               <input type="number" value={dataCompliance?.data_retention_policy.audit_logs_retention_years || 0} onChange={(e) => setDataCompliance((s) => s ? { ...s, data_retention_policy: { ...s.data_retention_policy, audit_logs_retention_years: Number(e.target.value) } } : s)} className="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Audit logs years" />
               <label className="flex items-center gap-2 rounded-md border border-slate-200 px-2 py-1 text-sm">
                 <input type="checkbox" checked={dataCompliance?.data_retention_policy.auto_purge_enabled || false} onChange={(e) => setDataCompliance((s) => s ? { ...s, data_retention_policy: { ...s.data_retention_policy, auto_purge_enabled: e.target.checked } } : s)} />
@@ -819,7 +819,7 @@ const CeoSystemSettings = () => {
             </div>
           </div>
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-6`}>
-            <p className="text-sm font-semibold text-slate-700">Automated Report Delivery</p>
+            <p className="text-sm font-semibold text-slate-700">Automated Order Delivery</p>
             <div className="mt-3 space-y-2 text-sm">
               <label className="flex items-center gap-2"><input type="checkbox" checked={aiAutomation?.automated_report_delivery.enabled || false} onChange={(e) => setAiAutomation((s) => s ? { ...s, automated_report_delivery: { ...s.automated_report_delivery, enabled: e.target.checked } } : s)} /> Enabled</label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={aiAutomation?.automated_report_delivery.whatsapp_enabled || false} onChange={(e) => setAiAutomation((s) => s ? { ...s, automated_report_delivery: { ...s.automated_report_delivery, whatsapp_enabled: e.target.checked } } : s)} /> WhatsApp</label>
@@ -832,7 +832,7 @@ const CeoSystemSettings = () => {
             <p className="text-sm font-semibold text-slate-700">Predictive Analytics Settings</p>
             <div className="mt-3 space-y-2 text-sm">
               <label className="flex items-center gap-2"><input type="checkbox" checked={aiAutomation?.predictive_analytics_settings.demand_forecasting_enabled || false} onChange={(e) => setAiAutomation((s) => s ? { ...s, predictive_analytics_settings: { ...s.predictive_analytics_settings, demand_forecasting_enabled: e.target.checked } } : s)} /> Demand forecasting</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={aiAutomation?.predictive_analytics_settings.patient_churn_model_enabled || false} onChange={(e) => setAiAutomation((s) => s ? { ...s, predictive_analytics_settings: { ...s.predictive_analytics_settings, patient_churn_model_enabled: e.target.checked } } : s)} /> Patient churn prediction</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={aiAutomation?.predictive_analytics_settings.patient_churn_model_enabled || false} onChange={(e) => setAiAutomation((s) => s ? { ...s, predictive_analytics_settings: { ...s.predictive_analytics_settings, patient_churn_model_enabled: e.target.checked } } : s)} /> Customer churn prediction</label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={aiAutomation?.predictive_analytics_settings.inventory_optimization_enabled || false} onChange={(e) => setAiAutomation((s) => s ? { ...s, predictive_analytics_settings: { ...s.predictive_analytics_settings, inventory_optimization_enabled: e.target.checked } } : s)} /> Inventory optimization</label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={aiAutomation?.predictive_analytics_settings.drift_monitoring_enabled || false} onChange={(e) => setAiAutomation((s) => s ? { ...s, predictive_analytics_settings: { ...s.predictive_analytics_settings, drift_monitoring_enabled: e.target.checked } } : s)} /> Drift monitoring</label>
               <input value={aiAutomation?.predictive_analytics_settings.model_refresh_frequency || ''} onChange={(e) => setAiAutomation((s) => s ? { ...s, predictive_analytics_settings: { ...s.predictive_analytics_settings, model_refresh_frequency: e.target.value } } : s)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Model refresh frequency" />
@@ -1291,7 +1291,7 @@ const CeoSystemSettings = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-6`}>
-            <p className="text-sm font-semibold text-slate-700">Automated System Health Report</p>
+            <p className="text-sm font-semibold text-slate-700">Automated System Health Order</p>
             <div className="mt-3 space-y-2 text-sm">
               <label className="flex items-center gap-2">
                 <input

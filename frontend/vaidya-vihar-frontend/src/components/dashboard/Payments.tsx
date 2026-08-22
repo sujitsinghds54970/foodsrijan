@@ -164,7 +164,7 @@ export default function Payments({ activeTab, branchId }: PaymentsProps) {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Invoice #</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Patient ID</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Customer ID</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Amount</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Status</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Payment</th>

@@ -127,7 +127,7 @@ export default function DirectorAttendancePanel({ staffProfileId }: DirectorAtte
 
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(10)
-    doc.text(`Staff Attendance Report (Staff ID: ${staffProfileId})`, 12, 18)
+    doc.text(`Staff Attendance Order (Staff ID: ${staffProfileId})`, 12, 18)
     doc.text(`Month: ${month}`, pageWidth - 56, 18)
 
     const body = rows.map((row) => [

@@ -13,11 +13,11 @@ import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 
 import { useAuth } from '../../contexts/AuthContext'
-import DoctorFormModal, { DoctorFormValues } from './DoctorFormModal'
+import StaffFormModal, { StaffFormValues } from './DoctorFormModal'
 import BulkPdfModal from './BulkPdfModal'
-import { DoctorItem, PerformanceResponse, ShareResultItem } from './types'
+import { StaffItem, PerformanceResponse, ShareResultItem } from './types'
 
-const columnHelper = createColumnHelper<DoctorItem>()
+const columnHelper = createColumnHelper<StaffItem>()
 
 type BroadcastValues = {
   message: string
@@ -33,15 +33,15 @@ type PortalLoginValues = {
 
 const mapCenter: [number, number] = [25.5941, 85.1376]
 
-export default function DoctorManagementCRMModule() {
+export default function StaffManagementCRMModule() {
   const { user, token } = useAuth()
-  const [doctors, setDoctors] = useState<DoctorItem[]>([])
+  const [staff, setStaffs] = useState<StaffItem[]>([])
   const [loading, setLoading] = useState(false)
   const [specializationFilter, setSpecializationFilter] = useState('')
   const [cityFilter, setCityFilter] = useState('')
 
   const [showForm, setShowForm] = useState(false)
-  const [editingDoctor, setEditingDoctor] = useState<DoctorItem | null>(null)
+  const [editingStaff, setEditingStaff] = useState<StaffItem | null>(null)
   const [showBulkModal, setShowBulkModal] = useState(false)
 
   const [performance, setPerformance] = useState<PerformanceResponse | null>(null)
@@ -51,7 +51,7 @@ export default function DoctorManagementCRMModule() {
   const [broadcastResults, setBroadcastResults] = useState<Array<{ doctor_name: string; email_link?: string; whatsapp_link?: string }>>([])
 
   const [portalToken, setPortalToken] = useState('')
-  const [portalDoctor, setPortalDoctor] = useState<any>(null)
+  const [portalStaff, setPortalStaff] = useState<any>(null)
   const [portalReferrals, setPortalReferrals] = useState<any[]>([])
 
   const API_BASE =
@@ -77,12 +77,12 @@ export default function DoctorManagementCRMModule() {
     defaultValues: { username: '', password: '' },
   })
 
-  const selectedDoctors = useMemo(
-    () => doctors.filter(d => selectedIds[d.id]),
-    [doctors, selectedIds],
+  const selectedStaffs = useMemo(
+    () => staff.filter(d => selectedIds[d.id]),
+    [staff, selectedIds],
   )
 
-  const loadDoctors = useCallback(async () => {
+  const loadStaffs = useCallback(async () => {
     if (!token) return
     setLoading(true)
     try {
@@ -90,10 +90,10 @@ export default function DoctorManagementCRMModule() {
       if (specializationFilter.trim()) params.append('specialization', specializationFilter.trim())
       if (cityFilter.trim()) params.append('city', cityFilter.trim())
 
-      const res = await axios.get(`${API_BASE}/api/doctors?${params.toString()}`, requestConfig)
-      setDoctors(Array.isArray(res.data) ? res.data : [])
+      const res = await axios.get(`${API_BASE}/api/staff?${params.toString()}`, requestConfig)
+      setStaffs(Array.isArray(res.data) ? res.data : [])
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to load doctors')
+      toast.error(err?.response?.data?.detail || 'Failed to load staff')
     } finally {
       setLoading(false)
     }
@@ -102,7 +102,7 @@ export default function DoctorManagementCRMModule() {
   const loadPerformance = useCallback(async () => {
     if (!token) return
     try {
-      const res = await axios.get(`${API_BASE}/api/doctors/performance`, requestConfig)
+      const res = await axios.get(`${API_BASE}/api/staff/performance`, requestConfig)
       setPerformance(res.data)
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || 'Failed to load performance')
@@ -110,11 +110,11 @@ export default function DoctorManagementCRMModule() {
   }, [token, API_BASE, requestConfig])
 
   useEffect(() => {
-    void loadDoctors()
+    void loadStaffs()
     void loadPerformance()
-  }, [token, loadDoctors, loadPerformance])
+  }, [token, loadStaffs, loadPerformance])
 
-  const submitDoctor = async (values: DoctorFormValues) => {
+  const submitStaff = async (values: StaffFormValues) => {
     const payload = {
       ...values,
       years_of_experience: values.years_of_experience ?? null,
@@ -123,15 +123,15 @@ export default function DoctorManagementCRMModule() {
     }
 
     try {
-      if (editingDoctor) {
-        await axios.put(`${API_BASE}/api/doctors/${editingDoctor.id}`, payload, requestConfig)
-        toast.success('Doctor updated')
+      if (editingStaff) {
+        await axios.put(`${API_BASE}/api/staff/${editingStaff.id}`, payload, requestConfig)
+        toast.success('Staff updated')
       } else {
-        await axios.post(`${API_BASE}/api/doctors`, payload, requestConfig)
-        toast.success('Doctor created')
+        await axios.post(`${API_BASE}/api/staff`, payload, requestConfig)
+        toast.success('Staff created')
       }
-      setEditingDoctor(null)
-      await loadDoctors()
+      setEditingStaff(null)
+      await loadStaffs()
       await loadPerformance()
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || 'Failed to save doctor')
@@ -139,23 +139,23 @@ export default function DoctorManagementCRMModule() {
     }
   }
 
-  const removeDoctor = useCallback(async (id: number) => {
+  const removeStaff = useCallback(async (id: number) => {
     try {
-      await axios.delete(`${API_BASE}/api/doctors/${id}`, requestConfig)
-      toast.success('Doctor deleted')
-      await loadDoctors()
+      await axios.delete(`${API_BASE}/api/staff/${id}`, requestConfig)
+      toast.success('Staff deleted')
+      await loadStaffs()
       await loadPerformance()
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || 'Failed to delete doctor')
     }
-  }, [API_BASE, requestConfig, loadDoctors, loadPerformance])
+  }, [API_BASE, requestConfig, loadStaffs, loadPerformance])
 
   const handleBulkSend = async (files: File[]): Promise<ShareResultItem[]> => {
     const fd = new FormData()
-    fd.append('doctor_ids', JSON.stringify(selectedDoctors.map(d => d.id)))
+    fd.append('doctor_ids', JSON.stringify(selectedStaffs.map(d => d.id)))
     files.forEach(file => fd.append('files', file))
 
-    const res = await axios.post(`${API_BASE}/api/doctors/send-pdfs`, fd, {
+    const res = await axios.post(`${API_BASE}/api/staff/send-pdfs`, fd, {
       headers: {
         ...requestConfig.headers,
         'Content-Type': 'multipart/form-data',
@@ -175,13 +175,13 @@ export default function DoctorManagementCRMModule() {
         message: values.message,
         specialization: values.specialization || null,
         city: values.city || null,
-        doctor_ids: values.to_all ? null : selectedDoctors.map(d => d.id),
+        doctor_ids: values.to_all ? null : selectedStaffs.map(d => d.id),
         channels: ['email', 'whatsapp'],
       }
 
-      const res = await axios.post(`${API_BASE}/api/doctors/broadcast`, payload, requestConfig)
+      const res = await axios.post(`${API_BASE}/api/staff/broadcast`, payload, requestConfig)
       setBroadcastResults(res.data?.items || [])
-      toast.success(`Broadcast ready for ${res.data?.total_recipients || 0} doctors`)
+      toast.success(`Broadcast ready for ${res.data?.total_recipients || 0} staff`)
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || 'Failed to build broadcast links')
     }
@@ -189,34 +189,34 @@ export default function DoctorManagementCRMModule() {
 
   const handlePortalLogin = portalLoginForm.handleSubmit(async values => {
     try {
-      const loginRes = await axios.post(`${API_BASE}/api/doctors/portal/login`, values)
+      const loginRes = await axios.post(`${API_BASE}/api/staff/portal/login`, values)
       const tokenValue: string = loginRes.data?.token
       setPortalToken(tokenValue)
 
       const [meRes, referralsRes] = await Promise.all([
-        axios.get(`${API_BASE}/api/doctors/portal/me?token=${encodeURIComponent(tokenValue)}`),
-        axios.get(`${API_BASE}/api/doctors/portal/referrals?token=${encodeURIComponent(tokenValue)}`),
+        axios.get(`${API_BASE}/api/staff/portal/me?token=${encodeURIComponent(tokenValue)}`),
+        axios.get(`${API_BASE}/api/staff/portal/referrals?token=${encodeURIComponent(tokenValue)}`),
       ])
 
-      setPortalDoctor(meRes.data)
+      setPortalStaff(meRes.data)
       setPortalReferrals(Array.isArray(referralsRes.data) ? referralsRes.data : [])
-      toast.success('Doctor portal session started')
+      toast.success('Staff portal session started')
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || 'Portal login failed')
     }
   })
 
-  const columns = useMemo<ColumnDef<DoctorItem, any>[]>(() => [
+  const columns = useMemo<ColumnDef<StaffItem, any>[]>(() => [
     columnHelper.display({
       id: 'select',
       header: () => (
         <input
           type="checkbox"
-          checked={doctors.length > 0 && doctors.every(d => !!selectedIds[d.id])}
+          checked={staff.length > 0 && staff.every(d => !!selectedIds[d.id])}
           onChange={e => {
             const checked = e.target.checked
             const next: Record<number, boolean> = {}
-            doctors.forEach(d => {
+            staff.forEach(d => {
               next[d.id] = checked
             })
             setSelectedIds(next)
@@ -236,7 +236,7 @@ export default function DoctorManagementCRMModule() {
       size: 36,
       minSize: 36,
     }),
-    columnHelper.accessor('full_name', { header: 'Doctor Name', size: 220 }),
+    columnHelper.accessor('full_name', { header: 'Staff Name', size: 220 }),
     columnHelper.accessor('specialization', { header: 'Specialization', size: 150 }),
     columnHelper.accessor('city', { header: 'City', size: 110 }),
     columnHelper.accessor('mobile', { header: 'Mobile', size: 120 }),
@@ -261,7 +261,7 @@ export default function DoctorManagementCRMModule() {
           <button
             className="px-2 py-1 rounded bg-blue-600 text-white text-xs"
             onClick={() => {
-              setEditingDoctor(info.row.original)
+              setEditingStaff(info.row.original)
               setShowForm(true)
             }}
           >
@@ -269,17 +269,17 @@ export default function DoctorManagementCRMModule() {
           </button>
           <button
             className="px-2 py-1 rounded bg-rose-600 text-white text-xs"
-            onClick={() => void removeDoctor(info.row.original.id)}
+            onClick={() => void removeStaff(info.row.original.id)}
           >
             Delete
           </button>
         </div>
       ),
     }),
-  ], [doctors, selectedIds, removeDoctor])
+  ], [staff, selectedIds, removeStaff])
 
   const table = useReactTable({
-    data: doctors,
+    data: staff,
     columns,
     getCoreRowModel: getCoreRowModel(),
   })
@@ -293,17 +293,17 @@ export default function DoctorManagementCRMModule() {
       <div className="premium-card p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-black text-slate-900">Doctor Management & CRM</h2>
-            <p className="text-slate-500 text-sm">Branch leadership CRM for referring doctors, marketing, reports, and growth insights.</p>
+            <h2 className="text-2xl font-black text-slate-900">Staff Management & CRM</h2>
+            <p className="text-slate-500 text-sm">Branch leadership CRM for referring staff, marketing, orders, and growth insights.</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button className="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold" onClick={() => { setEditingDoctor(null); setShowForm(true) }}>
-              Add Doctor
+            <button className="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold" onClick={() => { setEditingStaff(null); setShowForm(true) }}>
+              Add Staff
             </button>
             <button
               className="px-4 py-2 rounded-lg bg-emerald-600 text-white font-bold disabled:opacity-50"
-              disabled={selectedDoctors.length === 0}
+              disabled={selectedStaffs.length === 0}
               onClick={() => setShowBulkModal(true)}
             >
               Send Bulk PDF
@@ -315,12 +315,12 @@ export default function DoctorManagementCRMModule() {
       <div className="premium-card p-4">
         <div className="flex flex-wrap gap-2">
           {[
-            ['list', 'Doctor List'],
+            ['list', 'Staff List'],
             ['performance', 'Performance'],
             ['dashboard', 'Director Dashboard'],
             ['broadcast', 'Marketing Broadcast'],
             ['map', 'Geo Mapping'],
-            ['portal', 'Doctor Self-Service'],
+            ['portal', 'Staff Self-Service'],
           ].map(([key, label]) => (
             <button
               key={key}
@@ -348,7 +348,7 @@ export default function DoctorManagementCRMModule() {
               placeholder="Filter by City"
               className="px-3 py-2 border rounded-lg"
             />
-            <button className="px-3 py-2 bg-slate-700 text-white rounded-lg" onClick={() => void loadDoctors()}>Apply</button>
+            <button className="px-3 py-2 bg-slate-700 text-white rounded-lg" onClick={() => void loadStaffs()}>Apply</button>
           </div>
 
           <div className="overflow-x-auto border rounded-xl">
@@ -391,7 +391,7 @@ export default function DoctorManagementCRMModule() {
             <table className="w-full min-w-[760px]">
               <thead className="bg-slate-100">
                 <tr>
-                  <th className="text-left p-2 text-xs font-black">Doctor</th>
+                  <th className="text-left p-2 text-xs font-black">Staff</th>
                   <th className="text-left p-2 text-xs font-black">Specialization</th>
                   <th className="text-left p-2 text-xs font-black">Referrals</th>
                   <th className="text-left p-2 text-xs font-black">Revenue</th>
@@ -419,17 +419,17 @@ export default function DoctorManagementCRMModule() {
       {activeTab === 'dashboard' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="premium-card p-4 bg-gradient-to-br from-blue-50 to-cyan-50">
-            <p className="text-xs uppercase tracking-wide text-blue-700 font-black">Total Revenue from Doctor Referrals</p>
+            <p className="text-xs uppercase tracking-wide text-blue-700 font-black">Total Revenue from Staff Referrals</p>
             <p className="text-2xl font-black text-slate-900 mt-2">INR {Number(performance?.total_revenue_from_referrals || 0).toLocaleString()}</p>
           </div>
           <div className="premium-card p-4 bg-gradient-to-br from-amber-50 to-orange-50">
-            <p className="text-xs uppercase tracking-wide text-amber-700 font-black">Pending Reports to Send</p>
-            <p className="text-2xl font-black text-slate-900 mt-2">{performance?.pending_reports_to_send || 0}</p>
+            <p className="text-xs uppercase tracking-wide text-amber-700 font-black">Pending Orders to Send</p>
+            <p className="text-2xl font-black text-slate-900 mt-2">{performance?.pending_orders_to_send || 0}</p>
           </div>
           <div className="premium-card p-4 bg-gradient-to-br from-emerald-50 to-teal-50">
-            <p className="text-xs uppercase tracking-wide text-emerald-700 font-black">Top 5 Referring Doctors</p>
+            <p className="text-xs uppercase tracking-wide text-emerald-700 font-black">Top 5 Referring Staffs</p>
             <div className="mt-2 space-y-1 text-sm text-slate-700">
-              {(performance?.top_5_referring_doctors || []).map(item => (
+              {(performance?.top_5_referring_staff || []).map(item => (
                 <p key={item.doctor_id}>{item.doctor_name} - INR {item.revenue.toLocaleString()}</p>
               ))}
             </div>
@@ -449,7 +449,7 @@ export default function DoctorManagementCRMModule() {
             <input className="px-3 py-2 border rounded-lg" placeholder="Specialization filter (optional)" {...broadcastForm.register('specialization')} />
             <input className="px-3 py-2 border rounded-lg" placeholder="City filter (optional)" {...broadcastForm.register('city')} />
             <label className="inline-flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
-              <input type="checkbox" {...broadcastForm.register('to_all')} /> Send to all doctors (ignore selected rows)
+              <input type="checkbox" {...broadcastForm.register('to_all')} /> Send to all staff (ignore selected rows)
             </label>
             <button className="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold w-max">Generate Broadcast Links</button>
           </form>
@@ -472,14 +472,14 @@ export default function DoctorManagementCRMModule() {
 
       {activeTab === 'map' && (
         <div className="premium-card p-6">
-          <h3 className="text-xl font-black text-slate-900 mb-4">Doctor Geo Mapping</h3>
+          <h3 className="text-xl font-black text-slate-900 mb-4">Staff Geo Mapping</h3>
           <div className="h-[500px] rounded-xl overflow-hidden border">
             <MapContainer center={mapCenter} zoom={11} style={{ height: '100%', width: '100%' }}>
               <TileLayer
                 attribution='&copy; OpenStreetMap contributors'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              {doctors
+              {staff
                 .filter(d => typeof d.latitude === 'number' && typeof d.longitude === 'number')
                 .map(d => (
                   <Marker key={d.id} position={[Number(d.latitude), Number(d.longitude)]}>
@@ -500,17 +500,17 @@ export default function DoctorManagementCRMModule() {
 
       {activeTab === 'portal' && (
         <div className="premium-card p-6 space-y-4">
-          <h3 className="text-xl font-black text-slate-900">Doctor Self-Service Portal (Extension)</h3>
+          <h3 className="text-xl font-black text-slate-900">Staff Self-Service Portal (Extension)</h3>
           <form onSubmit={handlePortalLogin} className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <input className="px-3 py-2 border rounded-lg" placeholder="Portal Username" {...portalLoginForm.register('username', { required: true })} />
             <input type="password" className="px-3 py-2 border rounded-lg" placeholder="Portal Password" {...portalLoginForm.register('password', { required: true })} />
             <button className="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold">Login</button>
           </form>
 
-          {portalToken && portalDoctor && (
+          {portalToken && portalStaff && (
             <div className="space-y-3">
               <div className="rounded-lg border p-3 bg-slate-50">
-                <p className="font-semibold text-slate-800">Signed in as {portalDoctor.full_name}</p>
+                <p className="font-semibold text-slate-800">Signed in as {portalStaff.full_name}</p>
                 <p className="text-xs text-slate-500">Token: {portalToken.slice(0, 12)}...</p>
               </div>
 
@@ -518,11 +518,11 @@ export default function DoctorManagementCRMModule() {
                 <table className="w-full min-w-[720px]">
                   <thead className="bg-slate-100">
                     <tr>
-                      <th className="p-2 text-left text-xs font-black">Patient</th>
+                      <th className="p-2 text-left text-xs font-black">Customer</th>
                       <th className="p-2 text-left text-xs font-black">Mobile</th>
                       <th className="p-2 text-left text-xs font-black">Referred On</th>
                       <th className="p-2 text-left text-xs font-black">Revenue</th>
-                      <th className="p-2 text-left text-xs font-black">Report Sent</th>
+                      <th className="p-2 text-left text-xs font-black">Order Sent</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -543,19 +543,19 @@ export default function DoctorManagementCRMModule() {
         </div>
       )}
 
-      <DoctorFormModal
+      <StaffFormModal
         open={showForm}
-        initialDoctor={editingDoctor}
+        initialStaff={editingStaff}
         onClose={() => {
           setShowForm(false)
-          setEditingDoctor(null)
+          setEditingStaff(null)
         }}
-        onSubmit={submitDoctor}
+        onSubmit={submitStaff}
       />
 
       <BulkPdfModal
         open={showBulkModal}
-        selectedDoctors={selectedDoctors}
+        selectedStaffs={selectedStaffs}
         onClose={() => setShowBulkModal(false)}
         onSend={handleBulkSend}
       />

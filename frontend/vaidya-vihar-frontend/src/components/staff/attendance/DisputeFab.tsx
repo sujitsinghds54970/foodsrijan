@@ -35,7 +35,7 @@ export default function DisputeFab({ onSubmit }: DisputeFabProps) {
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-5 dark:bg-slate-900">
-            <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100">Report an Attendance Issue</h4>
+            <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100">Order an Attendance Issue</h4>
             <div className="mt-3 space-y-3">
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-800" />
               <select value={presetReason} onChange={(e) => setPresetReason(e.target.value)} className="w-full rounded-lg border px-3 py-2 dark:border-slate-700 dark:bg-slate-800">

@@ -92,7 +92,7 @@ export default function AttendanceTab(_: AttendanceTabProps) {
   const [taskDraft, setTaskDraft] = useState<Record<number, string>>({})
   const [staffNoteDraft, setStaffNoteDraft] = useState<Record<number, string>>({})
 
-  const taskOptions = ['Sample Collection', 'Report Dispatch', 'Patient Follow-up', 'Inventory Check', 'Reception Duty', 'Admin Task']
+  const taskOptions = ['Sample Collection', 'Order Dispatch', 'Customer Follow-up', 'Inventory Check', 'Reception Duty', 'Admin Task']
 
   const isDirectorView = ((user?.role || '').toLowerCase() === 'branch_director')
 
@@ -281,7 +281,7 @@ export default function AttendanceTab(_: AttendanceTabProps) {
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(12)
-    doc.text('Attendance Report', pageWidth - 78, 14)
+    doc.text('Attendance Order', pageWidth - 78, 14)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(10)
     doc.text(`Month: ${monthLabelText}`, pageWidth - 78, 20)

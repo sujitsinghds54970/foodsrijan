@@ -14,7 +14,7 @@ def export_invoices_csv(db: Session = Depends(get_db)):
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID", "Patient ID", "Branch ID", "Amount", "Status", "Created At"])
+    writer.writerow(["ID", "Customer ID", "Branch ID", "Amount", "Status", "Created At"])
 
     for invoice in invoices:
         writer.writerow([

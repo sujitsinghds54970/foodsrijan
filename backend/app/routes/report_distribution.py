@@ -1,12 +1,12 @@
 """
-Report Distribution Routes for VaidyaVihar Diagnostic ERP
+Order Distribution Routes for VaidyaVihar Diagnostic ERP
 
-Provides automatic report distribution to doctors across all branches:
-- Automatic report delivery to referring doctors
+Provides automatic report distribution to staff across all branches:
+- Automatic report delivery to referring staff
 - Multi-channel notification (SMS, WhatsApp, Email, Portal)
 - Real-time WebSocket alerts
 - Delivery tracking and confirmation
-- Doctor acknowledgment system
+- Staff acknowledgment system
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
@@ -21,10 +21,10 @@ import json
 
 from app.database import get_db
 from app.utils.auth_system import auth_guard, require_staff, get_current_user, require_role
-from app.models import User, Branch, Patient, LabResult
-from app.models.doctor import (
-    Doctor, DoctorBranch, ReportDistribution, ReportTemplate, 
-    DoctorNotification
+from app.models import User, Branch, Customer, LabResult
+from app.models.staff import (
+    Staff, StaffBranch, OrderDistribution, OrderTemplate, 
+    StaffNotification
 )
 from app.services.websocket_service import connection_manager, NotificationFactory
 from app.services.sms_service import get_sms_service
@@ -36,17 +36,17 @@ router = APIRouter()
 
 # ============ Pydantic Schemas ============
 
-class ReportDistributionCreate(BaseModel):
+class OrderDistributionCreate(BaseModel):
     """Schema for creating report distribution"""
     lab_result_id: int
-    doctor_ids: Optional[List[int]] = None  # If None, auto-distribute to referring doctors
+    doctor_ids: Optional[List[int]] = None  # If None, auto-distribute to referring staff
     priority: str = Field("normal", pattern="^(normal|high|urgent)$")
     delivery_methods: Optional[List[str]] = ["portal", "email", "sms", "whatsapp"]
     force_delivery: bool = False  # Force delivery even if not referring doctor
 
 
-class ReportDistributionResponse(BaseModel):
-    """Report distribution response"""
+class OrderDistributionResponse(BaseModel):
+    """Order distribution response"""
     id: int
     distribution_id: str
     lab_result_id: int
@@ -86,19 +86,19 @@ def generate_distribution_id():
 async def distribute_report_to_doctor(
     db: Session,
     lab_result: LabResult,
-    doctor: Doctor,
+    doctor: Staff,
     branch_id: int,
     delivery_methods: List[str],
     priority: str,
     created_by: int
-) -> ReportDistribution:
+) -> OrderDistribution:
     """Distribute a report to a single doctor"""
     
     # Check if already distributed
-    existing = db.query(ReportDistribution).filter(
+    existing = db.query(OrderDistribution).filter(
         and_(
-            ReportDistribution.lab_result_id == lab_result.id,
-            ReportDistribution.doctor_id == doctor.id
+            OrderDistribution.lab_result_id == lab_result.id,
+            OrderDistribution.doctor_id == doctor.id
         )
     ).first()
     
@@ -109,7 +109,7 @@ async def distribute_report_to_doctor(
     delivery_method = delivery_methods[0] if delivery_methods else "portal"
     
     # Create distribution record
-    distribution = ReportDistribution(
+    distribution = OrderDistribution(
         distribution_id=generate_distribution_id(),
         lab_result_id=lab_result.id,
         patient_id=lab_result.patient_id,
@@ -137,18 +137,18 @@ async def distribute_report_to_doctor(
 async def send_report_notifications(
     db: Session,
     lab_result: LabResult,
-    doctor: Doctor,
-    distribution: ReportDistribution,
+    doctor: Staff,
+    distribution: OrderDistribution,
     delivery_methods: List[str]
 ):
     """Send notifications to doctor via all configured channels"""
     
     # Get patient info
-    patient = db.query(Patient).filter(Patient.id == lab_result.patient_id).first()
+    patient = db.query(Customer).filter(Customer.id == lab_result.patient_id).first()
     patient_name = f"{patient.first_name} {patient.last_name}" if patient else "Unknown"
     
     # Generate report URL
-    report_url = f"/doctor-portal/reports/{distribution.id}"
+    report_url = f"/doctor-portal/orders/{distribution.id}"
     
     # 1. Send Portal Notification (WebSocket)
     notification = NotificationFactory.create_report_ready_notification(
@@ -203,11 +203,11 @@ async def send_report_notifications(
     
     # 5. Send Push Notification
     if "push" in delivery_methods and doctor.notification_preferences.get("push", True):
-        notification = DoctorNotification(
+        notification = StaffNotification(
             notification_id=f"NT-{uuid.uuid4().hex[:8].upper()}",
             doctor_id=doctor.id,
             notification_type="report_ready",
-            title="New Report Available",
+            title="New Order Available",
             message=f"New {lab_result.test_category} report for {patient_name}",
             channel="push",
             status="sent",
@@ -228,22 +228,22 @@ async def send_report_notifications(
     db.commit()
 
 
-# ============ Report Distribution Routes ============
+# ============ Order Distribution Routes ============
 
-@router.post("/reports/distribute")
+@router.post("/orders/distribute")
 async def distribute_report(
-    distribution_data: ReportDistributionCreate,
+    distribution_data: OrderDistributionCreate,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
     """
-    Distribute a lab report to doctors.
+    Distribute a lab report to staff.
     
     If doctor_ids is not provided, automatically distributes to:
     1. Referring doctor (from lab result)
-    2. All doctors who have seen this patient before
-    3. All doctors in the patient's assigned branches
+    2. All staff who have seen this patient before
+    3. All staff in the patient's assigned branches
     """
     
     # Get lab result
@@ -253,9 +253,9 @@ async def distribute_report(
         raise HTTPException(status_code=404, detail="Lab result not found")
     
     # Get patient
-    patient = db.query(Patient).filter(Patient.id == lab_result.patient_id).first()
+    patient = db.query(Customer).filter(Customer.id == lab_result.patient_id).first()
     
-    # Determine which doctors to distribute to
+    # Determine which staff to distribute to
     doctor_ids = distribution_data.doctor_ids or []
     
     if not doctor_ids:
@@ -263,39 +263,39 @@ async def distribute_report(
         
         # 1. Get referring doctor from lab result
         if lab_result.requested_by:
-            referring_doc = db.query(Doctor).filter(
+            referring_doc = db.query(Staff).filter(
                 or_(
-                    Doctor.full_name.ilike(f"%{lab_result.requested_by}%"),
-                    Doctor.first_name.ilike(f"%{lab_result.requested_by}%")
+                    Staff.full_name.ilike(f"%{lab_result.requested_by}%"),
+                    Staff.first_name.ilike(f"%{lab_result.requested_by}%")
                 )
             ).first()
             if referring_doc and referring_doc.id not in doctor_ids:
                 doctor_ids.append(referring_doc.id)
         
-        # 2. Get doctors who have received reports for this patient before
-        previous_distributions = db.query(ReportDistribution.doctor_id).filter(
-            ReportDistribution.patient_id == lab_result.patient_id
+        # 2. Get staff who have received orders for this patient before
+        previous_distributions = db.query(OrderDistribution.doctor_id).filter(
+            OrderDistribution.patient_id == lab_result.patient_id
         ).distinct().all()
         for (doc_id,) in previous_distributions:
             if doc_id not in doctor_ids:
                 doctor_ids.append(doc_id)
         
-        # 3. Get doctors in the patient's branch
-        patient_branches = db.query(DoctorBranch).filter(
+        # 3. Get staff in the patient's branch
+        patient_branches = db.query(StaffBranch).filter(
             and_(
-                DoctorBranch.branch_id == patient.branch_id,
-                DoctorBranch.is_active == True,
-                DoctorBranch.receive_all_reports == True
+                StaffBranch.branch_id == patient.branch_id,
+                StaffBranch.is_active == True,
+                StaffBranch.receive_all_orders == True
             )
         ).all()
         for db_branch in patient_branches:
             if db_branch.doctor_id not in doctor_ids:
                 doctor_ids.append(db_branch.doctor_id)
     
-    # If still no doctors, return warning
+    # If still no staff, return warning
     if not doctor_ids:
         return {
-            "message": "No doctors found for automatic distribution",
+            "message": "No staff found for automatic distribution",
             "lab_result_id": lab_result.id,
             "status": "no_recipients"
         }
@@ -303,7 +303,7 @@ async def distribute_report(
     # Distribute to each doctor
     distributions = []
     for doctor_id in doctor_ids:
-        doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+        doctor = db.query(Staff).filter(Staff.id == doctor_id).first()
         if doctor and doctor.is_active:
             try:
                 distribution = await distribute_report_to_doctor(
@@ -320,7 +320,7 @@ async def distribute_report(
                 print(f"Error distributing to doctor {doctor_id}: {e}")
     
     return {
-        "message": "Report distributed successfully",
+        "message": "Order distributed successfully",
         "lab_result_id": lab_result.id,
         "report_name": lab_result.test_name,
         "distributions_count": len(distributions),
@@ -328,8 +328,8 @@ async def distribute_report(
     }
 
 
-@router.post("/reports/distribute-to-all-branches")
-async def distribute_report_to_all_relevant_doctors(
+@router.post("/orders/distribute-to-all-branches")
+async def distribute_report_to_all_relevant_staff(
     lab_result_id: int,
     delivery_methods: Optional[List[str]] = Query(["portal", "email"]),
     priority: str = Query("normal", pattern="^(normal|high|urgent)$"),
@@ -337,8 +337,8 @@ async def distribute_report_to_all_relevant_doctors(
     db: Session = Depends(get_db)
 ):
     """
-    Distribute a report to ALL doctors across ALL branches.
-    Useful for critical/special reports that all doctors should see.
+    Distribute a report to ALL staff across ALL branches.
+    Useful for critical/special orders that all staff should see.
     """
     
     lab_result = db.query(LabResult).filter(LabResult.id == lab_result_id).first()
@@ -346,15 +346,15 @@ async def distribute_report_to_all_relevant_doctors(
     if not lab_result:
         raise HTTPException(status_code=404, detail="Lab result not found")
     
-    # Get all active doctors
-    all_doctors = db.query(Doctor).filter(Doctor.is_active == True).all()
+    # Get all active staff
+    all_staff = db.query(Staff).filter(Staff.is_active == True).all()
     
     # Get patient info
-    patient = db.query(Patient).filter(Patient.id == lab_result.patient_id).first()
+    patient = db.query(Customer).filter(Customer.id == lab_result.patient_id).first()
     patient_name = f"{patient.first_name} {patient.last_name}" if patient else "Unknown"
     
     distributions = []
-    for doctor in all_doctors:
+    for doctor in all_staff:
         if doctor.notification_preferences.get("report_ready", True):
             distribution = await distribute_report_to_doctor(
                 db=db,
@@ -368,14 +368,14 @@ async def distribute_report_to_all_relevant_doctors(
             distributions.append(distribution.id)
     
     return {
-        "message": "Report distributed to all doctors",
+        "message": "Order distributed to all staff",
         "lab_result_id": lab_result_id,
-        "total_doctors_notified": len(distributions),
+        "total_staff_notified": len(distributions),
         "distributions": distributions
     }
 
 
-@router.get("/reports/distributions/")
+@router.get("/orders/distributions/")
 def get_distributions(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -390,27 +390,27 @@ def get_distributions(
 ):
     """Get list of report distributions with filtering"""
     
-    query = db.query(ReportDistribution)
+    query = db.query(OrderDistribution)
     
     # Apply filters
     if doctor_id:
-        query = query.filter(ReportDistribution.doctor_id == doctor_id)
+        query = query.filter(OrderDistribution.doctor_id == doctor_id)
     if lab_result_id:
-        query = query.filter(ReportDistribution.lab_result_id == lab_result_id)
+        query = query.filter(OrderDistribution.lab_result_id == lab_result_id)
     if delivery_status:
-        query = query.filter(ReportDistribution.delivery_status == delivery_status)
+        query = query.filter(OrderDistribution.delivery_status == delivery_status)
     if report_type:
-        query = query.filter(ReportDistribution.report_type == report_type)
+        query = query.filter(OrderDistribution.report_type == report_type)
     if start_date:
-        query = query.filter(ReportDistribution.created_at >= start_date)
+        query = query.filter(OrderDistribution.created_at >= start_date)
     if end_date:
-        query = query.filter(ReportDistribution.created_at <= end_date)
+        query = query.filter(OrderDistribution.created_at <= end_date)
     
     # Get total count
     total = query.count()
     
     # Apply pagination
-    distributions = query.order_by(desc(ReportDistribution.created_at)).offset(skip).limit(limit).all()
+    distributions = query.order_by(desc(OrderDistribution.created_at)).offset(skip).limit(limit).all()
     
     return {
         "distributions": distributions,
@@ -420,28 +420,28 @@ def get_distributions(
     }
 
 
-@router.get("/reports/distribution/{distribution_id}")
+@router.get("/orders/distribution/{distribution_id}")
 def get_distribution(
     distribution_id: int,
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
     """Get report distribution details"""
-    distribution = db.query(ReportDistribution).filter(
-        ReportDistribution.id == distribution_id
+    distribution = db.query(OrderDistribution).filter(
+        OrderDistribution.id == distribution_id
     ).first()
     
     if not distribution:
         raise HTTPException(status_code=404, detail="Distribution not found")
     
     # Get doctor info
-    doctor = db.query(Doctor).filter(Doctor.id == distribution.doctor_id).first()
+    doctor = db.query(Staff).filter(Staff.id == distribution.doctor_id).first()
     
     # Get lab result info
     lab_result = db.query(LabResult).filter(LabResult.id == distribution.lab_result_id).first()
     
     # Get patient info
-    patient = db.query(Patient).filter(Patient.id == distribution.patient_id).first()
+    patient = db.query(Customer).filter(Customer.id == distribution.patient_id).first()
     
     return {
         "distribution": distribution,
@@ -466,43 +466,43 @@ def get_distribution(
     }
 
 
-@router.get("/reports/pending-for-doctor/{doctor_id}")
-def get_pending_reports_for_doctor(
+@router.get("/orders/pending-for-doctor/{doctor_id}")
+def get_pending_orders_for_doctor(
     doctor_id: int,
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
-    """Get pending reports for a specific doctor"""
+    """Get pending orders for a specific doctor"""
     
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    doctor = db.query(Staff).filter(Staff.id == doctor_id).first()
     
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
     
     # Get pending distributions
-    distributions = db.query(ReportDistribution).filter(
+    distributions = db.query(OrderDistribution).filter(
         and_(
-            ReportDistribution.doctor_id == doctor_id,
-            ReportDistribution.delivery_status.in_(["pending", "sent", "delivered"])
+            OrderDistribution.doctor_id == doctor_id,
+            OrderDistribution.delivery_status.in_(["pending", "sent", "delivered"])
         )
     ).order_by(
-        desc(ReportDistribution.priority),
-        desc(ReportDistribution.created_at)
+        desc(OrderDistribution.priority),
+        desc(OrderDistribution.created_at)
     ).limit(limit).all()
     
     # Get unread count
-    unread_count = db.query(func.count(ReportDistribution.id)).filter(
+    unread_count = db.query(func.count(OrderDistribution.id)).filter(
         and_(
-            ReportDistribution.doctor_id == doctor_id,
-            ReportDistribution.delivery_status.in_(["pending", "sent", "delivered"])
+            OrderDistribution.doctor_id == doctor_id,
+            OrderDistribution.delivery_status.in_(["pending", "sent", "delivered"])
         )
     ).scalar()
     
     result = []
     for dist in distributions:
         lab_result = db.query(LabResult).filter(LabResult.id == dist.lab_result_id).first()
-        patient = db.query(Patient).filter(Patient.id == dist.patient_id).first()
+        patient = db.query(Customer).filter(Customer.id == dist.patient_id).first()
         
         result.append({
             "distribution_id": dist.id,
@@ -529,11 +529,11 @@ def get_pending_reports_for_doctor(
             "name": f"Dr. {doctor.first_name} {doctor.last_name}"
         },
         "pending_count": unread_count or 0,
-        "reports": result
+        "orders": result
     }
 
 
-@router.post("/reports/{distribution_id}/acknowledge")
+@router.post("/orders/{distribution_id}/acknowledge")
 async def acknowledge_report(
     distribution_id: int,
     action: str = Query("view", pattern="^(view|download|print|acknowledge)$"),
@@ -542,8 +542,8 @@ async def acknowledge_report(
 ):
     """Acknowledge that a doctor has viewed/downloaded a report"""
     
-    distribution = db.query(ReportDistribution).filter(
-        ReportDistribution.id == distribution_id
+    distribution = db.query(OrderDistribution).filter(
+        OrderDistribution.id == distribution_id
     ).first()
     
     if not distribution:
@@ -567,14 +567,14 @@ async def acknowledge_report(
     db.commit()
     
     return {
-        "message": f"Report {action} acknowledged",
+        "message": f"Order {action} acknowledged",
         "distribution_id": distribution_id,
         "action": action,
         "timestamp": now
     }
 
 
-@router.get("/reports/distribution/summary")
+@router.get("/orders/distribution/summary")
 def get_distribution_summary(
     doctor_id: Optional[int] = Query(None),
     branch_id: Optional[int] = Query(None),
@@ -585,33 +585,33 @@ def get_distribution_summary(
 ):
     """Get summary statistics for report distributions"""
     
-    query = db.query(ReportDistribution)
+    query = db.query(OrderDistribution)
     
     if doctor_id:
-        query = query.filter(ReportDistribution.doctor_id == doctor_id)
+        query = query.filter(OrderDistribution.doctor_id == doctor_id)
     if branch_id:
-        query = query.filter(ReportDistribution.branch_id == branch_id)
+        query = query.filter(OrderDistribution.branch_id == branch_id)
     if start_date:
-        query = query.filter(ReportDistribution.created_at >= start_date)
+        query = query.filter(OrderDistribution.created_at >= start_date)
     if end_date:
-        query = query.filter(ReportDistribution.created_at <= end_date)
+        query = query.filter(OrderDistribution.created_at <= end_date)
     
     total = query.count()
     
     # Status breakdown
-    pending = query.filter(ReportDistribution.delivery_status == "pending").count()
-    sent = query.filter(ReportDistribution.delivery_status == "sent").count()
-    delivered = query.filter(ReportDistribution.delivery_status == "delivered").count()
-    read = query.filter(ReportDistribution.delivery_status == "read").count()
-    failed = query.filter(ReportDistribution.delivery_status == "failed").count()
+    pending = query.filter(OrderDistribution.delivery_status == "pending").count()
+    sent = query.filter(OrderDistribution.delivery_status == "sent").count()
+    delivered = query.filter(OrderDistribution.delivery_status == "delivered").count()
+    read = query.filter(OrderDistribution.delivery_status == "read").count()
+    failed = query.filter(OrderDistribution.delivery_status == "failed").count()
     
     # By report type
     by_type = db.query(
-        ReportDistribution.report_type,
-        func.count(ReportDistribution.id)
+        OrderDistribution.report_type,
+        func.count(OrderDistribution.id)
     ).filter(
-        ReportDistribution.created_at >= (start_date or datetime.utcnow() - timedelta(days=30))
-    ).group_by(ReportDistribution.report_type).all()
+        OrderDistribution.created_at >= (start_date or datetime.utcnow() - timedelta(days=30))
+    ).group_by(OrderDistribution.report_type).all()
     
     return {
         "summary": {
@@ -634,7 +634,7 @@ def get_distribution_summary(
     }
 
 
-@router.get("/reports/doctor-activity/{doctor_id}")
+@router.get("/orders/doctor-activity/{doctor_id}")
 def get_doctor_report_activity(
     doctor_id: int,
     days: int = Query(30, ge=1, le=365),
@@ -643,40 +643,40 @@ def get_doctor_report_activity(
 ):
     """Get report activity for a specific doctor"""
     
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    doctor = db.query(Staff).filter(Staff.id == doctor_id).first()
     
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
     
     start_date = datetime.utcnow() - timedelta(days=days)
     
     # Get distribution counts by status
     status_counts = db.query(
-        ReportDistribution.delivery_status,
-        func.count(ReportDistribution.id)
+        OrderDistribution.delivery_status,
+        func.count(OrderDistribution.id)
     ).filter(
         and_(
-            ReportDistribution.doctor_id == doctor_id,
-            ReportDistribution.created_at >= start_date
+            OrderDistribution.doctor_id == doctor_id,
+            OrderDistribution.created_at >= start_date
         )
-    ).group_by(ReportDistribution.delivery_status).all()
+    ).group_by(OrderDistribution.delivery_status).all()
     
     # Get recent activity
-    recent = db.query(ReportDistribution).filter(
+    recent = db.query(OrderDistribution).filter(
         and_(
-            ReportDistribution.doctor_id == doctor_id,
-            ReportDistribution.created_at >= start_date
+            OrderDistribution.doctor_id == doctor_id,
+            OrderDistribution.created_at >= start_date
         )
-    ).order_by(desc(ReportDistribution.created_at)).limit(50).all()
+    ).order_by(desc(OrderDistribution.created_at)).limit(50).all()
     
     # Daily breakdown for charts
     daily = db.query(
-        func.date(ReportDistribution.created_at).label("date"),
-        func.count(ReportDistribution.id).label("count")
+        func.date(OrderDistribution.created_at).label("date"),
+        func.count(OrderDistribution.id).label("count")
     ).filter(
         and_(
-            ReportDistribution.doctor_id == doctor_id,
-            ReportDistribution.created_at >= start_date
+            OrderDistribution.doctor_id == doctor_id,
+            OrderDistribution.created_at >= start_date
         )
     ).group_by("date").order_by("date").all()
     
@@ -694,7 +694,7 @@ def get_doctor_report_activity(
             {"date": str(d[0]), "count": d[1]}
             for d in daily
         ],
-        "recent_reports": [
+        "recent_orders": [
             {
                 "id": r.id,
                 "report_name": r.report_name,
@@ -709,7 +709,7 @@ def get_doctor_report_activity(
     }
 
 
-@router.post("/reports/{distribution_id}/send-reminder")
+@router.post("/orders/{distribution_id}/send-reminder")
 async def send_report_reminder(
     distribution_id: int,
     current_user: User = Depends(require_staff),
@@ -717,16 +717,16 @@ async def send_report_reminder(
 ):
     """Send a reminder notification for a pending report"""
     
-    distribution = db.query(ReportDistribution).filter(
-        ReportDistribution.id == distribution_id
+    distribution = db.query(OrderDistribution).filter(
+        OrderDistribution.id == distribution_id
     ).first()
     
     if not distribution:
         raise HTTPException(status_code=404, detail="Distribution not found")
     
-    doctor = db.query(Doctor).filter(Doctor.id == distribution.doctor_id).first()
+    doctor = db.query(Staff).filter(Staff.id == distribution.doctor_id).first()
     lab_result = db.query(LabResult).filter(LabResult.id == distribution.lab_result_id).first()
-    patient = db.query(Patient).filter(Patient.id == distribution.patient_id).first()
+    patient = db.query(Customer).filter(Customer.id == distribution.patient_id).first()
     
     if not doctor or not lab_result or not patient:
         raise HTTPException(status_code=404, detail="Related records not found")
@@ -744,11 +744,11 @@ async def send_report_reminder(
     )
     
     # Create notification record
-    notification = DoctorNotification(
+    notification = StaffNotification(
         notification_id=f"NT-REM-{uuid.uuid4().hex[:8].upper()}",
         doctor_id=doctor.id,
         notification_type="report_reminder",
-        title="Report Reminder",
+        title="Order Reminder",
         message=f"Reminder: {lab_result.test_name} report for {patient_name} is awaiting your review",
         channel="sms",
         status="sent",
@@ -767,7 +767,7 @@ async def send_report_reminder(
     }
 
 
-@router.get("/reports/tracking/{lab_result_id}")
+@router.get("/orders/tracking/{lab_result_id}")
 def track_report_distribution(
     lab_result_id: int,
     current_user: User = Depends(require_staff),
@@ -780,11 +780,11 @@ def track_report_distribution(
     if not lab_result:
         raise HTTPException(status_code=404, detail="Lab result not found")
     
-    distributions = db.query(ReportDistribution).filter(
-        ReportDistribution.lab_result_id == lab_result_id
+    distributions = db.query(OrderDistribution).filter(
+        OrderDistribution.lab_result_id == lab_result_id
     ).all()
     
-    patient = db.query(Patient).filter(Patient.id == lab_result.patient_id).first()
+    patient = db.query(Customer).filter(Customer.id == lab_result.patient_id).first()
     
     result = {
         "lab_result": {
@@ -802,7 +802,7 @@ def track_report_distribution(
     }
     
     for dist in distributions:
-        doctor = db.query(Doctor).filter(Doctor.id == dist.doctor_id).first()
+        doctor = db.query(Staff).filter(Staff.id == dist.doctor_id).first()
         
         result["distributions"].append({
             "distribution_id": dist.distribution_id,

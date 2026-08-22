@@ -26,7 +26,7 @@ def upgrade() -> None:
         sa.Column("entity_id", sa.String(length=100), nullable=True),
         sa.Column("event_meta", sa.JSON(), nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(["doctor_id"], ["doctors.id"]),
+        sa.ForeignKeyConstraint(["doctor_id"], ["staff.id"]),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )

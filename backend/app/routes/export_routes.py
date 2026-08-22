@@ -9,14 +9,14 @@ from io import BytesIO
 from app.database import get_db
 from app.utils.auth_system import auth_guard, require_staff, get_current_user
 from app.models import User, Branch
-from app.schemas.user import MonthlyReportRequest, ExportResponse
+from app.schemas.user import MonthlyOrderRequest, ExportResponse
 from app.utils.excel_export import export_service
 
 router = APIRouter()
 
 @router.post("/export/monthly-report", response_model=ExportResponse)
 def export_monthly_report(
-    request: MonthlyReportRequest,
+    request: MonthlyOrderRequest,
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):

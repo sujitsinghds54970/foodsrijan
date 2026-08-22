@@ -43,7 +43,7 @@ def _generate_invoice_pdf_file(invoice: FinanceInvoice) -> str:
     y -= 18
     c.drawString(50, y, f"Invoice Date: {invoice.date.strftime('%Y-%m-%d %H:%M')}")
     y -= 18
-    c.drawString(50, y, f"Patient Name: {invoice.patient_name or '-'}")
+    c.drawString(50, y, f"Customer Name: {invoice.patient_name or '-'}")
     y -= 18
     c.drawString(50, y, f"Status: {invoice.status}")
     y -= 30
@@ -425,7 +425,7 @@ def send_invoice(
         full_pdf_url = f"{base_url}{invoice.pdf_url}" if base_url else invoice.pdf_url
 
     body_text = (
-        f"Invoice {invoice.invoice_number} for {invoice.patient_name or 'Patient'} is ready.\n"
+        f"Invoice {invoice.invoice_number} for {invoice.patient_name or 'Customer'} is ready.\n"
         f"Download PDF: {full_pdf_url}"
     )
 
@@ -557,7 +557,7 @@ def approve_expense(
     return expense
 
 
-@router.get("/api/reports/profit-loss")
+@router.get("/api/orders/profit-loss")
 def profit_loss_report(
     start: datetime = Query(...),
     end: datetime = Query(...),
@@ -594,7 +594,7 @@ def profit_loss_report(
     }
 
 
-@router.get("/api/reports/gst")
+@router.get("/api/orders/gst")
 def gst_report(
     month: int = Query(..., ge=1, le=12),
     year: int = Query(..., ge=2000, le=2100),

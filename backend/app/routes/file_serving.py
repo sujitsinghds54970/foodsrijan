@@ -13,10 +13,10 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Doctor, User
+from app.models import Staff, User
 from app.models.daily_entry_module import DailyEntryModule
-from app.models.doctor import DoctorBranch
-from app.models.doctor_portal import DoctorAuditLog
+from app.models.staff import StaffBranch
+from app.models.doctor_portal import StaffAuditLog
 from app.utils.auth_system import auth_guard
 
 router = APIRouter()
@@ -27,30 +27,30 @@ ALLOWED_FILE_ROLES = {"super_admin", "branch_admin", "branch_director", "staff",
 BASE_DIR = Path(__file__).parent.parent.parent
 UPLOADS_DIR = BASE_DIR / "uploads"
 
-# Also check for daily_entry_reports subdirectory
-DAILY_ENTRY_REPORTS_DIR = UPLOADS_DIR / "daily_entry_reports"
+# Also check for daily_entry_orders subdirectory
+DAILY_ENTRY_REPORTS_DIR = UPLOADS_DIR / "daily_entry_orders"
 
 
-def _doctor_for_user(current_user: User, db: Session) -> Optional[Doctor]:
-    doctor = db.query(Doctor).filter(Doctor.user_id == current_user.id).first()
+def _doctor_for_user(current_user: User, db: Session) -> Optional[Staff]:
+    doctor = db.query(Staff).filter(Staff.user_id == current_user.id).first()
     if doctor:
         return doctor
     if current_user.email:
-        return db.query(Doctor).filter(Doctor.email == current_user.email).first()
+        return db.query(Staff).filter(Staff.email == current_user.email).first()
     return None
 
 
 def _doctor_branch_ids(doctor_id: int, db: Session) -> set[int]:
-    rows = db.query(DoctorBranch.branch_id).filter(DoctorBranch.doctor_id == doctor_id, DoctorBranch.is_active.is_(True)).all()
+    rows = db.query(StaffBranch.branch_id).filter(StaffBranch.doctor_id == doctor_id, StaffBranch.is_active.is_(True)).all()
     return {row[0] for row in rows}
 
 
 def _extract_daily_report_filename(filename: str) -> Optional[str]:
     normalized = filename.lstrip("/")
-    if normalized.startswith("uploads/daily_entry_reports/"):
-        return normalized.split("uploads/daily_entry_reports/", 1)[1]
-    if normalized.startswith("daily_entry_reports/"):
-        return normalized.split("daily_entry_reports/", 1)[1]
+    if normalized.startswith("uploads/daily_entry_orders/"):
+        return normalized.split("uploads/daily_entry_orders/", 1)[1]
+    if normalized.startswith("daily_entry_orders/"):
+        return normalized.split("daily_entry_orders/", 1)[1]
     if normalized.lower().endswith(".pdf"):
         return os.path.basename(normalized)
     return None
@@ -62,7 +62,7 @@ def _enforce_doctor_report_access(filename: str, current_user: User, db: Session
 
     doctor = _doctor_for_user(current_user, db)
     if not doctor or not doctor.is_active:
-        raise HTTPException(status_code=403, detail="Doctor profile is not configured")
+        raise HTTPException(status_code=403, detail="Staff profile is not configured")
 
     report_file = _extract_daily_report_filename(filename)
     if not report_file:
@@ -70,7 +70,7 @@ def _enforce_doctor_report_access(filename: str, current_user: User, db: Session
 
     branch_ids = _doctor_branch_ids(doctor.id, db)
     if not branch_ids:
-        raise HTTPException(status_code=403, detail="Doctor branch access not configured")
+        raise HTTPException(status_code=403, detail="Staff branch access not configured")
 
     report_entry = db.query(DailyEntryModule).filter(
         DailyEntryModule.branch_id.in_(branch_ids),
@@ -91,7 +91,7 @@ def _enforce_doctor_report_access(filename: str, current_user: User, db: Session
         raise HTTPException(status_code=403, detail="You do not have access to this report")
 
     db.add(
-        DoctorAuditLog(
+        StaffAuditLog(
             doctor_id=doctor.id,
             user_id=current_user.id,
             action="REPORT_FILE_VIEW",
@@ -169,7 +169,7 @@ async def serve_file(
     is_staff_or_attendance_image = 'staff/' in filename or 'attendance/' in filename
     is_ceo_branding_image = 'ceo/branding/' in filename
 
-    # If it's a non-image file (PDFs, reports) or a sensitive image, require authentication
+    # If it's a non-image file (PDFs, orders) or a sensitive image, require authentication
     if not is_image or (is_image and not (is_staff_or_attendance_image or is_ceo_branding_image)):
         current_user = _resolve_current_user(db, authorization, access_token)
         _enforce_doctor_report_access(filename, current_user, db)

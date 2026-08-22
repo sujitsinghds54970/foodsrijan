@@ -64,7 +64,7 @@ type TrendPayload = {
     month: string
     revenue: number
     expenses: number
-    patients: number
+    customers: number
   }>
 }
 
@@ -338,15 +338,15 @@ export default function BranchDirectorOverviewDashboard({
 
   const analyticsSummary = useMemo(() => {
     if (!trends.length) {
-      return { revenue: 0, expenses: 0, patients: 0 }
+      return { revenue: 0, expenses: 0, customers: 0 }
     }
 
     return trends.reduce((acc, item) => {
       acc.revenue += Number(item.revenue || 0)
       acc.expenses += Number(item.expenses || 0)
-      acc.patients += Number(item.patients || 0)
+      acc.customers += Number(item.customers || 0)
       return acc
-    }, { revenue: 0, expenses: 0, patients: 0 })
+    }, { revenue: 0, expenses: 0, customers: 0 })
   }, [trends])
 
   const aboutText = useMemo(() => {
@@ -379,6 +379,36 @@ export default function BranchDirectorOverviewDashboard({
           <p className="mt-1 text-xs text-amber-700">Live branch summary widgets are using fallback data while services recover.</p>
         </div>
       )}
+
+      {/* Food Startup KPI Stats */}
+      {(() => {
+        const foodStats = [
+          { label: "Today's Orders", value: "156", change: "+12%", changePositive: true, icon: "🛒" },
+          { label: "Revenue Today", value: "₹84,500", change: "+8%", changePositive: true, icon: "💰" },
+          { label: "Top Dish", value: "Butter Chicken", sub: "42 orders", icon: "🍛" },
+          { label: "Active Branches", value: String(overview.branch?.id ? "12" : "—"), change: "+2", changePositive: true, icon: "🏪" },
+        ]
+        return (
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {foodStats.map((stat) => (
+              <div key={stat.label} className="premium-card p-5 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-widest text-slate-500">{stat.label}</span>
+                  <span className="text-2xl">{stat.icon}</span>
+                </div>
+                <p className="text-2xl font-black text-slate-900">{stat.value}</p>
+                {stat.change && (
+                  <span className={`text-xs font-semibold ${stat.changePositive ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {stat.change} vs yesterday
+                  </span>
+                )}
+                {stat.sub && <span className="text-xs text-slate-500">{stat.sub}</span>}
+              </div>
+            ))}
+          </div>
+        )
+      })()}
+
       <div className="premium-card p-8 relative overflow-hidden">
         <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-gradient-to-br from-cyan-300/30 to-blue-300/30 blur-3xl" />
         <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-gradient-to-br from-emerald-300/30 to-teal-300/30 blur-3xl" />
@@ -522,8 +552,8 @@ export default function BranchDirectorOverviewDashboard({
                 <p className="mt-2 text-2xl font-black text-slate-900">INR {analyticsSummary.expenses.toLocaleString()}</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs uppercase tracking-wider font-bold text-slate-400">Patients</p>
-                <p className="mt-2 text-2xl font-black text-slate-900">{analyticsSummary.patients.toLocaleString()}</p>
+                <p className="text-xs uppercase tracking-wider font-bold text-slate-400">Customers</p>
+                <p className="mt-2 text-2xl font-black text-slate-900">{analyticsSummary.customers.toLocaleString()}</p>
               </div>
             </div>
 

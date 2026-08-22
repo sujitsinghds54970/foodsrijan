@@ -2,11 +2,11 @@
 WhatsApp Service for VaidyaVihar Diagnostic ERP
 
 Provides WhatsApp messaging via WhatsApp Cloud API for:
-- Report delivery
+- Order delivery
 - Appointment reminders
 - Payment receipts
 - Critical alerts
-- Doctor notifications
+- Staff notifications
 """
 
 import os
@@ -398,7 +398,7 @@ class WhatsAppService:
         body = (
             f"Dear {patient_name},\n\n"
             f"Your {report_type} report is ready!\n\n"
-            f"📋 Report ID: {report_id}\n"
+            f"📋 Order ID: {report_id}\n"
             f"You can download your report from:\n"
             f"{portal_url}\n\n"
             f"Thank you for choosing VaidyaVihar Diagnostic! 🏥"
@@ -422,9 +422,9 @@ class WhatsAppService:
         body = (
             f"{urgency}Dear Dr. {doctor_name},\n\n"
             f"A new {report_type} report has been generated for your patient:\n\n"
-            f"👤 Patient: {patient_name}\n"
+            f"👤 Customer: {patient_name}\n"
             f"🎂 Age/Gender: {patient_age}/{patient_gender}\n"
-            f"📋 Report Type: {report_type}\n\n"
+            f"📋 Order Type: {report_type}\n\n"
             f"📝 Summary:\n{report_summary}\n\n"
             f"📥 View complete report:\n{report_url}\n\n"
             f"- VaidyaVihar Diagnostic"
@@ -446,7 +446,7 @@ class WhatsAppService:
         body = (
             f"Dear {patient_name},\n\n"
             f"⏰ Appointment Reminder\n\n"
-            f"👨‍⚕️ Doctor: Dr. {doctor_name}\n"
+            f"👨‍⚕️ Staff: Dr. {doctor_name}\n"
             f"📅 Date: {appointment_date}\n"
             f"🕐 Time: {appointment_time}\n"
             f"🏥 Location: {branch_name}\n"
@@ -489,11 +489,11 @@ class WhatsAppService:
         instructions: Optional[str] = None
     ) -> WhatsAppResponse:
         """Send sample collection reminder"""
-        tests = "\n• ".join(test_names)
+        menu_items = "\n• ".join(test_names)
         body = (
             f"Dear {patient_name},\n\n"
             f"🧪 Sample Collection Reminder\n\n"
-            f"Tests:\n• {tests}\n\n"
+            f"MenuItems:\n• {menu_items}\n\n"
             f"📅 Date: {collection_date}\n"
             f"🕐 Time: {collection_time}\n\n"
         )
@@ -541,8 +541,8 @@ class WhatsAppService:
             f"🔴 CRITICAL ALERT\n\n"
             f"Dear {recipient_name},\n\n"
             f"⚠️ Critical value detected for:\n"
-            f"Patient: {patient_name}\n"
-            f"Test: {test_name}\n"
+            f"Customer: {patient_name}\n"
+            f"MenuItem: {test_name}\n"
             f"Value: {critical_value}\n\n"
             f"💡 Recommendation:\n{recommendation}\n\n"
             f"Please take immediate action.\n\n"
@@ -565,7 +565,7 @@ class WhatsAppService:
             f"Dear {patient_name},\n\n"
             f"✅ Appointment Confirmed!\n\n"
             f"🆔 Appointment ID: {appointment_id}\n"
-            f"👨‍⚕️ Doctor: Dr. {doctor_name}\n"
+            f"👨‍⚕️ Staff: Dr. {doctor_name}\n"
             f"📅 Date: {appointment_date}\n"
             f"🕐 Time: {appointment_time}\n"
             f"🏥 Center: {branch_name}\n\n"

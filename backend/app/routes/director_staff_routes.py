@@ -1301,7 +1301,7 @@ def list_staff_documents(
     ]
 
 
-@router.get("/reports/attendance/csv")
+@router.get("/orders/attendance/csv")
 def export_attendance_csv(
     staff_profile_id: Optional[int] = Query(None),
     month: int = Query(..., ge=1, le=12),

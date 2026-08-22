@@ -45,7 +45,7 @@ def delete_bill(
     return {"message": "Bill deleted"}
 from fastapi.responses import Response
 from app.utils.pdf_generator import generate_invoice_pdf
-from app.models.test_entry import TestEntry
+from app.models.test_entry import MenuItemEntry
 
 @router.get("/billing/{bill_id}/invoice")
 def download_invoice_pdf(bill_id: int, db: Session = Depends(get_db)):
@@ -53,13 +53,13 @@ def download_invoice_pdf(bill_id: int, db: Session = Depends(get_db)):
     if not bill:
         raise HTTPException(status_code=404, detail="Bill not found")
 
-    patient = db.query(PatientEntry).filter(PatientEntry.id == bill.patient_id).first()
-    tests = db.query(TestEntry).filter(TestEntry.patient_id == patient.id).all()
+    patient = db.query(CustomerEntry).filter(CustomerEntry.id == bill.patient_id).first()
+    menu_items = db.query(MenuItemEntry).filter(MenuItemEntry.patient_id == patient.id).all()
 
     invoice_data = {
         "patient": patient,
         "date": str(patient.created_at.date()) if hasattr(patient, "created_at") else "N/A",
-        "tests": tests,
+        "menu_items": menu_items,
         "total": bill.total_amount,
         "paid": bill.paid_amount,
         "status": bill.status

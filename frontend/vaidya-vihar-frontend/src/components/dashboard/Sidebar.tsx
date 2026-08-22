@@ -35,9 +35,9 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
 
   const canAccessDailyOps = isStaff ? Boolean((user as any)?.can_access_daily_ops) : false
   const deskTitle = useMemo(() => {
-    if (role === 'super_admin') return 'CEO - Mr. Sujit Singh'
+    if (role === 'super_admin') return 'FoodSrijan Group'
     if (role === 'branch_admin' || role === 'branch_director') return 'Director Desk'
-    if (role === 'doctor') return 'Doctor Desk'
+    if (role === 'doctor') return 'Staff Desk'
     if (role === 'staff') return 'Staff Desk'
     if (isStaff) return 'Staff Desk'
     return 'Staff Desk'
@@ -90,38 +90,41 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   ]
 
   const doctorMenuItems = [
-    { id: 'doctor-portal', label: 'Doctor Portal', icon: '🩺', gradient: 'from-teal-500 to-cyan-500' },
+    { id: 'doctor-portal', label: 'Staff Portal', icon: '🩺', gradient: 'from-teal-500 to-cyan-500' },
   ]
 
   const superAdminMenuItems = [
     { id: 'ceo-overview', label: 'Overview', icon: '📊', gradient: 'from-blue-500 to-cyan-500' },
     { id: 'ceo', label: 'CEO Command Center', icon: '🛡️', gradient: 'from-slate-700 to-indigo-700' },
-    { id: 'ceo-profile', label: 'CEO Profile', icon: FaUserCircle, gradient: 'from-indigo-600 to-violet-600' },
-    { id: 'branch-management', label: 'Branch Management', icon: '🏢', gradient: 'from-red-500 to-orange-500' },
+    { id: 'ceo-profile', label: 'Company Settings', icon: FaUserCircle, gradient: 'from-orange-500 to-amber-500' },
+    { id: 'branch-management', label: 'Branches', icon: '🏢', gradient: 'from-red-500 to-orange-500' },
     { id: 'ceo-people-culture', label: 'People & Culture', icon: FaUsers, gradient: 'from-indigo-600 to-violet-600' },
     { id: 'ceo-finance-accounts', label: 'Finance & Accounts', icon: FaMoneyBillWave, gradient: 'from-emerald-600 to-green-600' },
-    { id: 'ceo-doctor-network', label: 'Doctor Network', icon: FaStethoscope, gradient: 'from-cyan-600 to-sky-600' },
-    { id: 'ceo-patient-insights', label: 'Patient Insights', icon: FaUserInjured, gradient: 'from-rose-600 to-pink-600' },
+    { id: 'ceo-doctor-network', label: 'Staff Network', icon: FaStethoscope, gradient: 'from-cyan-600 to-sky-600' },
+    { id: 'ceo-patient-insights', label: 'Customer Insights', icon: FaUserInjured, gradient: 'from-rose-600 to-pink-600' },
     { id: 'ceo-inventory-supply', label: 'Inventory & Supply Chain', icon: FaBoxes, gradient: 'from-amber-600 to-orange-600' },
     { id: 'ceo-compliance-legal', label: 'Compliance & Legal', icon: FaGavel, gradient: 'from-slate-600 to-gray-700' },
     { id: 'ceo-system-settings', label: 'System Settings', icon: FaCogs, gradient: 'from-blue-600 to-indigo-700' },
   ]
 
   const defaultMenuItems = [
-    { id: 'overview', label: 'Overview', icon: '📊', gradient: 'from-blue-500 to-cyan-500' },
-    ...((role === 'branch_director' || role === 'branch_admin') ? [{ id: 'staff', label: 'Staff Management', icon: GroupsIcon, gradient: 'from-emerald-500 to-teal-500' }] : []),
+    { id: 'overview', label: 'Dashboard', icon: '📊', gradient: 'from-blue-500 to-cyan-500' },
+    { id: 'branch-management', label: 'Branches', icon: '🏪', gradient: 'from-red-500 to-orange-500' },
+    { id: 'concepts', label: 'Concepts', icon: '🍽️', gradient: 'from-violet-500 to-purple-500' },
+    { id: 'customers', label: 'Customers', icon: '👤', gradient: 'from-rose-500 to-pink-500' },
+    ...((role === 'branch_director' || role === 'branch_admin') ? [{ id: 'staff', label: 'Staff', icon: '👨‍🍳', gradient: 'from-emerald-500 to-teal-500' }] : []),
+    { id: 'menu', label: 'Menu', icon: '📋', gradient: 'from-cyan-500 to-blue-500' },
+    { id: 'orders', label: 'Orders', icon: '🛒', gradient: 'from-purple-500 to-pink-500' },
+    { id: 'recipes', label: 'Recipes', icon: '📖', gradient: 'from-amber-500 to-yellow-500' },
+    { id: 'inventory', label: 'Inventory', icon: '📦', gradient: 'from-amber-500 to-orange-500' },
+    { id: 'suppliers', label: 'Suppliers', icon: '🚚', gradient: 'from-lime-500 to-green-500' },
     ...((role === 'branch_director' || role === 'branch_admin') ? [{ id: 'payroll', label: 'Salary Management', icon: FaWallet, gradient: 'from-emerald-600 to-lime-600' }] : []),
     ...((role === 'branch_director' || role === 'branch_admin')
       ? [{ id: 'branch-notifications', label: 'Notification Center', icon: FaBell, gradient: 'from-indigo-600 to-blue-600', badge: branchUnreadNotifications }]
       : []),
-    ...((role === 'branch_admin' || role === 'super_admin') ? [{ id: 'daily-operations', label: 'Daily Operations', icon: '📝', gradient: 'from-purple-500 to-pink-500' }] : []),
-    { id: 'inventory', label: 'Inventory', icon: '📦', gradient: 'from-amber-500 to-orange-500' },
-    { id: 'analytics', label: 'Analytics', icon: '📈', gradient: 'from-pink-500 to-rose-500' },
-    { id: 'lis', label: 'LIS Lab Tests', icon: '🧪', gradient: 'from-cyan-500 to-blue-500' },
     { id: 'payments', label: 'Payments', icon: '💳', gradient: 'from-green-500 to-emerald-500' },
     { id: 'accounts', label: 'Accounts', icon: '📚', gradient: 'from-indigo-500 to-sky-500' },
-    ...((role === 'branch_director' || role === 'branch_admin' || role === 'super_admin') ? [{ id: 'doctor-portal', label: 'Doctor Portal', icon: '🩺', gradient: 'from-teal-500 to-cyan-500' }] : []),
-    { id: 'patient-portal', label: 'Patient Portal', icon: '🏥', gradient: 'from-rose-500 to-pink-500' },
+    { id: 'analytics', label: 'Analytics', icon: '📈', gradient: 'from-pink-500 to-rose-500' },
   ]
 
   // Determine which menu to show: prioritize based on role
@@ -182,7 +185,7 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
                   onClick={() => handleMenuClick(item.id)}
                   className={`group w-full flex items-center space-x-3 px-4 py-3.5 text-left rounded-xl transition-all duration-300 relative overflow-hidden ${
                     isActive
-                      ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 text-white shadow-2xl scale-[1.02] font-black'
+                      ? 'bg-[#E85D3A] text-white shadow-lg scale-[1.02] font-black'
                       : 'text-slate-700 hover:bg-white hover:text-slate-900 hover:shadow-lg font-semibold'
                   }`}
                 >

@@ -69,7 +69,7 @@ class BranchResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class PatientBase(BaseModel):
+class CustomerBase(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     date_of_birth: datetime
@@ -87,10 +87,10 @@ class PatientBase(BaseModel):
     chronic_conditions: Optional[str] = None
     current_medications: Optional[str] = None
 
-class PatientCreate(PatientBase):
+class CustomerCreate(CustomerBase):
     pass
 
-class PatientUpdate(BaseModel):
+class CustomerUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     phone: Optional[str] = None
@@ -107,7 +107,7 @@ class PatientUpdate(BaseModel):
     current_medications: Optional[str] = None
     is_active: Optional[bool] = None
 
-class PatientResponse(PatientBase):
+class CustomerResponse(CustomerBase):
     id: int
     patient_id: str
     branch_id: int
@@ -154,12 +154,12 @@ class DailyEntryResponse(DailyEntryBase):
     created_at: datetime
     
     # Include patient info if available
-    patient: Optional[PatientResponse] = None
+    patient: Optional[CustomerResponse] = None
     
     class Config:
         from_attributes = True
 
-class MonthlyReportRequest(BaseModel):
+class MonthlyOrderRequest(BaseModel):
     year: int = Field(..., ge=2020, le=2030)
     month: int = Field(..., ge=1, le=12)
     branch_id: Optional[int] = None

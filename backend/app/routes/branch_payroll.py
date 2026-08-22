@@ -1224,7 +1224,7 @@ def branch_simulate_hike(
     }
 
 
-@router.get("/reports/statutory")
+@router.get("/orders/statutory")
 def branch_statutory_report(
     payroll_run_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
@@ -1268,7 +1268,7 @@ def branch_statutory_report(
         branch_id,
         current_user.id,
         "viewing",
-        "/api/branch/payroll/reports/statutory",
+        "/api/branch/payroll/orders/statutory",
         f"Viewed statutory report for run {run.id}",
     )
     db.commit()
@@ -1281,7 +1281,7 @@ def branch_statutory_report(
     }
 
 
-@router.get("/reports/bank-file")
+@router.get("/orders/bank-file")
 def branch_bank_file(
     payroll_run_id: Optional[int] = Query(default=None),
     db: Session = Depends(get_db),
@@ -1318,7 +1318,7 @@ def branch_bank_file(
         branch_id,
         current_user.id,
         "viewing",
-        "/api/branch/payroll/reports/bank-file",
+        "/api/branch/payroll/orders/bank-file",
         f"Generated bank file for run {run.id}",
     )
     db.commit()
@@ -1331,7 +1331,7 @@ def branch_bank_file(
     )
 
 
-@router.get("/reports/payroll")
+@router.get("/orders/payroll")
 def branch_payroll_report_export(
     format: Literal["pdf", "excel", "csv"] = Query(default="csv"),
     payroll_run_id: Optional[int] = Query(default=None),
@@ -1354,7 +1354,7 @@ def branch_payroll_report_export(
     elif format == "excel":
         workbook = Workbook()
         sheet = workbook.active
-        sheet.title = "Payroll Report"
+        sheet.title = "Payroll Order"
         sheet.append(["Employee", "Department", "Basic", "DA", "HRA", "Shift Allowance", "OT", "LOP", "Incentives", "Statutory Deductions", "Net Pay"])
         for row in rows:
             sheet.append([row.employee_name, row.department, row.basic, row.da, row.hra, row.shift_allowance, row.ot, row.lop, row.incentives, row.statutory_deductions, row.net_pay])
@@ -1368,7 +1368,7 @@ def branch_payroll_report_export(
         packet = io.BytesIO()
         report_canvas = canvas.Canvas(packet, pagesize=A4)
         report_canvas.setFont("Helvetica-Bold", 13)
-        report_canvas.drawString(20 * mm, 280 * mm, f"Payroll Report {run.month:02d}/{run.year}")
+        report_canvas.drawString(20 * mm, 280 * mm, f"Payroll Order {run.month:02d}/{run.year}")
         report_canvas.setFont("Helvetica", 9)
         y = 270 * mm
         for row in rows[:24]:
@@ -1388,7 +1388,7 @@ def branch_payroll_report_export(
         branch_id,
         current_user.id,
         "viewing",
-        "/api/branch/payroll/reports/payroll",
+        "/api/branch/payroll/orders/payroll",
         f"Exported payroll report format={format} run={run.id}",
     )
     db.commit()

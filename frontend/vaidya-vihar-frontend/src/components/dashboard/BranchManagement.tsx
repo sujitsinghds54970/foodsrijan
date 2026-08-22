@@ -24,7 +24,7 @@ interface Branch {
   created_at: string
   updated_at?: string
   total_staff?: number
-  total_patients?: number
+  total_customers?: number
   monthly_revenue?: number
   modalities?: string[]
 }
@@ -33,7 +33,7 @@ interface BranchStats {
   branch_id: number
   branch_name: string
   total_staff: number
-  total_patients: number
+  total_customers: number
   monthly_revenue: number
   total_appointments: number
   pending_payments: number
@@ -547,7 +547,7 @@ export default function BranchManagement() {
               <p className="text-sm text-red-800 font-semibold mb-2">⚠️ Warning:</p>
               <ul className="text-xs text-red-700 space-y-1 font-medium">
                 <li>• All associated branch data will be archived/removed</li>
-                <li>• Staff, patients, and inventory will be deactivated</li>
+                <li>• Staff, customers, and inventory will be deactivated</li>
                 <li>• This action cannot be undone</li>
               </ul>
             </div>
@@ -818,7 +818,7 @@ export default function BranchManagement() {
                   <th className="py-4 px-4 font-black text-slate-700 uppercase tracking-wider">Code</th>
                   <th className="py-4 px-4 font-black text-slate-700 uppercase tracking-wider">Status</th>
                   <th className="py-4 px-4 font-black text-slate-700 uppercase tracking-wider">Staff</th>
-                  <th className="py-4 px-4 font-black text-slate-700 uppercase tracking-wider">Patients</th>
+                  <th className="py-4 px-4 font-black text-slate-700 uppercase tracking-wider">Customers</th>
                   <th className="py-4 px-4 font-black text-slate-700 uppercase tracking-wider">Revenue</th>
                   <th className="py-4 px-4 font-black text-slate-700 uppercase tracking-wider text-right">Actions</th>
                 </tr>
@@ -842,7 +842,7 @@ export default function BranchManagement() {
                       </span>
                     </td>
                     <td className="py-4 px-4 font-bold text-slate-900">{b.total_staff ?? 0}</td>
-                    <td className="py-4 px-4 font-bold text-slate-900">{b.total_patients ?? 0}</td>
+                    <td className="py-4 px-4 font-bold text-slate-900">{b.total_customers ?? 0}</td>
                     <td className="py-4 px-4 font-bold text-emerald-600">₹{Number(b.monthly_revenue || 0).toLocaleString()}</td>
                     <td className="py-4 px-4">
                       <div className="flex justify-end gap-2 flex-wrap">
@@ -915,7 +915,7 @@ export default function BranchManagement() {
           <div className="grid md:grid-cols-4 gap-6">
             {[
               { label: 'Total Staff', value: selectedStats.total_staff, icon: '👨‍⚕️', gradient: 'from-blue-500 to-cyan-500' },
-              { label: 'Total Patients', value: selectedStats.total_patients, icon: '👥', gradient: 'from-emerald-500 to-teal-500' },
+              { label: 'Total Customers', value: selectedStats.total_customers, icon: '👥', gradient: 'from-emerald-500 to-teal-500' },
               { label: 'Monthly Revenue', value: `₹${Number(selectedStats.monthly_revenue || 0).toLocaleString()}`, icon: '💰', gradient: 'from-amber-500 to-orange-500' },
               { label: 'Appointments', value: selectedStats.total_appointments, icon: '📅', gradient: 'from-purple-500 to-pink-500' },
               { label: 'Pending Payments', value: `₹${Number(selectedStats.pending_payments || 0).toLocaleString()}`, icon: '⏳', gradient: 'from-red-500 to-rose-500' },
@@ -1109,7 +1109,7 @@ export default function BranchManagement() {
                 <div className="grid gap-4 md:grid-cols-3 mt-6">
                   {[
                     { label: 'Staff', value: selectedStats.total_staff, emoji: '👨‍⚕️' },
-                    { label: 'Patients', value: selectedStats.total_patients, emoji: '👥' },
+                    { label: 'Customers', value: selectedStats.total_customers, emoji: '👥' },
                     { label: 'Services', value: selectedStats.active_services, emoji: '🔧' },
                   ].map((item) => (
                     <div key={item.label} className="rounded-3xl bg-slate-50 p-6 shadow-sm">
@@ -1209,7 +1209,7 @@ export default function BranchManagement() {
                   {[
                     { label: 'Monthly Revenue', value: selectedBranch.monthly_revenue || 0, max: 500000, accent: 'bg-emerald-500' },
                     { label: 'Active Staff', value: selectedBranch.total_staff || 0, max: 50, accent: 'bg-sky-500' },
-                    { label: 'Active Patients', value: selectedBranch.total_patients || 0, max: 2000, accent: 'bg-fuchsia-500' },
+                    { label: 'Active Customers', value: selectedBranch.total_customers || 0, max: 2000, accent: 'bg-fuchsia-500' },
                   ].map((item) => {
                     const ratio = Math.min(100, Math.round((item.value / item.max) * 100))
                     return (

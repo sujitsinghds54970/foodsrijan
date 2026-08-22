@@ -18,8 +18,8 @@ from app.models.daily_entry_module import DailyEntryModule, DailyExpense
 from app.models.inventory import InventoryConsumptionHistory, InventoryItemV2 as InventoryItem
 from app.models.branch_bank_details import BranchBankDetails
 from app.models import User, Branch
-from app.models.doctor import Doctor, DoctorBranch
-from app.models.staff import StaffProfile
+from app.models.staff import Staff, StaffBranch
+from app.models.hr import StaffProfile
 from app.schemas.daily_entry_module import (
     DailyEntryCreate, DailyEntryUpdate, DailyEntryResponse,
     DailyExpenseCreate, DailyExpenseUpdate, DailyExpenseResponse,
@@ -42,7 +42,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 # Upload directory for PDFs
-UPLOAD_DIR = Path("uploads/daily_entry_reports")
+UPLOAD_DIR = Path("uploads/daily_entry_orders")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -103,15 +103,15 @@ def _ensure_daily_entry_schema(db: Session = Depends(get_db)) -> None:
 
 def _get_doctor_white_label_for_branch(branch_id: int, db: Session) -> Dict[str, str]:
     assignment = (
-        db.query(DoctorBranch)
-        .filter(DoctorBranch.branch_id == branch_id, DoctorBranch.is_active.is_(True))
-        .order_by(DoctorBranch.is_primary.desc(), DoctorBranch.assigned_date.desc())
+        db.query(StaffBranch)
+        .filter(StaffBranch.branch_id == branch_id, StaffBranch.is_active.is_(True))
+        .order_by(StaffBranch.is_primary.desc(), StaffBranch.assigned_date.desc())
         .first()
     )
     if not assignment:
         return {}
 
-    doctor = db.query(Doctor).filter(Doctor.id == assignment.doctor_id, Doctor.is_active.is_(True)).first()
+    doctor = db.query(Staff).filter(Staff.id == assignment.doctor_id, Staff.is_active.is_(True)).first()
     if not doctor or not isinstance(doctor.report_preferences, dict):
         return {}
 
@@ -438,7 +438,7 @@ async def create_daily_entry(
         try:
             # Generate auto_patient_id inside transaction
             auto_patient_id = generate_patient_id(db, branch_id, attempt)
-            print(f"[CREATE ENTRY] Attempt {attempt + 1}: Generated Patient ID: {auto_patient_id}")
+            print(f"[CREATE ENTRY] Attempt {attempt + 1}: Generated Customer ID: {auto_patient_id}")
             
             # Calculate total amount
             total_amount = calculate_total_amount(entry.fee_amount, entry.tax_percent)
@@ -493,7 +493,7 @@ async def create_daily_entry(
             )
             db.commit()
             
-            print(f"[CREATE ENTRY] Success! Entry ID: {db_entry.id}, Patient ID: {db_entry.auto_patient_id}")
+            print(f"[CREATE ENTRY] Success! Entry ID: {db_entry.id}, Customer ID: {db_entry.auto_patient_id}")
             return db_entry
             
         except IntegrityError as e:
@@ -557,7 +557,7 @@ async def create_daily_entry(
                         created_by=current_user.id,
                     )
                     db.commit()
-                    print(f"[CREATE ENTRY] Fallback success! Entry ID: {db_entry.id}, Patient ID: {db_entry.auto_patient_id}")
+                    print(f"[CREATE ENTRY] Fallback success! Entry ID: {db_entry.id}, Customer ID: {db_entry.auto_patient_id}")
                     return db_entry
                 except Exception as fallback_error:
                     print(f"[CREATE ENTRY ERROR] Fallback failed: {fallback_error}")
@@ -698,7 +698,7 @@ async def upload_report_pdf(
     
     # Update entry with file URL
     previous_status = db_entry.status
-    db_entry.report_pdf_url = f"/uploads/daily_entry_reports/{unique_filename}"
+    db_entry.report_pdf_url = f"/uploads/daily_entry_orders/{unique_filename}"
     db_entry.status = "Completed"
     _consume_xray_inventory_if_needed(db, db_entry, current_user)
     if previous_status != "Completed":
@@ -706,7 +706,7 @@ async def upload_report_pdf(
     db.commit()
     
     return {
-        "message": "Report uploaded successfully",
+        "message": "Order uploaded successfully",
         "file_url": db_entry.report_pdf_url,
         "status": db_entry.status
     }
@@ -933,14 +933,14 @@ async def get_daily_stats(
 
 # ==================== DOCTOR SEARCH ENDPOINT ====================
 
-@router.get("/api/doctors/search")
-async def search_doctors(
+@router.get("/api/staff/search")
+async def search_staff(
     q: str = Query(..., min_length=2, description="Search query for doctor name"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Search for doctors by name (autocomplete endpoint).
+    Search for staff by name (autocomplete endpoint).
     Returns distinct doctor names matching the search query.
     """
     # Get branch_id for scoping
@@ -960,9 +960,9 @@ async def search_doctors(
     if branch_id:
         query = query.filter(DailyEntryModule.branch_id == branch_id)
     
-    doctors = query.distinct().limit(10).all()
+    staff = query.distinct().limit(10).all()
     
-    return [{"name": d[0]} for d in doctors if d[0]]
+    return [{"name": d[0]} for d in staff if d[0]]
 
 
 # ==================== EXPORT ENDPOINTS ====================
@@ -977,7 +977,7 @@ async def export_daily_entries(
 ):
     """Export daily entries as CSV or PDF"""
     if _is_staff_role(current_user.role):
-        raise HTTPException(status_code=403, detail="Staff cannot export daily operations reports")
+        raise HTTPException(status_code=403, detail="Staff cannot export daily operations orders")
 
     branch_id = get_user_branch_id(current_user)
     target_date = date_filter or datetime.now().date()
@@ -1015,8 +1015,8 @@ def export_to_csv(entries: List[DailyEntryModule], filename_suffix: str):
     
     # Write header
     writer.writerow([
-        'Patient ID', 'Date', 'Patient Name', 'Mobile', 'Address',
-        'Referred Doctor', 'Test Name', 'Fee Amount', 'Tax %', 
+        'Customer ID', 'Date', 'Customer Name', 'Mobile', 'Address',
+        'Referred Staff', 'MenuItem Name', 'Fee Amount', 'Tax %', 
         'Total Amount', 'Payment Method', 'Status', 'Remarks'
     ])
     
@@ -1069,7 +1069,7 @@ def export_to_pdf(entries: List[DailyEntryModule], filename_suffix: str, period:
     
     clinic_name_text = branding.get('clinic_name') or 'Vaidya Vihar Diagnostic'
     clinic_address_text = branding.get('clinic_address') or ''
-    title_text = f"{clinic_name_text}<br/>Daily Entries Report - {period.capitalize()}"
+    title_text = f"{clinic_name_text}<br/>Daily Entries Order - {period.capitalize()}"
     elements.append(Paragraph(title_text, title_style))
 
     if clinic_address_text:
@@ -1091,7 +1091,7 @@ def export_to_pdf(entries: List[DailyEntryModule], filename_suffix: str, period:
     
     summary_data = [
         ['Clinic:', clinic_name_text],
-        ['Total Patients:', str(patient_count)],
+        ['Total Customers:', str(patient_count)],
         ['Total Revenue:', f'₹{total_revenue:,.2f}'],
         ['Period:', filename_suffix]
     ]
@@ -1111,7 +1111,7 @@ def export_to_pdf(entries: List[DailyEntryModule], filename_suffix: str, period:
     elements.append(Spacer(1, 0.3 * inch))
     
     # Entries table
-    table_data = [['Patient ID', 'Name', 'Test', 'Amount', 'Status']]
+    table_data = [['Customer ID', 'Name', 'MenuItem', 'Amount', 'Status']]
     
     for entry in entries[:50]:  # Limit to 50 entries per page
         table_data.append([

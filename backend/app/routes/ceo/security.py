@@ -604,7 +604,7 @@ def _ceo_executive_rows(db: Session) -> list[dict[str, Any]]:
             ) rev ON rev.branch_id = b2.id
             LEFT JOIN (
                 SELECT p.branch_id AS branch_id, COUNT(*) AS patient_count
-                FROM patients p
+                FROM customers p
                 GROUP BY p.branch_id
             ) pat ON pat.branch_id = b2.id
             LEFT JOIN (
@@ -925,7 +925,7 @@ def _ceo_dashboard_payload(db: Session) -> dict[str, Any]:
     )
     machine_utilization_percent = round(((machine_total - machine_due) / machine_total) * 100, 2) if machine_total > 0 else 0.0
 
-    tests_today = _safe_scalar(
+    menu_items_today = _safe_scalar(
         db,
         """
         SELECT COUNT(*)
@@ -964,11 +964,11 @@ def _ceo_dashboard_payload(db: Session) -> dict[str, Any]:
         """,
     )
 
-    new_patients_month = _safe_scalar(
+    new_customers_month = _safe_scalar(
         db,
         """
         SELECT COUNT(*)
-        FROM patients
+        FROM customers
         WHERE registration_date >= :month_start AND registration_date < :next_month_start
         """,
         params,
@@ -1166,13 +1166,13 @@ def _ceo_dashboard_payload(db: Session) -> dict[str, Any]:
             "operational": {
                 "title": "Operational Efficiency",
                 "daily_entries_today": int(daily_entries_today),
-                "tests_processed_today": int(tests_today),
+                "menu_items_processed_today": int(menu_items_today),
                 "average_tat_minutes": round(avg_tat_minutes, 2),
                 "machine_utilization_percent": machine_utilization_percent,
             },
             "sales": {
                 "title": "Sales & Marketing",
-                "new_patients_month": int(new_patients_month),
+                "new_customers_month": int(new_customers_month),
                 "appointments_month": int(appointments_month),
                 "doctor_referrals_total": int(sum(row.get("doctor_referrals", 0) or 0 for row in branch_sales_rows)),
                 "patient_visits_total": int(sum(row.get("patient_visits", 0) or 0 for row in branch_sales_rows)),
@@ -1200,7 +1200,7 @@ def _ceo_dashboard_payload(db: Session) -> dict[str, Any]:
             "financial_branch_revenue": financial_branch_revenue,
             "ops_mix": [
                 {"label": "Daily Entries", "value": int(daily_entries_today)},
-                {"label": "Tests", "value": int(tests_today)},
+                {"label": "MenuItems", "value": int(menu_items_today)},
                 {"label": "Machine Utilization %", "value": float(machine_utilization_percent)},
             ],
             "sales_mix": [
@@ -1926,9 +1926,9 @@ def get_ceo_system_health(
     )
     activity_feed = []
     for row in referral_rows:
-        doctor_name = row.doctor.full_name if row.doctor else "Doctor"
+        doctor_name = row.doctor.full_name if row.doctor else "Staff"
         branch_name = row.branch.name if row.branch else "Branch"
-        patient_name = (row.patient_name or "Patient").strip()
+        patient_name = (row.patient_name or "Customer").strip()
         activity_feed.append(
             {
                 "id": row.id,
@@ -1939,7 +1939,7 @@ def get_ceo_system_health(
 
     if not activity_feed:
         activity_feed = [
-            {"id": 1, "event": "Dr. Sharma referred 5 new patients this morning.", "timestamp": datetime.utcnow().isoformat()},
+            {"id": 1, "event": "Dr. Sharma referred 5 new customers this morning.", "timestamp": datetime.utcnow().isoformat()},
             {"id": 2, "event": "Billing gateway heartbeat is stable across all branches.", "timestamp": datetime.utcnow().isoformat()},
             {"id": 3, "event": "LIS processing queue is within target turnaround.", "timestamp": datetime.utcnow().isoformat()},
         ]
@@ -2012,11 +2012,11 @@ def get_ceo_master_summary(
 ):
     branches_count_rows = _safe_rows(db, "SELECT COUNT(*) AS total FROM branches")
     users_count_rows = _safe_rows(db, "SELECT COUNT(*) AS total FROM users")
-    patients_count_rows = _safe_rows(db, "SELECT COUNT(*) AS total FROM patients")
+    customers_count_rows = _safe_rows(db, "SELECT COUNT(*) AS total FROM customers")
     return {
         "total_branches": int((branches_count_rows[0].get("total") if branches_count_rows else 0) or 0),
         "total_users": int((users_count_rows[0].get("total") if users_count_rows else 0) or 0),
-        "total_patients": int((patients_count_rows[0].get("total") if patients_count_rows else 0) or 0),
+        "total_customers": int((customers_count_rows[0].get("total") if customers_count_rows else 0) or 0),
     }
 
 
@@ -2054,7 +2054,7 @@ def get_ceo_users(
             'patient' AS role,
             COALESCE(b.name, 'Unassigned') AS branch_name,
             CASE WHEN COALESCE(p.is_active, 1) = 1 THEN 'active' ELSE 'inactive' END AS status
-        FROM patients p
+        FROM customers p
         LEFT JOIN branches b ON b.id = p.branch_id
         ORDER BY p.id DESC
         """,
@@ -2078,13 +2078,13 @@ def get_ceo_users(
         rows.append(
             {
                 "id": f"patient-{int(row.get('id') or 0)}",
-                "name": (row.get("full_name") or "").strip() or row.get("username") or "Patient",
+                "name": (row.get("full_name") or "").strip() or row.get("username") or "Customer",
                 "username": row.get("username") or "",
                 "email": row.get("email") or "",
                 "role": "patient",
                 "branch": row.get("branch_name") or "Unassigned",
                 "status": row.get("status") or "active",
-                "source": "patients",
+                "source": "customers",
             }
         )
 
@@ -2136,7 +2136,7 @@ def get_ceo_proactive_insights(
     lagging_branch = branch_rows[-1] if branch_rows else None
     financial_risk = "Mumbai branch is projecting a 5% cost overrun if discretionary spends are not controlled."
     operational_risk = "Average TAT increased by 15% in Delhi based on recent sample trends."
-    opportunity = "Promoting Cardiac tests can increase revenue by an estimated 10% this month."
+    opportunity = "Promoting Cardiac menu_items can increase revenue by an estimated 10% this month."
 
     if top_branch and lagging_branch:
         top_name = top_branch.get("branch_name") or "Top branch"
@@ -2157,12 +2157,12 @@ def get_ceo_proactive_insights(
         """
         SELECT
             COALESCE(b.name, 'Unknown') AS branch_name,
-            COALESCE(rd.full_name, 'Referring Doctor') AS doctor_name,
+            COALESCE(rd.full_name, 'Referring Staff') AS doctor_name,
             SUM(CASE WHEN rl.referred_on >= :seven_days_ago THEN 1 ELSE 0 END) AS last_7d,
             SUM(CASE WHEN rl.referred_on >= :fourteen_days_ago AND rl.referred_on < :seven_days_ago THEN 1 ELSE 0 END) AS prev_7d
         FROM referral_logs rl
         LEFT JOIN branches b ON b.id = rl.branch_id
-        LEFT JOIN referring_doctors rd ON rd.id = rl.doctor_id
+        LEFT JOIN referring_staff rd ON rd.id = rl.doctor_id
         GROUP BY rl.branch_id, b.name, rd.full_name
         ORDER BY last_7d ASC, prev_7d DESC
         LIMIT 1
@@ -2425,7 +2425,7 @@ def ask_ceo_nlp(
             {"label": "Daily Entries", "value": operational["daily_entries_today"]},
             {"label": "Avg TAT (min)", "value": operational["average_tat_minutes"]},
             {"label": "Machine Utilization %", "value": operational["machine_utilization_percent"]},
-            {"label": "Doctor Referrals", "value": sales["doctor_referrals_total"]},
+            {"label": "Staff Referrals", "value": sales["doctor_referrals_total"]},
         ]
 
     return {

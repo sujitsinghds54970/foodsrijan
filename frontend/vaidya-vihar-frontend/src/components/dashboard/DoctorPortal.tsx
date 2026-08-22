@@ -4,11 +4,11 @@ import toast from 'react-hot-toast'
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell, BarChart, Bar } from 'recharts'
 import { Step } from 'react-joyride'
 import { useAuth } from '../../contexts/AuthContext'
-import DoctorOnboardingTour from '../doctor/DoctorOnboardingTour'
+import StaffOnboardingTour from '../doctor/DoctorOnboardingTour'
 
-type Tab = 'dashboard' | 'patients' | 'ordering' | 'communication' | 'analytics' | 'referrals' | 'ai' | 'loyalty' | 'cme' | 'white-label' | 'profile'
+type Tab = 'dashboard' | 'customers' | 'ordering' | 'communication' | 'analytics' | 'referrals' | 'ai' | 'loyalty' | 'cme' | 'white-label' | 'profile'
 
-interface Patient {
+interface Customer {
   id: number
   patient_id: string
   name: string
@@ -18,7 +18,7 @@ interface Patient {
   tags: string[]
 }
 
-interface TestItem {
+interface MenuItemItem {
   id: number
   test_name: string
   category?: string | null
@@ -73,13 +73,13 @@ interface TrendItem {
   orders: number
 }
 
-interface CommonTest {
+interface CommonMenuItem {
   test_name: string
   count: number
 }
 
 interface AnalyticsResponse {
-  common_tests: CommonTest[]
+  common_menu_items: CommonMenuItem[]
   demographics: {
     male: number
     female: number
@@ -96,7 +96,7 @@ interface AnalyticsResponse {
 
 interface ReferralSummary {
   total_referrals: number
-  active_patients: number
+  active_customers: number
   commission_earned: number
   commission_pending: number
 }
@@ -150,7 +150,7 @@ interface WhiteLabelSettings {
 
 interface AISymptomResponse {
   possible_conditions: string[]
-  recommended_tests: string[]
+  recommended_menu_items: string[]
   disclaimer: string
 }
 
@@ -168,8 +168,8 @@ interface AIPredictiveResponse {
 interface AIGrowthResponse {
   insights: string[]
   summary: {
-    total_referred_patients: number
-    diabetic_patients: number
+    total_referred_customers: number
+    diabetic_customers: number
     diabetic_without_hba1c: number
   }
   disclaimer: string
@@ -189,20 +189,20 @@ function formatMonth(value: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
 }
 
-export default function DoctorPortal() {
+export default function StaffPortal() {
   const { token, user } = useAuth()
   const [tab, setTab] = useState<Tab>('dashboard')
   const [profile, setProfile] = useState<any>(null)
-  const [patients, setPatients] = useState<Patient[]>([])
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [timeline, setTimeline] = useState<TimelineEvent[]>([])
-  const [tests, setTests] = useState<TestItem[]>([])
+  const [menu_items, setMenuItems] = useState<MenuItemItem[]>([])
   const [panels, setPanels] = useState<Panel[]>([])
   const [orders, setOrders] = useState<any[]>([])
   const [search, setSearch] = useState('')
   const [tagFilter, setTagFilter] = useState('')
   const [dateFilter, setDateFilter] = useState('')
-  const [selectedTestIds, setSelectedTestIds] = useState<number[]>([])
+  const [selectedMenuItemIds, setSelectedMenuItemIds] = useState<number[]>([])
   const [selectedPanelIds, setSelectedPanelIds] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -222,7 +222,7 @@ export default function DoctorPortal() {
 
   const [symptomsInput, setSymptomsInput] = useState('fever, fatigue')
   const [aiSymptom, setAiSymptom] = useState<AISymptomResponse | null>(null)
-  const [reportIdInput, setReportIdInput] = useState('')
+  const [reportIdInput, setOrderIdInput] = useState('')
   const [aiInterpretation, setAiInterpretation] = useState<AIInterpretationResponse | null>(null)
   const [aiPredictive, setAiPredictive] = useState<AIPredictiveResponse | null>(null)
   const [aiGrowth, setAiGrowth] = useState<AIGrowthResponse | null>(null)
@@ -249,12 +249,12 @@ export default function DoctorPortal() {
   const tourSteps = useMemo<Step[]>(() => [
     {
       target: '[data-tour="doctor-header"]',
-      content: 'Welcome to your Doctor Portal. This area gives you a branch-aligned clinical view.',
+      content: 'Welcome to your Staff Portal. This area gives you a branch-aligned clinical view.',
       disableBeacon: true,
     },
     {
       target: '[data-tour="doctor-tabs"]',
-      content: 'Use these tabs to switch quickly between patients, ordering, communication, and insights.',
+      content: 'Use these tabs to switch quickly between customers, ordering, communication, and insights.',
     },
     {
       target: '[data-tour="doctor-tab-ordering"]',
@@ -262,11 +262,11 @@ export default function DoctorPortal() {
     },
     {
       target: '[data-tour="doctor-tab-analytics"]',
-      content: 'Analytics helps you spot trends, common tests, and risk patterns.',
+      content: 'Analytics helps you spot trends, common menu_items, and risk patterns.',
     },
     {
       target: '[data-tour="doctor-tab-whitelabel"]',
-      content: 'White-label settings brand patient-facing reports with your clinic identity.',
+      content: 'White-label settings brand patient-facing orders with your clinic identity.',
     },
   ], [])
 
@@ -281,7 +281,7 @@ export default function DoctorPortal() {
     try {
       const [
         profileRes,
-        patientsRes,
+        customersRes,
         catalogRes,
         panelsRes,
         ordersRes,
@@ -296,7 +296,7 @@ export default function DoctorPortal() {
         whiteLabelRes,
       ] = await Promise.all([
         axios.get(`${API_BASE}/api/doctor/profile`, requestConfig),
-        axios.get(`${API_BASE}/api/doctor/patients`, requestConfig),
+        axios.get(`${API_BASE}/api/doctor/customers`, requestConfig),
         axios.get(`${API_BASE}/api/doctor/test-catalog`, requestConfig),
         axios.get(`${API_BASE}/api/doctor/panels`, requestConfig),
         axios.get(`${API_BASE}/api/doctor/orders`, requestConfig),
@@ -311,8 +311,8 @@ export default function DoctorPortal() {
         axios.get(`${API_BASE}/api/doctor/white-label`, requestConfig),
       ])
       setProfile(profileRes.data)
-      setPatients(patientsRes.data.patients || [])
-      setTests(catalogRes.data.tests || [])
+      setCustomers(customersRes.data.customers || [])
+      setMenuItems(catalogRes.data.menu_items || [])
       setPanels(panelsRes.data.panels || [])
       setOrders(ordersRes.data.orders || [])
       setAlerts(alertsRes.data.alerts || [])
@@ -383,11 +383,11 @@ export default function DoctorPortal() {
     const timer = window.setTimeout(async () => {
       if (!token) return
       try {
-        const response = await axios.get(`${API_BASE}/api/doctor/patients`, {
+        const response = await axios.get(`${API_BASE}/api/doctor/customers`, {
           ...requestConfig,
           params: { search, tag: tagFilter || undefined, date: dateFilter || undefined },
         })
-        setPatients(response.data.patients || [])
+        setCustomers(response.data.customers || [])
       } catch {
         // Keep current list visible if optional search call fails.
       }
@@ -430,10 +430,10 @@ export default function DoctorPortal() {
     return () => window.clearInterval(interval)
   }, [requestConfig, token])
 
-  const openPatient = async (patient: Patient) => {
-    setSelectedPatient(patient)
+  const openCustomer = async (patient: Customer) => {
+    setSelectedCustomer(patient)
     try {
-      const response = await axios.get(`${API_BASE}/api/doctor/patients/${patient.id}/timeline`, requestConfig)
+      const response = await axios.get(`${API_BASE}/api/doctor/customers/${patient.id}/timeline`, requestConfig)
       setTimeline(response.data.events || [])
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Unable to load patient timeline')
@@ -441,31 +441,31 @@ export default function DoctorPortal() {
   }
 
   const updateTag = async (tag: string, action: 'add' | 'remove') => {
-    if (!selectedPatient) return
+    if (!selectedCustomer) return
     try {
-      const response = await axios.post(`${API_BASE}/api/doctor/patients/${selectedPatient.id}/tags`, { tag, action }, requestConfig)
-      const updated = { ...selectedPatient, tags: response.data.tags || [] }
-      setSelectedPatient(updated)
-      setPatients(current => current.map(patient => patient.id === updated.id ? updated : patient))
+      const response = await axios.post(`${API_BASE}/api/doctor/customers/${selectedCustomer.id}/tags`, { tag, action }, requestConfig)
+      const updated = { ...selectedCustomer, tags: response.data.tags || [] }
+      setSelectedCustomer(updated)
+      setCustomers(current => current.map(patient => patient.id === updated.id ? updated : patient))
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Unable to update patient tag')
     }
   }
 
   const submitOrder = async () => {
-    if (!selectedPatient || (!selectedTestIds.length && !selectedPanelIds.length)) {
+    if (!selectedCustomer || (!selectedMenuItemIds.length && !selectedPanelIds.length)) {
       toast.error('Select a patient and at least one test or panel')
       return
     }
     setSaving(true)
     try {
       await axios.post(`${API_BASE}/api/doctor/orders`, {
-        patient_id: selectedPatient.id,
-        test_ids: selectedTestIds,
+        patient_id: selectedCustomer.id,
+        test_ids: selectedMenuItemIds,
         panel_ids: selectedPanelIds,
       }, requestConfig)
       toast.success('Order sent to the lab')
-      setSelectedTestIds([])
+      setSelectedMenuItemIds([])
       setSelectedPanelIds([])
       await loadFoundation()
       setTab('dashboard')
@@ -519,7 +519,7 @@ export default function DoctorPortal() {
     }
   }
 
-  const runReportInterpretation = async () => {
+  const runOrderInterpretation = async () => {
     const reportId = Number(reportIdInput)
     if (!reportId) {
       toast.error('Enter a valid report ID')
@@ -580,7 +580,7 @@ export default function DoctorPortal() {
     }
   }
 
-  const toggleTest = (id: number) => setSelectedTestIds(current => current.includes(id) ? current.filter(testId => testId !== id) : [...current, id])
+  const toggleMenuItem = (id: number) => setSelectedMenuItemIds(current => current.includes(id) ? current.filter(testId => testId !== id) : [...current, id])
   const togglePanel = (panel: Panel) => {
     setSelectedPanelIds(current => current.includes(panel.id) ? current.filter(panelId => panelId !== panel.id) : [...current, panel.id])
   }
@@ -605,26 +605,26 @@ export default function DoctorPortal() {
   const ageBars = useMemo(() => {
     if (!analytics) return []
     return [
-      { group: '0-18', patients: analytics.demographics.age_groups['0-18'] },
-      { group: '19-40', patients: analytics.demographics.age_groups['19-40'] },
-      { group: '41-60', patients: analytics.demographics.age_groups['41-60'] },
-      { group: '61+', patients: analytics.demographics.age_groups['61+'] },
+      { group: '0-18', customers: analytics.demographics.age_groups['0-18'] },
+      { group: '19-40', customers: analytics.demographics.age_groups['19-40'] },
+      { group: '41-60', customers: analytics.demographics.age_groups['41-60'] },
+      { group: '61+', customers: analytics.demographics.age_groups['61+'] },
     ]
   }, [analytics])
 
   if (loading) {
-    return <div className="p-6 text-sm font-semibold text-slate-600">Loading Doctor Portal...</div>
+    return <div className="p-6 text-sm font-semibold text-slate-600">Loading Staff Portal...</div>
   }
 
   return (
     <div className="min-h-full bg-slate-50 p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
-        <DoctorOnboardingTour run={tourRun} steps={tourSteps} onFinish={completeTour} />
+        <StaffOnboardingTour run={tourRun} steps={tourSteps} onFinish={completeTour} />
 
         <header data-tour="doctor-header" className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-600">Doctor Platform</p>
-            <h1 className="mt-1 text-2xl font-black text-slate-900 sm:text-3xl">Good day, {profile?.name || user?.first_name || 'Doctor'}</h1>
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-teal-600">Staff Platform</p>
+            <h1 className="mt-1 text-2xl font-black text-slate-900 sm:text-3xl">Good day, {profile?.name || user?.first_name || 'Staff'}</h1>
             <p className="mt-1 text-sm text-slate-500">Clinical history, communication, analytics, and referral performance in one place.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -639,8 +639,8 @@ export default function DoctorPortal() {
           <div className="flex min-w-max gap-2">
           {([
             ['dashboard', 'Dashboard'],
-            ['patients', 'Patients'],
-            ['ordering', 'Order tests'],
+            ['customers', 'Customers'],
+            ['ordering', 'Order menu_items'],
             ['communication', 'Communication'],
             ['analytics', 'Analytics'],
             ['referrals', 'Referrals'],
@@ -673,7 +673,7 @@ export default function DoctorPortal() {
         {tab === 'dashboard' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-              <Metric label="Patients" value={patients.length} />
+              <Metric label="Customers" value={customers.length} />
               <Metric label="Pending orders" value={orders.filter(order => order.status !== 'Completed').length} />
               <Metric label="Critical alerts" value={alerts.length} tone="rose" />
               <Metric label="Pending commission" value={Math.round(referrals?.commission_pending || 0)} tone="amber" />
@@ -687,28 +687,28 @@ export default function DoctorPortal() {
             </section>
             <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-lg font-black text-slate-900">Recent patients</h2>
-                <button onClick={() => setTab('patients')} className="text-sm font-bold text-teal-600">View all</button>
+                <h2 className="text-lg font-black text-slate-900">Recent customers</h2>
+                <button onClick={() => setTab('customers')} className="text-sm font-bold text-teal-600">View all</button>
               </div>
-              <PatientList patients={patients.slice(0, 5)} onSelect={openPatient} />
+              <CustomerList customers={customers.slice(0, 5)} onSelect={openCustomer} />
             </section>
           </div>
         )}
 
-        {tab === 'patients' && (
+        {tab === 'customers' && (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
             <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h2 className="text-lg font-black text-slate-900">Patient search</h2>
+                <h2 className="text-lg font-black text-slate-900">Customer search</h2>
                 <div className="grid w-full gap-2 sm:max-w-xl sm:grid-cols-3">
                   <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, ID, or mobile" className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-teal-500" />
                   <input value={tagFilter} onChange={event => setTagFilter(event.target.value)} placeholder="Tag" className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-teal-500" />
                   <input type="date" value={dateFilter} onChange={event => setDateFilter(event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-teal-500" />
                 </div>
               </div>
-              <PatientList patients={patients} onSelect={openPatient} />
+              <CustomerList customers={customers} onSelect={openCustomer} />
             </section>
-            <PatientDetails patient={selectedPatient} timeline={timeline} onTag={updateTag} />
+            <CustomerDetails patient={selectedCustomer} timeline={timeline} onTag={updateTag} />
           </div>
         )}
 
@@ -716,7 +716,7 @@ export default function DoctorPortal() {
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
             <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
               <h2 className="mb-4 text-lg font-black text-slate-900">Choose patient</h2>
-              <PatientList patients={patients} onSelect={openPatient} selectedId={selectedPatient?.id} />
+              <CustomerList customers={customers} onSelect={openCustomer} selectedId={selectedCustomer?.id} />
               <div className="mt-5 border-t border-slate-100 pt-5">
                 <h3 className="mb-3 font-bold text-slate-800">Your panels</h3>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -730,11 +730,11 @@ export default function DoctorPortal() {
               </div>
             </section>
             <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="mb-4 text-lg font-black text-slate-900">Test catalog</h2>
+              <h2 className="mb-4 text-lg font-black text-slate-900">MenuItem catalog</h2>
               <div className="max-h-[28rem] space-y-2 overflow-auto">
-                {tests.map(test => (
+                {menu_items.map(test => (
                   <label key={test.id} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
-                    <input type="checkbox" checked={selectedTestIds.includes(test.id)} onChange={() => toggleTest(test.id)} className="mt-1" />
+                    <input type="checkbox" checked={selectedMenuItemIds.includes(test.id)} onChange={() => toggleMenuItem(test.id)} className="mt-1" />
                     <span className="min-w-0 flex-1">
                       <strong className="block text-sm text-slate-800">{test.test_name}</strong>
                       <span className="text-xs text-slate-500">{test.category || 'General'} · {test.turnaround_time_hours}h · INR {test.discounted_price || test.base_price}</span>
@@ -743,7 +743,7 @@ export default function DoctorPortal() {
                 ))}
               </div>
               <button disabled={saving} onClick={() => void submitOrder()} className="mt-5 w-full rounded-xl bg-teal-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
-                {saving ? 'Sending...' : `Send order${selectedPatient ? ` for ${selectedPatient.name}` : ''}`}
+                {saving ? 'Sending...' : `Send order${selectedCustomer ? ` for ${selectedCustomer.name}` : ''}`}
               </button>
             </section>
           </div>
@@ -822,7 +822,7 @@ export default function DoctorPortal() {
             </section>
             <div className="grid gap-6 lg:grid-cols-2">
               <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
-                <h2 className="mb-4 text-lg font-black text-slate-900">Patient demographics</h2>
+                <h2 className="mb-4 text-lg font-black text-slate-900">Customer demographics</h2>
                 <div className="h-64 w-full">
                   <ResponsiveContainer>
                     <PieChart>
@@ -846,22 +846,22 @@ export default function DoctorPortal() {
                       <XAxis dataKey="group" />
                       <YAxis allowDecimals={false} />
                       <Tooltip />
-                      <Bar dataKey="patients" fill="#0f766e" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="customers" fill="#0f766e" radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </section>
             </div>
             <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="mb-4 text-lg font-black text-slate-900">Most requested tests</h2>
+              <h2 className="mb-4 text-lg font-black text-slate-900">Most requested menu_items</h2>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {(analytics?.common_tests || []).map(test => (
+                {(analytics?.common_menu_items || []).map(test => (
                   <div key={test.test_name} className="rounded-xl border border-slate-200 p-3">
                     <p className="text-sm font-bold text-slate-800">{test.test_name}</p>
                     <p className="text-xs text-slate-500">Requested {test.count} times</p>
                   </div>
                 ))}
-                {!analytics?.common_tests?.length && <p className="text-sm text-slate-500">No request trends available yet.</p>}
+                {!analytics?.common_menu_items?.length && <p className="text-sm text-slate-500">No request trends available yet.</p>}
               </div>
             </section>
           </div>
@@ -876,7 +876,7 @@ export default function DoctorPortal() {
               <Metric label="Commission pending" value={Math.round(wallet?.commission_pending || referrals?.commission_pending || 0)} tone="amber" />
             </div>
             <section className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
-              <h2 className="mb-4 text-lg font-black text-slate-900">Doctor wallet</h2>
+              <h2 className="mb-4 text-lg font-black text-slate-900">Staff wallet</h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                 <TotalCard label="Referrals" value={wallet?.total_referrals || 0} tone="teal" isCurrency={false} />
                 <TotalCard label="Earned" value={wallet?.commission_earned || 0} tone="emerald" />
@@ -891,7 +891,7 @@ export default function DoctorPortal() {
                   <thead className="bg-slate-50">
                     <tr>
                       <th className="px-3 py-2 text-left font-bold text-slate-600">Date</th>
-                      <th className="px-3 py-2 text-left font-bold text-slate-600">Patient</th>
+                      <th className="px-3 py-2 text-left font-bold text-slate-600">Customer</th>
                       <th className="px-3 py-2 text-left font-bold text-slate-600">Order</th>
                       <th className="px-3 py-2 text-left font-bold text-slate-600">Amount</th>
                       <th className="px-3 py-2 text-left font-bold text-slate-600">Status</th>
@@ -943,8 +943,8 @@ export default function DoctorPortal() {
                     <ul className="mt-2 space-y-1 text-sm text-slate-700">{aiSymptom.possible_conditions.map(item => <li key={item}>• {item}</li>)}</ul>
                   </div>
                   <div className="rounded-xl border border-slate-200 p-3">
-                    <p className="text-xs font-bold uppercase text-slate-500">Recommended tests</p>
-                    <ul className="mt-2 space-y-1 text-sm text-slate-700">{aiSymptom.recommended_tests.map(item => <li key={item}>• {item}</li>)}</ul>
+                    <p className="text-xs font-bold uppercase text-slate-500">Recommended menu_items</p>
+                    <ul className="mt-2 space-y-1 text-sm text-slate-700">{aiSymptom.recommended_menu_items.map(item => <li key={item}>• {item}</li>)}</ul>
                   </div>
                 </div>
               )}
@@ -952,10 +952,10 @@ export default function DoctorPortal() {
 
             <section className="grid gap-6 lg:grid-cols-2">
               <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-6">
-                <h3 className="text-lg font-black text-slate-900">Report Interpretation</h3>
+                <h3 className="text-lg font-black text-slate-900">Order Interpretation</h3>
                 <div className="mt-3 flex gap-2">
-                  <input value={reportIdInput} onChange={event => setReportIdInput(event.target.value)} className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Report ID" />
-                  <button disabled={aiBusy} onClick={() => void runReportInterpretation()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Summarize</button>
+                  <input value={reportIdInput} onChange={event => setOrderIdInput(event.target.value)} className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Order ID" />
+                  <button disabled={aiBusy} onClick={() => void runOrderInterpretation()} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Summarize</button>
                 </div>
                 {aiInterpretation && <p className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">{aiInterpretation.summary}</p>}
               </div>
@@ -983,8 +983,8 @@ export default function DoctorPortal() {
                   </div>
                   <div className="rounded-xl border border-slate-200 p-3">
                     <p className="text-xs font-bold uppercase text-slate-500">Panel summary</p>
-                    <p className="mt-2 text-sm text-slate-700">Total referred patients: {aiGrowth.summary.total_referred_patients}</p>
-                    <p className="text-sm text-slate-700">Diabetic patients: {aiGrowth.summary.diabetic_patients}</p>
+                    <p className="mt-2 text-sm text-slate-700">Total referred customers: {aiGrowth.summary.total_referred_customers}</p>
+                    <p className="text-sm text-slate-700">Diabetic customers: {aiGrowth.summary.diabetic_customers}</p>
                     <p className="text-sm text-slate-700">No HbA1c in records: {aiGrowth.summary.diabetic_without_hba1c}</p>
                   </div>
                 </div>
@@ -1128,19 +1128,19 @@ function AlertsList({ alerts }: { alerts: AlertItem[] }) {
   )
 }
 
-function PatientList({
-  patients,
+function CustomerList({
+  customers,
   onSelect,
   selectedId,
 }: {
-  patients: Patient[]
-  onSelect: (patient: Patient) => void
+  customers: Customer[]
+  onSelect: (patient: Customer) => void
   selectedId?: number
 }) {
-  if (!patients.length) return <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No patients found.</p>
+  if (!customers.length) return <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No customers found.</p>
   return (
     <div className="space-y-2">
-      {patients.map(patient => (
+      {customers.map(patient => (
         <button
           key={patient.id}
           onClick={() => onSelect(patient)}
@@ -1157,12 +1157,12 @@ function PatientList({
   )
 }
 
-function PatientDetails({
+function CustomerDetails({
   patient,
   timeline,
   onTag,
 }: {
-  patient: Patient | null
+  patient: Customer | null
   timeline: TimelineEvent[]
   onTag: (tag: string, action: 'add' | 'remove') => void
 }) {

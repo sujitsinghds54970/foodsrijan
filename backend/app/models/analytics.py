@@ -23,7 +23,7 @@ class DailyAnalyticsSnapshot(Base):
     pathology_count = Column(Integer, nullable=False, default=0)
     ct_mri_count = Column(Integer, nullable=False, default=0)
     other_count = Column(Integer, nullable=False, default=0)
-    total_tests = Column(Integer, nullable=False, default=0)
+    total_menu_items = Column(Integer, nullable=False, default=0)
 
     avg_bill_value = Column(Float, nullable=False, default=0.0)
 

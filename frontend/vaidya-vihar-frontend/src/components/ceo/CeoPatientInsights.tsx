@@ -22,22 +22,22 @@ import {
   YAxis,
 } from 'recharts'
 import {
-  CeoPatientFinancialAnalyticsResponse,
-  CeoPatientJourneyExperienceResponse,
-  CeoPatientOverviewResponse,
-  CeoPatientPredictiveInsightsResponse,
-  CeoPatientPredictiveWhatIfResponse,
-  CeoPatientRetentionLoyaltyResponse,
-  CeoPatientSegmentationHealthResponse,
-  CeoPatientWowFeaturesResponse,
-  getCeoPatientFinancialAnalytics,
-  getCeoPatientJourneyExperience,
-  getCeoPatientOverview,
-  getCeoPatientPredictiveInsights,
-  getCeoPatientPredictiveWhatIfSimulation,
-  getCeoPatientRetentionLoyalty,
-  getCeoPatientSegmentationHealth,
-  getCeoPatientWowFeatures,
+  CeoCustomerFinancialAnalyticsResponse,
+  CeoCustomerJourneyExperienceResponse,
+  CeoCustomerOverviewResponse,
+  CeoCustomerPredictiveInsightsResponse,
+  CeoCustomerPredictiveWhatIfResponse,
+  CeoCustomerRetentionLoyaltyResponse,
+  CeoCustomerSegmentationHealthResponse,
+  CeoCustomerWowFeaturesResponse,
+  getCeoCustomerFinancialAnalytics,
+  getCeoCustomerJourneyExperience,
+  getCeoCustomerOverview,
+  getCeoCustomerPredictiveInsights,
+  getCeoCustomerPredictiveWhatIfSimulation,
+  getCeoCustomerRetentionLoyalty,
+  getCeoCustomerSegmentationHealth,
+  getCeoCustomerWowFeatures,
 } from './api'
 
 const CARD_CLASS = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm'
@@ -46,36 +46,36 @@ const PIE_COLORS = ['#4f46e5', '#0ea5e9', '#22c55e', '#f59e0b', '#ef4444']
 const toCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value || 0)
 
-const CeoPatientInsights = () => {
+const CeoCustomerInsights = () => {
   const [loading, setLoading] = useState(true)
-  const [overview, setOverview] = useState<CeoPatientOverviewResponse | null>(null)
-  const [journey, setJourney] = useState<CeoPatientJourneyExperienceResponse | null>(null)
-  const [retention, setRetention] = useState<CeoPatientRetentionLoyaltyResponse | null>(null)
-  const [segmentation, setSegmentation] = useState<CeoPatientSegmentationHealthResponse | null>(null)
-  const [financial, setFinancial] = useState<CeoPatientFinancialAnalyticsResponse | null>(null)
-  const [predictive, setPredictive] = useState<CeoPatientPredictiveInsightsResponse | null>(null)
-  const [wow, setWow] = useState<CeoPatientWowFeaturesResponse | null>(null)
+  const [overview, setOverview] = useState<CeoCustomerOverviewResponse | null>(null)
+  const [journey, setJourney] = useState<CeoCustomerJourneyExperienceResponse | null>(null)
+  const [retention, setRetention] = useState<CeoCustomerRetentionLoyaltyResponse | null>(null)
+  const [segmentation, setSegmentation] = useState<CeoCustomerSegmentationHealthResponse | null>(null)
+  const [financial, setFinancial] = useState<CeoCustomerFinancialAnalyticsResponse | null>(null)
+  const [predictive, setPredictive] = useState<CeoCustomerPredictiveInsightsResponse | null>(null)
+  const [wow, setWow] = useState<CeoCustomerWowFeaturesResponse | null>(null)
   const [whatIfCondition, setWhatIfCondition] = useState('Diabetes')
   const [whatIfCity, setWhatIfCity] = useState('Mumbai')
   const [whatIfDiscount, setWhatIfDiscount] = useState(10)
   const [whatIfLoading, setWhatIfLoading] = useState(false)
-  const [whatIfResult, setWhatIfResult] = useState<CeoPatientPredictiveWhatIfResponse | null>(null)
-  const [isPatient360Open, setIsPatient360Open] = useState(false)
-  const [patientSearch, setPatientSearch] = useState('')
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null)
+  const [whatIfResult, setWhatIfResult] = useState<CeoCustomerPredictiveWhatIfResponse | null>(null)
+  const [isCustomer360Open, setIsCustomer360Open] = useState(false)
+  const [patientSearch, setCustomerSearch] = useState('')
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       try {
         const [overviewResp, journeyResp, retentionResp, segmentationResp, financialResp, predictiveResp, wowResp] = await Promise.all([
-          getCeoPatientOverview(),
-          getCeoPatientJourneyExperience(),
-          getCeoPatientRetentionLoyalty(),
-          getCeoPatientSegmentationHealth(),
-          getCeoPatientFinancialAnalytics(),
-          getCeoPatientPredictiveInsights(),
-          getCeoPatientWowFeatures(),
+          getCeoCustomerOverview(),
+          getCeoCustomerJourneyExperience(),
+          getCeoCustomerRetentionLoyalty(),
+          getCeoCustomerSegmentationHealth(),
+          getCeoCustomerFinancialAnalytics(),
+          getCeoCustomerPredictiveInsights(),
+          getCeoCustomerWowFeatures(),
         ])
         setOverview(overviewResp)
         setJourney(journeyResp)
@@ -84,9 +84,9 @@ const CeoPatientInsights = () => {
         setFinancial(financialResp)
         setPredictive(predictiveResp)
         setWow(wowResp)
-        setSelectedPatientId(wowResp.patient_360_profiles[0]?.patient_id || null)
+        setSelectedCustomerId(wowResp.patient_360_profiles[0]?.patient_id || null)
       } catch (error: any) {
-        toast.error(error?.response?.data?.detail || 'Unable to load Patient Insights dashboard')
+        toast.error(error?.response?.data?.detail || 'Unable to load Customer Insights dashboard')
       } finally {
         setLoading(false)
       }
@@ -97,7 +97,7 @@ const CeoPatientInsights = () => {
   const runWhatIf = async () => {
     setWhatIfLoading(true)
     try {
-      const result = await getCeoPatientPredictiveWhatIfSimulation({
+      const result = await getCeoCustomerPredictiveWhatIfSimulation({
         condition: whatIfCondition.trim() || 'Diabetes',
         city: whatIfCity.trim() || 'Mumbai',
         discount_percent: whatIfDiscount,
@@ -112,12 +112,12 @@ const CeoPatientInsights = () => {
 
   const npsGaugeData = useMemo(() => {
     const value = Math.max(0, Math.min(journey?.patient_nps_score || 0, 100))
-    return [{ name: 'Patient NPS', value, fill: value >= 70 ? '#16a34a' : value >= 50 ? '#f59e0b' : '#ef4444' }]
+    return [{ name: 'Customer NPS', value, fill: value >= 70 ? '#16a34a' : value >= 50 ? '#f59e0b' : '#ef4444' }]
   }, [journey])
 
   const healthScoreGaugeData = useMemo(() => {
     const value = Math.max(0, Math.min(retention?.patient_health_score || 0, 100))
-    return [{ name: 'Patient Health Score', value, fill: value >= 75 ? '#16a34a' : value >= 55 ? '#f59e0b' : '#ef4444' }]
+    return [{ name: 'Customer Health Score', value, fill: value >= 75 ? '#16a34a' : value >= 55 ? '#f59e0b' : '#ef4444' }]
   }, [retention])
 
   const patient360List = useMemo(() => {
@@ -127,16 +127,16 @@ const CeoPatientInsights = () => {
     return list.filter((item) => item.name.toLowerCase().includes(q) || item.patient_id.toLowerCase().includes(q))
   }, [wow, patientSearch])
 
-  const selectedPatient360 = useMemo(
-    () => (wow?.patient_360_profiles || []).find((item) => item.patient_id === selectedPatientId) || null,
-    [wow, selectedPatientId]
+  const selectedCustomer360 = useMemo(
+    () => (wow?.patient_360_profiles || []).find((item) => item.patient_id === selectedCustomerId) || null,
+    [wow, selectedCustomerId]
   )
 
   if (loading) {
     return (
       <div className="flex min-h-[420px] items-center justify-center">
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-          Loading Patient Insights dashboard...
+          Loading Customer Insights dashboard...
         </div>
       </div>
     )
@@ -145,32 +145,32 @@ const CeoPatientInsights = () => {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-black text-slate-900">Patient Insights</h1>
+        <h1 className="text-2xl font-black text-slate-900">Customer Insights</h1>
         <p className="mt-1 text-sm text-slate-600">Acquisition, journey, retention, segmentation, and predictive patient analytics for super admin decisions.</p>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-bold text-slate-900">Patient Acquisition &amp; Growth (The Top of Funnel)</h2>
+        <h2 className="text-xl font-bold text-slate-900">Customer Acquisition &amp; Growth (The Top of Funnel)</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 md:col-span-4`}>
-            <p className="text-xs uppercase text-slate-500">Total Patient Base</p>
-            <p className="mt-1 text-4xl font-black text-slate-900">{overview?.total_patients || 0}</p>
+            <p className="text-xs uppercase text-slate-500">Total Customer Base</p>
+            <p className="mt-1 text-4xl font-black text-slate-900">{overview?.total_customers || 0}</p>
             <p className="mt-2 text-xs font-semibold text-emerald-700">MoM: +{Number(overview?.growth.mom_percent || 0).toFixed(1)}%</p>
             <p className="text-xs font-semibold text-indigo-700">YoY: +{Number(overview?.growth.yoy_percent || 0).toFixed(1)}%</p>
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 md:col-span-4`}>
-            <p className="text-xs uppercase text-slate-500">Patient Acquisition Cost (PAC)</p>
+            <p className="text-xs uppercase text-slate-500">Customer Acquisition Cost (PAC)</p>
             <p className="mt-1 text-3xl font-black text-rose-700">{toCurrency(overview?.patient_acquisition_cost || 0)}</p>
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 md:col-span-4`}>
-            <p className="text-xs uppercase text-slate-500">Patient Lifetime Value (PLV)</p>
+            <p className="text-xs uppercase text-slate-500">Customer Lifetime Value (PLV)</p>
             <p className="mt-1 text-3xl font-black text-emerald-700">{toCurrency(overview?.patient_lifetime_value || 0)}</p>
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-5`}>
-            <p className="text-sm font-semibold text-slate-700">New vs Returning Patients</p>
+            <p className="text-sm font-semibold text-slate-700">New vs Returning Customers</p>
             <div className="mt-3 h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -203,14 +203,14 @@ const CeoPatientInsights = () => {
                   <XAxis dataKey="source" interval={0} angle={-12} textAnchor="end" height={70} />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="patients" fill="#0ea5e9" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="customers" fill="#0ea5e9" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
           <div className={`${CARD_CLASS} col-span-12`}>
-            <p className="text-sm font-semibold text-slate-700">Patient Base Growth Trend</p>
+            <p className="text-sm font-semibold text-slate-700">Customer Base Growth Trend</p>
             <div className="mt-3 h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={overview?.monthly_growth_trend || []}>
@@ -218,7 +218,7 @@ const CeoPatientInsights = () => {
                   <XAxis dataKey="month" />
                   <YAxis />
                   <Tooltip />
-                  <Line type="monotone" dataKey="patients" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4 }} />
+                  <Line type="monotone" dataKey="customers" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -227,10 +227,10 @@ const CeoPatientInsights = () => {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-bold text-slate-900">Patient Journey &amp; Experience (The Middle of Funnel)</h2>
+        <h2 className="text-xl font-bold text-slate-900">Customer Journey &amp; Experience (The Middle of Funnel)</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-7`}>
-            <p className="text-sm font-semibold text-slate-700">Patient Journey Funnel</p>
+            <p className="text-sm font-semibold text-slate-700">Customer Journey Funnel</p>
             <div className="mt-3 h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <FunnelChart>
@@ -247,7 +247,7 @@ const CeoPatientInsights = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-5`}>
-            <p className="text-sm font-semibold text-slate-700">Patient Satisfaction (NPS)</p>
+            <p className="text-sm font-semibold text-slate-700">Customer Satisfaction (NPS)</p>
             <div className="mt-3 h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <RadialBarChart data={npsGaugeData} innerRadius="68%" outerRadius="100%" barSize={22} startAngle={180} endAngle={0}>
@@ -263,7 +263,7 @@ const CeoPatientInsights = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 md:col-span-4`}>
-            <p className="text-xs uppercase text-slate-500">Average Time to Test</p>
+            <p className="text-xs uppercase text-slate-500">Average Time to MenuItem</p>
             <p className="mt-2 text-3xl font-black text-indigo-700">{Number(journey?.average_time_to_test_hours || 0).toFixed(1)} hrs</p>
           </div>
           <div className={`${CARD_CLASS} col-span-12 md:col-span-4`}>
@@ -276,10 +276,10 @@ const CeoPatientInsights = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12`}>
-            <p className="text-xs uppercase text-slate-500">Report Viewing Rate</p>
+            <p className="text-xs uppercase text-slate-500">Order Viewing Rate</p>
             <div className="mt-2">
               <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
-                <span>Online Report View Rate</span>
+                <span>Online Order View Rate</span>
                 <span>{journey?.report_viewing_rate_percent || 0}%</span>
               </div>
               <div className="h-3 rounded-full bg-slate-100">
@@ -291,7 +291,7 @@ const CeoPatientInsights = () => {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-bold text-slate-900">Patient Retention &amp; Loyalty (The Bottom of Funnel)</h2>
+        <h2 className="text-xl font-bold text-slate-900">Customer Retention &amp; Loyalty (The Bottom of Funnel)</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 md:col-span-3`}><p className="text-xs uppercase text-slate-500">Retention Rate</p><p className="mt-2 text-3xl font-black text-emerald-700">{Number(retention?.retention_rate_percent || 0).toFixed(1)}%</p></div>
           <div className={`${CARD_CLASS} col-span-12 md:col-span-3`}><p className="text-xs uppercase text-slate-500">Churn Rate</p><p className="mt-2 text-3xl font-black text-rose-700">{Number(retention?.churn_rate_percent || 0).toFixed(1)}%</p></div>
@@ -307,7 +307,7 @@ const CeoPatientInsights = () => {
             </div>
           </div>
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-5`}>
-            <p className="text-sm font-semibold text-slate-700">Patient Health Score</p>
+            <p className="text-sm font-semibold text-slate-700">Customer Health Score</p>
             <div className="mt-3 h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <RadialBarChart data={healthScoreGaugeData} innerRadius="68%" outerRadius="100%" barSize={22} startAngle={180} endAngle={0}>
@@ -322,7 +322,7 @@ const CeoPatientInsights = () => {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-bold text-slate-900">Patient Segmentation &amp; Population Health (The Granular View)</h2>
+        <h2 className="text-xl font-bold text-slate-900">Customer Segmentation &amp; Population Health (The Granular View)</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-4`}>
             <p className="text-sm font-semibold text-slate-700">Demographics by Age</p>
@@ -339,15 +339,15 @@ const CeoPatientInsights = () => {
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-6`}>
             <p className="text-sm font-semibold text-slate-700">Segmentation by Condition</p>
-            <div className="mt-3 h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={segmentation?.segment_by_condition || []}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="condition" /><YAxis /><Tooltip /><Bar dataKey="patients" fill="#4f46e5" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>
+            <div className="mt-3 h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={segmentation?.segment_by_condition || []}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="condition" /><YAxis /><Tooltip /><Bar dataKey="customers" fill="#4f46e5" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>
           </div>
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-6`}>
             <p className="text-sm font-semibold text-slate-700">Segmentation by Lifetime Value</p>
-            <div className="mt-3 h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={segmentation?.segment_by_value || []}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="segment" /><YAxis /><Tooltip /><Bar dataKey="patients" fill="#0ea5e9" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>
+            <div className="mt-3 h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={segmentation?.segment_by_value || []}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="segment" /><YAxis /><Tooltip /><Bar dataKey="customers" fill="#0ea5e9" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-7`}>
-            <p className="text-sm font-semibold text-slate-700">Geographic Patient Density Map</p>
+            <p className="text-sm font-semibold text-slate-700">Geographic Customer Density Map</p>
             <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
               {(segmentation?.geographic_density || []).map((zone) => (
                 <div key={zone.zone} className="rounded-lg border border-slate-200 p-3 text-center" style={{ backgroundColor: `rgba(14, 165, 233, ${Math.max(0.2, Math.min(zone.density_score / 100, 0.9))})` }}>
@@ -367,11 +367,11 @@ const CeoPatientInsights = () => {
         <h2 className="text-xl font-bold text-slate-900">Financial &amp; Revenue Analytics (The Bottom Line)</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-8`}>
-            <p className="text-sm font-semibold text-slate-700">Revenue by Patient Segment</p>
+            <p className="text-sm font-semibold text-slate-700">Revenue by Customer Segment</p>
             <div className="mt-3 h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={financial?.revenue_by_segment || []}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="segment" interval={0} angle={-12} textAnchor="end" height={70} /><YAxis /><Tooltip formatter={(value: any) => toCurrency(Number(value || 0))} /><Bar dataKey="revenue" fill="#22c55e" radius={[6, 6, 0, 0]} /></BarChart></ResponsiveContainer></div>
           </div>
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-4`}>
-            <p className="text-xs uppercase text-slate-500">Revenue per Patient</p><p className="mt-2 text-3xl font-black text-emerald-700">{toCurrency(financial?.revenue_per_patient || 0)}</p>
+            <p className="text-xs uppercase text-slate-500">Revenue per Customer</p><p className="mt-2 text-3xl font-black text-emerald-700">{toCurrency(financial?.revenue_per_patient || 0)}</p>
             <p className="mt-4 text-xs uppercase text-slate-500">Average Order Value (AOV)</p><p className="mt-1 text-3xl font-black text-indigo-700">{toCurrency(financial?.average_order_value || 0)}</p>
             <p className="mt-4 text-xs uppercase text-slate-500">Collection Effectiveness</p><p className="mt-1 text-3xl font-black text-cyan-700">{Number(financial?.collection_effectiveness_percent || 0).toFixed(1)}%</p>
           </div>
@@ -386,9 +386,9 @@ const CeoPatientInsights = () => {
         <h2 className="text-xl font-bold text-slate-900">AI-Powered Predictive Insights (The Brain)</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-5`}>
-            <p className="text-sm font-semibold text-slate-700">Patient Churn Prediction</p>
+            <p className="text-sm font-semibold text-slate-700">Customer Churn Prediction</p>
             <div className="mt-3 space-y-2">
-              {(predictive?.churn_risk_patients || []).map((item) => (
+              {(predictive?.churn_risk_customers || []).map((item) => (
                 <div key={item.patient_id} className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
                   <p className="text-sm font-semibold text-slate-800">{item.name} ({item.patient_id})</p>
                   <p className="text-xs text-rose-700">Risk Score: {item.risk_score}</p>
@@ -425,9 +425,9 @@ const CeoPatientInsights = () => {
               {whatIfResult && (
                 <div className="rounded-md border border-indigo-100 bg-indigo-50 p-3 text-sm text-slate-700">
                   <p className="font-semibold text-indigo-800">{whatIfResult.scenario}</p>
-                  <p>Patient Volume Uplift: {whatIfResult.projections.projected_patient_volume_uplift_percent.toFixed(2)}%</p>
+                  <p>Customer Volume Uplift: {whatIfResult.projections.projected_patient_volume_uplift_percent.toFixed(2)}%</p>
                   <p>Revenue Impact: {whatIfResult.projections.projected_revenue_impact_percent.toFixed(2)}%</p>
-                  <p>Monthly Patient Delta: {whatIfResult.projections.estimated_monthly_patient_delta}</p>
+                  <p>Monthly Customer Delta: {whatIfResult.projections.estimated_monthly_patient_delta}</p>
                   <p>Monthly Revenue Delta: {toCurrency(whatIfResult.projections.estimated_monthly_revenue_delta)}</p>
                 </div>
               )}
@@ -435,7 +435,7 @@ const CeoPatientInsights = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-6`}>
-            <p className="text-sm font-semibold text-slate-700">Automated Patient Insights Briefing</p>
+            <p className="text-sm font-semibold text-slate-700">Automated Customer Insights Briefing</p>
             <div className="mt-3 rounded-md border border-cyan-100 bg-cyan-50 p-4 text-sm leading-relaxed text-slate-700">
               {predictive?.automated_patient_briefing || 'No briefing available.'}
             </div>
@@ -448,16 +448,16 @@ const CeoPatientInsights = () => {
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-4`}>
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-700">Patient 360 View</p>
-              <button type="button" onClick={() => setIsPatient360Open(true)} className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700">
+              <p className="text-sm font-semibold text-slate-700">Customer 360 View</p>
+              <button type="button" onClick={() => setIsCustomer360Open(true)} className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700">
                 Open
               </button>
             </div>
-            <p className="mt-3 text-sm text-slate-600">Searchable modal aggregating interactions, tests, reports, and feedback.</p>
+            <p className="mt-3 text-sm text-slate-600">Searchable modal aggregating interactions, menu_items, orders, and feedback.</p>
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-4`}>
-            <p className="text-sm font-semibold text-slate-700">Voice of the Patient Feed</p>
+            <p className="text-sm font-semibold text-slate-700">Voice of the Customer Feed</p>
             <div className="mt-3 space-y-2">
               {(wow?.voice_of_patient_feed || []).map((item, idx) => (
                 <div key={idx} className="rounded-md border border-slate-200 px-3 py-2">
@@ -477,21 +477,21 @@ const CeoPatientInsights = () => {
         </div>
       </section>
 
-      {isPatient360Open && (
+      {isCustomer360Open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-5xl rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between">
-              <h3 className="text-xl font-bold text-slate-900">Patient 360 View</h3>
-              <button type="button" onClick={() => setIsPatient360Open(false)} className="rounded-md bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+              <h3 className="text-xl font-bold text-slate-900">Customer 360 View</h3>
+              <button type="button" onClick={() => setIsCustomer360Open(false)} className="rounded-md bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
                 Close
               </button>
             </div>
             <div className="mt-4 grid grid-cols-12 gap-4">
               <div className="col-span-12 lg:col-span-4">
-                <input value={patientSearch} onChange={(e) => setPatientSearch(e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Search patient by name or ID" />
+                <input value={patientSearch} onChange={(e) => setCustomerSearch(e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Search patient by name or ID" />
                 <div className="mt-3 max-h-80 space-y-2 overflow-auto">
                   {patient360List.map((patient) => (
-                    <button key={patient.patient_id} type="button" onClick={() => setSelectedPatientId(patient.patient_id)} className={`w-full rounded-md border px-3 py-2 text-left ${selectedPatientId === patient.patient_id ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 bg-white'}`}>
+                    <button key={patient.patient_id} type="button" onClick={() => setSelectedCustomerId(patient.patient_id)} className={`w-full rounded-md border px-3 py-2 text-left ${selectedCustomerId === patient.patient_id ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 bg-white'}`}>
                       <p className="text-sm font-semibold text-slate-800">{patient.name}</p>
                       <p className="text-xs text-slate-500">{patient.patient_id}</p>
                     </button>
@@ -499,21 +499,21 @@ const CeoPatientInsights = () => {
                 </div>
               </div>
               <div className="col-span-12 lg:col-span-8">
-                {selectedPatient360 ? (
+                {selectedCustomer360 ? (
                   <div className="space-y-3">
                     <div className="rounded-md border border-slate-200 p-3">
-                      <p className="text-sm font-semibold text-slate-800">{selectedPatient360.name} ({selectedPatient360.patient_id})</p>
-                      <p className="text-xs text-slate-600">{selectedPatient360.feedback}</p>
+                      <p className="text-sm font-semibold text-slate-800">{selectedCustomer360.name} ({selectedCustomer360.patient_id})</p>
+                      <p className="text-xs text-slate-600">{selectedCustomer360.feedback}</p>
                     </div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase text-slate-500">Interactions</p><ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">{selectedPatient360.interactions.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
-                      <div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase text-slate-500">Tests</p><ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">{selectedPatient360.tests.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
-                      <div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase text-slate-500">Reports</p><ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">{selectedPatient360.reports.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
+                      <div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase text-slate-500">Interactions</p><ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">{selectedCustomer360.interactions.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
+                      <div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase text-slate-500">MenuItems</p><ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">{selectedCustomer360.menu_items.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
+                      <div className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase text-slate-500">Orders</p><ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-slate-700">{selectedCustomer360.orders.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
                     </div>
                     <div className="rounded-md border border-slate-200 p-3">
-                      <p className="text-sm font-semibold text-slate-700">Patient Health Journey Timeline</p>
+                      <p className="text-sm font-semibold text-slate-700">Customer Health Journey Timeline</p>
                       <div className="mt-3 space-y-2">
-                        {selectedPatient360.journey_timeline.map((event, idx) => (
+                        {selectedCustomer360.journey_timeline.map((event, idx) => (
                           <div key={idx} className="flex items-center gap-3">
                             <div className="h-2 w-2 rounded-full bg-indigo-500" />
                             <p className="text-xs font-semibold text-slate-700">{event.date}</p>
@@ -535,4 +535,4 @@ const CeoPatientInsights = () => {
   )
 }
 
-export default CeoPatientInsights
+export default CeoCustomerInsights

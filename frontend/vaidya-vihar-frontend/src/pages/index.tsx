@@ -6,15 +6,15 @@ import { useNavigate } from 'react-router-dom'
 import Login from '../components/auth/Login'
 import Registration from '../components/auth/Registration'
 import Dashboard from '../components/dashboard/Dashboard'
-import PatientPortal from '../components/dashboard/PatientPortal'
+import CustomerPortal from '../components/dashboard/PatientPortal'
 
 export default function Home() {
   const { user, loading } = useAuth()
   const navigate = useNavigate()
   const [showRegistration, setShowRegistration] = useState(false)
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '/'
-  const hasPatientSession = typeof window !== 'undefined' && Boolean(localStorage.getItem('patient_portal_token'))
-  const isPatientRoute = pathname.startsWith('/patient-portal')
+  const hasCustomerSession = typeof window !== 'undefined' && Boolean(localStorage.getItem('patient_portal_token'))
+  const isCustomerRoute = pathname.startsWith('/patient-portal')
   const isDashboardRoute = pathname.startsWith('/branch') || pathname.startsWith('/staff') || pathname.startsWith('/ceo') || pathname === '/'
 
   // Role-based redirect on initial login
@@ -43,8 +43,8 @@ export default function Home() {
   }
 
   if (!user) {
-    if (isPatientRoute || hasPatientSession) {
-      return <PatientPortal activeTab="patient-portal" />
+    if (isCustomerRoute || hasCustomerSession) {
+      return <CustomerPortal activeTab="patient-portal" />
     }
 
     return showRegistration ? (
@@ -55,7 +55,7 @@ export default function Home() {
   }
 
   if ((user.role || '').trim().toLowerCase() === 'patient') {
-    return <PatientPortal activeTab="patient-portal" />
+    return <CustomerPortal activeTab="patient-portal" />
   }
 
   return <Dashboard />

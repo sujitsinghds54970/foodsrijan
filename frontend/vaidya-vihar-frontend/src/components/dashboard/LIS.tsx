@@ -4,7 +4,7 @@ interface LISProps {
   activeTab: string
 }
 
-interface TestOrder {
+interface MenuItemOrder {
   id: number
   order_number: string
   patient_id: number
@@ -14,7 +14,7 @@ interface TestOrder {
   priority: string
 }
 
-interface LabTest {
+interface LabMenuItem {
   id: number
   test_code: string
   test_name: string
@@ -25,16 +25,16 @@ interface LabTest {
 }
 
 export default function LIS({ activeTab }: LISProps) {
-  const [orders, setOrders] = useState<TestOrder[]>([])
-  const [tests, setTests] = useState<LabTest[]>([])
+  const [orders, setOrders] = useState<MenuItemOrder[]>([])
+  const [menu_items, setMenuItems] = useState<LabMenuItem[]>([])
   const [loading, setLoading] = useState(false)
   const [showNewOrder, setShowNewOrder] = useState(false)
-  const [selectedOrder, setSelectedOrder] = useState<TestOrder | null>(null)
+  const [selectedOrder, setSelectedOrder] = useState<MenuItemOrder | null>(null)
 
   useEffect(() => {
     if (activeTab === 'lis') {
       fetchOrders()
-      fetchTests()
+      fetchMenuItems()
     }
   }, [activeTab])
 
@@ -52,15 +52,15 @@ export default function LIS({ activeTab }: LISProps) {
     setLoading(false)
   }
 
-  const fetchTests = async () => {
+  const fetchMenuItems = async () => {
     try {
       const response = await fetch('/api/lis/test-master')
       const data = await response.json()
       if (data.success) {
-        setTests(data.tests || [])
+        setMenuItems(data.menu_items || [])
       }
     } catch (error) {
-      console.error('Error fetching tests:', error)
+      console.error('Error fetching menu_items:', error)
     }
   }
 
@@ -85,14 +85,14 @@ export default function LIS({ activeTab }: LISProps) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">LIS - Laboratory Information System</h1>
-          <p className="text-gray-600">Manage lab tests, orders, and results</p>
+          <p className="text-gray-600">Manage lab menu_items, orders, and results</p>
         </div>
         <div className="space-x-2">
           <button
             onClick={() => setShowNewOrder(true)}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
           >
-            + New Test Order
+            + New MenuItem Order
           </button>
         </div>
       </div>
@@ -123,14 +123,14 @@ export default function LIS({ activeTab }: LISProps) {
         </div>
       </div>
 
-      {/* Test Categories */}
+      {/* MenuItem Categories */}
       <div className="bg-white rounded-lg shadow mb-6 p-4">
-        <h2 className="text-lg font-semibold mb-4">Available Test Categories</h2>
+        <h2 className="text-lg font-semibold mb-4">Available MenuItem Categories</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {['Hematology', 'Biochemistry', 'Microbiology', 'Serology', 'Pathology', 'Radiology', 'Cardiology', 'Endocrinology'].map(cat => (
             <div key={cat} className="bg-gray-50 rounded-lg p-3 text-center">
               <div className="font-medium text-gray-700">{cat}</div>
-              <div className="text-sm text-gray-500">{tests.filter(t => t.category === cat.toLowerCase()).length} tests</div>
+              <div className="text-sm text-gray-500">{menu_items.filter(t => t.category === cat.toLowerCase()).length} menu_items</div>
             </div>
           ))}
         </div>
@@ -139,7 +139,7 @@ export default function LIS({ activeTab }: LISProps) {
       {/* Orders Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">Recent Test Orders</h2>
+          <h2 className="text-lg font-semibold">Recent MenuItem Orders</h2>
         </div>
         {loading ? (
           <div className="p-8 text-center text-gray-500">Loading...</div>
@@ -150,7 +150,7 @@ export default function LIS({ activeTab }: LISProps) {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Order #</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Patient ID</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Customer ID</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Amount</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Priority</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Status</th>

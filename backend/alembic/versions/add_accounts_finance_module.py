@@ -76,7 +76,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.ForeignKeyConstraint(["branch_id"], ["branches.id"]),
         sa.ForeignKeyConstraint(["created_by"], ["users.id"]),
-        sa.ForeignKeyConstraint(["patient_id"], ["patients.id"]),
+        sa.ForeignKeyConstraint(["patient_id"], ["customers.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_finance_invoices_id", "finance_invoices", ["id"], unique=False)

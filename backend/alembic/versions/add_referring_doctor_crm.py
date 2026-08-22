@@ -17,7 +17,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.create_table(
-        "referring_doctors",
+        "referring_staff",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("branch_id", sa.Integer(), nullable=False),
         sa.Column("full_name", sa.String(length=200), nullable=False),
@@ -45,14 +45,14 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["created_by"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_referring_doctors_id", "referring_doctors", ["id"], unique=False)
-    op.create_index("ix_referring_doctors_branch_id", "referring_doctors", ["branch_id"], unique=False)
-    op.create_index("ix_referring_doctors_full_name", "referring_doctors", ["full_name"], unique=False)
-    op.create_index("ix_referring_doctors_mobile", "referring_doctors", ["mobile"], unique=False)
-    op.create_index("ix_referring_doctors_email", "referring_doctors", ["email"], unique=False)
-    op.create_index("ix_referring_doctors_city", "referring_doctors", ["city"], unique=False)
-    op.create_index("ix_referring_doctors_specialization", "referring_doctors", ["specialization"], unique=False)
-    op.create_index("ix_referring_doctors_portal_username", "referring_doctors", ["portal_username"], unique=True)
+    op.create_index("ix_referring_staff_id", "referring_staff", ["id"], unique=False)
+    op.create_index("ix_referring_staff_branch_id", "referring_staff", ["branch_id"], unique=False)
+    op.create_index("ix_referring_staff_full_name", "referring_staff", ["full_name"], unique=False)
+    op.create_index("ix_referring_staff_mobile", "referring_staff", ["mobile"], unique=False)
+    op.create_index("ix_referring_staff_email", "referring_staff", ["email"], unique=False)
+    op.create_index("ix_referring_staff_city", "referring_staff", ["city"], unique=False)
+    op.create_index("ix_referring_staff_specialization", "referring_staff", ["specialization"], unique=False)
+    op.create_index("ix_referring_staff_portal_username", "referring_staff", ["portal_username"], unique=True)
 
     op.create_table(
         "referral_logs",
@@ -69,7 +69,7 @@ def upgrade() -> None:
         sa.Column("created_by", sa.Integer(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.ForeignKeyConstraint(["branch_id"], ["branches.id"]),
-        sa.ForeignKeyConstraint(["doctor_id"], ["referring_doctors.id"]),
+        sa.ForeignKeyConstraint(["doctor_id"], ["referring_staff.id"]),
         sa.ForeignKeyConstraint(["created_by"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -92,7 +92,7 @@ def upgrade() -> None:
         sa.Column("created_by", sa.Integer(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.ForeignKeyConstraint(["branch_id"], ["branches.id"]),
-        sa.ForeignKeyConstraint(["doctor_id"], ["referring_doctors.id"]),
+        sa.ForeignKeyConstraint(["doctor_id"], ["referring_staff.id"]),
         sa.ForeignKeyConstraint(["created_by"], ["users.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -117,12 +117,12 @@ def downgrade() -> None:
     op.drop_index("ix_referral_logs_id", table_name="referral_logs")
     op.drop_table("referral_logs")
 
-    op.drop_index("ix_referring_doctors_portal_username", table_name="referring_doctors")
-    op.drop_index("ix_referring_doctors_specialization", table_name="referring_doctors")
-    op.drop_index("ix_referring_doctors_city", table_name="referring_doctors")
-    op.drop_index("ix_referring_doctors_email", table_name="referring_doctors")
-    op.drop_index("ix_referring_doctors_mobile", table_name="referring_doctors")
-    op.drop_index("ix_referring_doctors_full_name", table_name="referring_doctors")
-    op.drop_index("ix_referring_doctors_branch_id", table_name="referring_doctors")
-    op.drop_index("ix_referring_doctors_id", table_name="referring_doctors")
-    op.drop_table("referring_doctors")
+    op.drop_index("ix_referring_staff_portal_username", table_name="referring_staff")
+    op.drop_index("ix_referring_staff_specialization", table_name="referring_staff")
+    op.drop_index("ix_referring_staff_city", table_name="referring_staff")
+    op.drop_index("ix_referring_staff_email", table_name="referring_staff")
+    op.drop_index("ix_referring_staff_mobile", table_name="referring_staff")
+    op.drop_index("ix_referring_staff_full_name", table_name="referring_staff")
+    op.drop_index("ix_referring_staff_branch_id", table_name="referring_staff")
+    op.drop_index("ix_referring_staff_id", table_name="referring_staff")
+    op.drop_table("referring_staff")

@@ -4,7 +4,7 @@ from app.database import get_db
 from app.utils.auth_guard import get_current_user
 from app.models.user import User
 from app.models.appointment import Appointment
-from app.models.lab_test import LabTest
+from app.models.lab_test import LabMenuItem
 from sqlalchemy import func
 
 router = APIRouter()
@@ -17,29 +17,29 @@ def get_dashboard(
     role = current_user.role
 
     if role == "admin":
-        total_patients = db.query(func.count(PatientEntry.id)).scalar()
+        total_customers = db.query(func.count(CustomerEntry.id)).scalar()
         total_appointments = db.query(func.count(Appointment.id)).scalar()
-        total_tests = db.query(func.count(LabTest.id)).scalar()
+        total_menu_items = db.query(func.count(LabMenuItem.id)).scalar()
         return {
             "role": "admin",
-            "total_patients": total_patients,
+            "total_customers": total_customers,
             "total_appointments": total_appointments,
-            "total_lab_tests": total_tests
+            "total_lab_menu_items": total_menu_items
         }
 
     elif role == "technician":
-        assigned_tests = db.query(LabTest).filter(
-            LabTest.technician_id == current_user.id,
-            LabTest.status == "pending"
+        assigned_menu_items = db.query(LabMenuItem).filter(
+            LabMenuItem.technician_id == current_user.id,
+            LabMenuItem.status == "pending"
         ).count()
-        completed_tests = db.query(LabTest).filter(
-            LabTest.technician_id == current_user.id,
-            LabTest.status == "completed"
+        completed_menu_items = db.query(LabMenuItem).filter(
+            LabMenuItem.technician_id == current_user.id,
+            LabMenuItem.status == "completed"
         ).count()
         return {
             "role": "technician",
-            "assigned_tests": assigned_tests,
-            "completed_tests": completed_tests
+            "assigned_menu_items": assigned_menu_items,
+            "completed_menu_items": completed_menu_items
         }
 
     elif role == "reception":

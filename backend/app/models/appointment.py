@@ -6,10 +6,10 @@ class Appointment(Base):
     __tablename__ = "appointments"
 
     id = Column(Integer, primary_key=True, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     calendar_day_id = Column(Integer, ForeignKey("calendar_days.id"), nullable=False)
     time_slot = Column(Time, nullable=False)
     status = Column(String, default="scheduled")  # scheduled, completed, cancelled
 
-    patient = relationship("Patient", back_populates="appointments")
+    patient = relationship("Customer", back_populates="appointments")
     calendar_day = relationship("CalendarDay", back_populates="appointments")

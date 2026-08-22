@@ -3,7 +3,7 @@ SMS Service for VaidyaVihar Diagnostic ERP
 
 Provides SMS notifications via Twilio for:
 - Appointment reminders
-- Report ready alerts
+- Order ready alerts
 - Payment confirmations
 - Critical value notifications
 - OTP verification
@@ -402,11 +402,11 @@ class SMSService:
         instructions: Optional[str] = None
     ) -> SMSResponse:
         """Send sample collection reminder SMS"""
-        tests = ", ".join(test_names)
+        menu_items = ", ".join(test_names)
         instructions_text = f"Instructions: {instructions}. " if instructions else ""
         body = (
             f"Dear {patient_name}, reminder for sample collection on {collection_date}. "
-            f"Tests: {tests}. "
+            f"MenuItems: {menu_items}. "
             f"{instructions_text}"
             f"Please fast 8-10 hours before collection if required. "
             f"- VaidyaVihar Diagnostic"

@@ -26,7 +26,7 @@ import {
   BranchPayrollHealthScore,
   BranchPayrollReadiness,
   BranchPayrollSimulationResponse,
-  BranchPayrollStatutoryReport,
+  BranchPayrollStatutoryOrder,
   PayrollAnomalyItem,
   PayrollWellnessData,
   TopEarnerItem,
@@ -55,7 +55,7 @@ export default function BranchDirectorSalaryDashboard() {
   const [health, setHealth] = useState<BranchPayrollHealthScore | null>(null)
   const [analytics, setAnalytics] = useState<BranchPayrollAnalytics | null>(null)
   const [readiness, setReadiness] = useState<BranchPayrollReadiness | null>(null)
-  const [statutory, setStatutory] = useState<BranchPayrollStatutoryReport | null>(null)
+  const [statutory, setStatutory] = useState<BranchPayrollStatutoryOrder | null>(null)
   const [anomalies, setAnomalies] = useState<PayrollAnomalyItem[]>([])
   const [wellness, setWellness] = useState<PayrollWellnessData | null>(null)
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
@@ -106,7 +106,7 @@ export default function BranchDirectorSalaryDashboard() {
       })
       if (healthRes.payroll_run?.id) {
         const [statutoryRes, wellnessRes, previewRes] = await Promise.all([
-          branchPayrollApi.getStatutoryReport(healthRes.payroll_run.id),
+          branchPayrollApi.getStatutoryOrder(healthRes.payroll_run.id),
           branchPayrollApi.getWellness(healthRes.payroll_run.id),
           branchPayrollApi.preview(healthRes.payroll_run.id),
         ])
@@ -693,9 +693,9 @@ export default function BranchDirectorSalaryDashboard() {
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-lg">
               <h3 className="text-base font-bold text-slate-900">Export Options</h3>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" onClick={() => window.open(branchPayrollApi.payrollReportUrl('pdf', activeRunId || undefined), '_blank')} className="rounded bg-slate-700 px-3 py-2 text-xs font-bold text-white">Payroll PDF</button>
-                <button type="button" onClick={() => window.open(branchPayrollApi.payrollReportUrl('excel', activeRunId || undefined), '_blank')} className="rounded bg-slate-700 px-3 py-2 text-xs font-bold text-white">Payroll Excel</button>
-                <button type="button" onClick={() => window.open(branchPayrollApi.payrollReportUrl('csv', activeRunId || undefined), '_blank')} className="rounded bg-slate-700 px-3 py-2 text-xs font-bold text-white">Payroll CSV</button>
+                <button type="button" onClick={() => window.open(branchPayrollApi.payrollOrderUrl('pdf', activeRunId || undefined), '_blank')} className="rounded bg-slate-700 px-3 py-2 text-xs font-bold text-white">Payroll PDF</button>
+                <button type="button" onClick={() => window.open(branchPayrollApi.payrollOrderUrl('excel', activeRunId || undefined), '_blank')} className="rounded bg-slate-700 px-3 py-2 text-xs font-bold text-white">Payroll Excel</button>
+                <button type="button" onClick={() => window.open(branchPayrollApi.payrollOrderUrl('csv', activeRunId || undefined), '_blank')} className="rounded bg-slate-700 px-3 py-2 text-xs font-bold text-white">Payroll CSV</button>
                 <button type="button" onClick={() => window.open(branchPayrollApi.bankFileUrl(activeRunId || undefined), '_blank')} className="rounded bg-emerald-700 px-3 py-2 text-xs font-bold text-white">Bank File</button>
               </div>
               <p className="mt-3 text-xs text-slate-500">Includes statutory-ready summaries for salary disbursement workflows.</p>
@@ -718,7 +718,7 @@ export default function BranchDirectorSalaryDashboard() {
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-lg">
-              <h3 className="text-base font-bold text-slate-900">Statutory Compliance Report</h3>
+              <h3 className="text-base font-bold text-slate-900">Statutory Compliance Order</h3>
               <div className="mt-3 overflow-x-auto">
                 <table className="min-w-full text-xs">
                   <thead className="bg-slate-100">

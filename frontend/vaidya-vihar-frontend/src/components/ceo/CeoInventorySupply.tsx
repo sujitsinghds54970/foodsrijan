@@ -317,7 +317,7 @@ const CeoInventorySupply = () => {
             <p className="text-sm font-semibold text-slate-700">High-Value Reagent Movement</p>
             <div className="mt-3 overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Reagent</th><th className="pb-2 pr-4">Used By</th><th className="pb-2 pr-4">Used On</th><th className="pb-2 pr-4">Test</th><th className="pb-2 pr-4">Qty</th><th className="pb-2">Branch</th></tr></thead>
+                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Reagent</th><th className="pb-2 pr-4">Used By</th><th className="pb-2 pr-4">Used On</th><th className="pb-2 pr-4">MenuItem</th><th className="pb-2 pr-4">Qty</th><th className="pb-2">Branch</th></tr></thead>
                 <tbody>
                   {(liveView?.high_value_reagent_movement || []).map((row, idx) => (
                     <tr key={idx} className="border-b border-slate-100">
@@ -495,7 +495,7 @@ const CeoInventorySupply = () => {
             <p className="mt-2 text-3xl font-black text-rose-700">{toCurrency(financialImpact?.inventory_carrying_cost || 0)}</p>
           </div>
           <div className={`${CARD_CLASS} col-span-12 md:col-span-6 lg:col-span-3`}>
-            <p className="text-xs uppercase text-slate-500">Cost per Test (Inventory)</p>
+            <p className="text-xs uppercase text-slate-500">Cost per MenuItem (Inventory)</p>
             <p className="mt-2 text-3xl font-black text-indigo-700">{toCurrency(financialImpact?.inventory_cost_per_test || 0)}</p>
           </div>
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-6`}>
@@ -547,7 +547,7 @@ const CeoInventorySupply = () => {
             <p className="text-sm font-semibold text-slate-700">Lot &amp; Batch Traceability</p>
             <div className="mt-3 overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Item</th><th className="pb-2 pr-4">Lot/Batch</th><th className="pb-2 pr-4">Received</th><th className="pb-2 pr-4">Used</th><th className="pb-2 pr-4">Branch</th><th className="pb-2">Test</th></tr></thead>
+                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Item</th><th className="pb-2 pr-4">Lot/Batch</th><th className="pb-2 pr-4">Received</th><th className="pb-2 pr-4">Used</th><th className="pb-2 pr-4">Branch</th><th className="pb-2">MenuItem</th></tr></thead>
                 <tbody>
                   {(compliance?.lot_batch_traceability || []).map((row, idx) => (
                     <tr key={`${row.lot_number}-${idx}`} className="border-b border-slate-100">
@@ -616,7 +616,7 @@ const CeoInventorySupply = () => {
                 <div key={idx} className="rounded-md border border-slate-200 px-3 py-2">
                   <p className="text-sm font-semibold text-slate-800">{row.item_name}</p>
                   <p className="text-xs text-slate-700">{row.issue_type} · Complaints: {row.complaint_count}</p>
-                  <p className="text-xs text-slate-600">Last Reported: {row.last_reported_on} · Status: {row.status}</p>
+                  <p className="text-xs text-slate-600">Last Ordered: {row.last_reported_on} · Status: {row.status}</p>
                 </div>
               ))}
             </div>

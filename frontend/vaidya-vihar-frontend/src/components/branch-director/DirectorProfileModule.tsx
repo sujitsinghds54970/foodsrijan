@@ -16,7 +16,7 @@ import QRCode from 'react-qr-code'
 import { useAuth } from '../../contexts/AuthContext'
 import BranchPaymentsDashboard from './BranchPaymentsDashboard'
 
-type DirectorTab = 'profile' | 'staff' | 'attendance' | 'leave' | 'reports' | 'payments'
+type DirectorTab = 'profile' | 'staff' | 'attendance' | 'leave' | 'orders' | 'payments'
 
 type DirectorProfile = {
   user_id: number
@@ -640,7 +640,7 @@ export default function DirectorProfileModule() {
               { key: 'attendance', label: 'Attendance' },
               { key: 'leave', label: 'Leave Requests' },
               { key: 'payments', label: 'Payments' },
-              { key: 'reports', label: 'Reports' },
+              { key: 'orders', label: 'Orders' },
             ].map(tab => (
               <button
                 key={tab.key}
@@ -1194,9 +1194,9 @@ export default function DirectorProfileModule() {
             </div>
           )}
 
-          {activeTab === 'reports' && (
+          {activeTab === 'orders' && (
             <div className="premium-card p-6 space-y-4">
-              <h3 className="text-2xl font-black text-slate-900">Reports & Notifications</h3>
+              <h3 className="text-2xl font-black text-slate-900">Orders & Notifications</h3>
 
               <div className="flex flex-wrap gap-3">
                 <p className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700">

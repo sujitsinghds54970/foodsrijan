@@ -24,7 +24,7 @@ export async function fetchAnalyticsTrends(branchId: number, startDate: string, 
 }
 
 export async function fetchTopReferrers(branchId: number, startDate: string, endDate: string, token?: string): Promise<TopReferrersResponse> {
-  const response = await axios.get(`${API_BASE}/api/analytics/doctors/top-referrers`, {
+  const response = await axios.get(`${API_BASE}/api/analytics/staff/top-referrers`, {
     params: { branch_id: branchId, start_date: startDate, end_date: endDate, limit: 10 },
     headers: authHeader(token),
   })

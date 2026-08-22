@@ -170,7 +170,7 @@ class BranchResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime]
     total_staff: Optional[int] = 0
-    total_patients: Optional[int] = 0
+    total_customers: Optional[int] = 0
     monthly_revenue: Optional[float] = 0.0
     modalities: Optional[List[str]] = []
 
@@ -195,7 +195,7 @@ class BranchStatistics(BaseModel):
     branch_id: int
     branch_name: str
     total_staff: int
-    total_patients: int
+    total_customers: int
     monthly_revenue: float
     total_appointments: int
     pending_payments: float
@@ -440,7 +440,7 @@ def get_branches(
     branches = query.order_by(desc(Branch.created_at)).offset(skip).limit(limit).all()
 
     results = []
-    from app.models import DailyEntry, Patient
+    from app.models import DailyEntry, Customer
     from app.models.hr import StaffProfile
 
     current_month = datetime.now().replace(day=1)
@@ -470,7 +470,7 @@ def get_branches(
         if stats_available:
             try:
                 b["total_staff"] = db.query(StaffProfile).filter(StaffProfile.branch_id == branch.id, StaffProfile.is_active.is_(True)).count()
-                b["total_patients"] = db.query(Patient).filter(Patient.branch_id == branch.id, Patient.is_active.is_(True)).count()
+                b["total_customers"] = db.query(Customer).filter(Customer.branch_id == branch.id, Customer.is_active.is_(True)).count()
                 monthly_entries = db.query(DailyEntry).filter(
                     DailyEntry.branch_id == branch.id,
                     DailyEntry.entry_date >= current_month,
@@ -480,7 +480,7 @@ def get_branches(
                 traceback.print_exc()
                 stats_available = False
                 b["total_staff"] = 0
-                b["total_patients"] = 0
+                b["total_customers"] = 0
                 b["monthly_revenue"] = 0.0
 
         results.append(b)
@@ -501,7 +501,7 @@ def get_branch(
     if current_user.role != "super_admin" and current_user.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this branch")
 
-    from app.models import DailyEntry, Patient
+    from app.models import DailyEntry, Customer
     from app.models.hr import StaffProfile
 
     try:
@@ -514,12 +514,12 @@ def get_branch(
             )
         )
         total_staff = db.query(StaffProfile).filter(StaffProfile.branch_id == branch.id, StaffProfile.is_active.is_(True)).count()
-        total_patients = db.query(Patient).filter(Patient.branch_id == branch.id, Patient.is_active.is_(True)).count()
+        total_customers = db.query(Customer).filter(Customer.branch_id == branch.id, Customer.is_active.is_(True)).count()
     except OperationalError:
         traceback.print_exc()
         monthly_revenue = 0.0
         total_staff = 0
-        total_patients = 0
+        total_customers = 0
 
     return {
         "id": branch.id,
@@ -541,7 +541,7 @@ def get_branch(
         "logo_url": branch.logo_url,
         "modalities": [m.name for m in (branch.modalities or [])],
         "total_staff": total_staff,
-        "total_patients": total_patients,
+        "total_customers": total_customers,
         "monthly_revenue": monthly_revenue,
     }
 
@@ -632,7 +632,7 @@ def delete_branch(
         branch_name = branch.name
 
         # Archive instead of hard-delete to avoid schema drift in legacy tables.
-        from app.models import Patient, User, DailyEntry, InventoryItem
+        from app.models import Customer, User, DailyEntry, InventoryItem
         from app.models.hr import StaffProfile
 
         try:
@@ -642,12 +642,12 @@ def delete_branch(
             staff_count = 0
             
         try:
-            patient_count = db.query(Patient).filter(Patient.branch_id == branch_id).count()
+            patient_count = db.query(Customer).filter(Customer.branch_id == branch_id).count()
         except Exception as e:
-            print(f"Warning: Could not count patients: {e}")
+            print(f"Warning: Could not count customers: {e}")
             # Fallback: use raw SQL without patient_id column
             try:
-                patient_count = db.query(func.count(Patient.id)).filter(Patient.branch_id == branch_id).scalar() or 0
+                patient_count = db.query(func.count(Customer.id)).filter(Customer.branch_id == branch_id).scalar() or 0
             except:
                 patient_count = 0
                 
@@ -678,9 +678,9 @@ def delete_branch(
             print(f"Warning: Could not update staff: {e}")
             
         try:
-            db.query(Patient).filter(Patient.branch_id == branch_id).update({"is_active": False})
+            db.query(Customer).filter(Customer.branch_id == branch_id).update({"is_active": False})
         except Exception as e:
-            print(f"Warning: Could not update patients: {e}")
+            print(f"Warning: Could not update customers: {e}")
             
         try:
             # Do NOT deactivate the current user (prevent logout on branch delete)
@@ -712,7 +712,7 @@ def delete_branch(
             "message": "Branch and associated data archived successfully" if total_dependencies > 0 else "Branch deleted successfully",
             "archived_records": {
                 "staff": staff_count,
-                "patients": patient_count,
+                "customers": patient_count,
                 "users": user_count,
                 "entries": entry_count,
                 "inventory": inventory_count,
@@ -742,11 +742,11 @@ def delete_branch_permanent(
         raise HTTPException(status_code=404, detail="Branch not found")
 
     # Check for dependencies
-    from app.models import Patient, User, DailyEntry, InventoryItem
+    from app.models import Customer, User, DailyEntry, InventoryItem
     from app.models.hr import StaffProfile
     
     staff_count = db.query(StaffProfile).filter(StaffProfile.branch_id == branch_id).count()
-    patient_count = db.query(Patient).filter(Patient.branch_id == branch_id).count()
+    patient_count = db.query(Customer).filter(Customer.branch_id == branch_id).count()
     user_count = db.query(User).filter(User.branch_id == branch_id).count()
     entry_count = db.query(DailyEntry).filter(DailyEntry.branch_id == branch_id).count()
     inventory_count = db.query(InventoryItem).filter(InventoryItem.branch_id == branch_id).count()
@@ -759,7 +759,7 @@ def delete_branch_permanent(
         
         # Archive associated records
         db.query(StaffProfile).filter(StaffProfile.branch_id == branch_id).update({"is_active": False})
-        db.query(Patient).filter(Patient.branch_id == branch_id).update({"is_active": False})
+        db.query(Customer).filter(Customer.branch_id == branch_id).update({"is_active": False})
         db.query(User).filter(User.branch_id == branch_id).update({"is_active": False})
         db.query(InventoryItem).filter(InventoryItem.branch_id == branch_id).update({"is_active": False})
         
@@ -779,7 +779,7 @@ def delete_branch_permanent(
             "message": "Branch and associated data archived successfully",
             "archived_records": {
                 "staff": staff_count,
-                "patients": patient_count,
+                "customers": patient_count,
                 "users": user_count,
                 "entries": entry_count,
                 "inventory": inventory_count
@@ -1023,12 +1023,12 @@ def get_branch_statistics(
         raise HTTPException(status_code=403, detail="Access denied to this branch")
 
     from app.database import Base
-    from app.models import DailyEntry, InventoryItem, Patient
+    from app.models import DailyEntry, InventoryItem, Customer
     from app.models.hr import StaffProfile
 
     Base.metadata.create_all(
         bind=db.get_bind(),
-        tables=[DailyEntry.__table__, InventoryItem.__table__, Patient.__table__, StaffProfile.__table__],
+        tables=[DailyEntry.__table__, InventoryItem.__table__, Customer.__table__, StaffProfile.__table__],
     )
 
     try:
@@ -1036,7 +1036,7 @@ def get_branch_statistics(
         end_date = datetime(year + 1, 1, 1) - timedelta(days=1) if month == 12 else datetime(year, month + 1, 1) - timedelta(days=1)
 
         total_staff = db.query(StaffProfile).filter(StaffProfile.branch_id == branch_id, StaffProfile.is_active.is_(True)).count()
-        total_patients = db.query(Patient).filter(Patient.branch_id == branch_id, Patient.is_active.is_(True)).count()
+        total_customers = db.query(Customer).filter(Customer.branch_id == branch_id, Customer.is_active.is_(True)).count()
         daily_entries = db.query(DailyEntry).filter(
             DailyEntry.branch_id == branch_id,
             DailyEntry.entry_date >= start_date,
@@ -1060,7 +1060,7 @@ def get_branch_statistics(
             branch_id=branch.id,
             branch_name=branch.name,
             total_staff=total_staff,
-            total_patients=total_patients,
+            total_customers=total_customers,
             monthly_revenue=monthly_revenue,
             total_appointments=total_appointments,
             pending_payments=pending_payments,
@@ -1073,7 +1073,7 @@ def get_branch_statistics(
             branch_id=branch.id,
             branch_name=branch.name,
             total_staff=0,
-            total_patients=0,
+            total_customers=0,
             monthly_revenue=0.0,
             total_appointments=0,
             pending_payments=0.0,

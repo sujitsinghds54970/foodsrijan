@@ -4,8 +4,8 @@ import {
   FinanceInvoice,
   FinanceTransaction,
   FinanceTransactionType,
-  GstReport,
-  ProfitLossReport,
+  GstOrder,
+  ProfitLossOrder,
 } from './types'
 
 const API_BASE = 'http://127.0.0.1:8000'
@@ -119,16 +119,16 @@ export async function getProfitLoss(params: {
   start: string
   end: string
   branch_id?: number
-}): Promise<ProfitLossReport> {
-  const response = await axios.get(`${API_BASE}/api/reports/profit-loss`, { params })
-  return response.data as ProfitLossReport
+}): Promise<ProfitLossOrder> {
+  const response = await axios.get(`${API_BASE}/api/orders/profit-loss`, { params })
+  return response.data as ProfitLossOrder
 }
 
-export async function getGstReport(params: {
+export async function getGstOrder(params: {
   month: number
   year: number
   branch_id?: number
-}): Promise<GstReport> {
-  const response = await axios.get(`${API_BASE}/api/reports/gst`, { params })
-  return response.data as GstReport
+}): Promise<GstOrder> {
+  const response = await axios.get(`${API_BASE}/api/orders/gst`, { params })
+  return response.data as GstOrder
 }

@@ -5,28 +5,28 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { useAuth } from '../../contexts/AuthContext'
 import {
   addAppointmentConsent,
-  askPatientChatbot,
-  createOrUpdatePatientGoal,
-  createPatientReferral,
+  askCustomerChatbot,
+  createOrUpdateCustomerGoal,
+  createCustomerReferral,
   createB2CAppointment,
   getB2CProfile,
-  getPatientHealthScore,
-  getPatientReminders,
-  getPatientReportSummary,
-  getPatientReportsPhase2,
-  getPatientTrends,
-  getPatientWallet,
-  getB2CTestCatalog,
+  getCustomerHealthScore,
+  getCustomerReminders,
+  getCustomerOrderSummary,
+  getCustomerOrdersPhase2,
+  getCustomerTrends,
+  getCustomerWallet,
+  getB2CMenuItemCatalog,
   getUpcomingAppointments,
-  requestPatientOtp,
-  verifyPatientOtp,
+  requestCustomerOtp,
+  verifyCustomerOtp,
 } from './b2cApi'
 
-interface PatientB2CPhase1Props {
+interface CustomerB2CPhase1Props {
   active: boolean
 }
 
-export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
+export default function CustomerB2CPhase1({ active }: CustomerB2CPhase1Props) {
   const { token } = useAuth()
   const patientToken = typeof window !== 'undefined' ? localStorage.getItem('patient_portal_token') : null
   const apiToken = patientToken || token
@@ -36,14 +36,14 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
   const [otp, setOtp] = useState('')
 
   const [profile, setProfile] = useState<any>(null)
-  const [tests, setTests] = useState<any[]>([])
+  const [menu_items, setMenuItems] = useState<any[]>([])
   const [upcoming, setUpcoming] = useState<any[]>([])
-  const [selectedTests, setSelectedTests] = useState<number[]>([])
+  const [selectedMenuItems, setSelectedMenuItems] = useState<number[]>([])
   const [appointmentType, setAppointmentType] = useState<'Home' | 'Center'>('Center')
   const [scheduledTime, setScheduledTime] = useState('')
-  const [reports, setReports] = useState<any[]>([])
-  const [selectedReport, setSelectedReport] = useState<any | null>(null)
-  const [reportSummary, setReportSummary] = useState<{ ai_summary: string; abnormal_flags: Record<string, string> } | null>(null)
+  const [orders, setOrders] = useState<any[]>([])
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null)
+  const [reportSummary, setOrderSummary] = useState<{ ai_summary: string; abnormal_flags: Record<string, string> } | null>(null)
   const [showSummaryModal, setShowSummaryModal] = useState(false)
   const [healthScore, setHealthScore] = useState<{ score: number; band: string } | null>(null)
   const [reminders, setReminders] = useState<any[]>([])
@@ -58,7 +58,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
     },
   ])
   const [consentText, setConsentText] = useState(
-    'I consent to sample collection, processing, and diagnostic report generation for selected tests.'
+    'I consent to sample collection, processing, and diagnostic report generation for selected menu_items.'
   )
   const [consentAppointmentId, setConsentAppointmentId] = useState('')
   const [wallet, setWallet] = useState<{
@@ -79,22 +79,22 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
   const [insuranceFileName, setInsuranceFileName] = useState('')
 
   const recommendation = useMemo(() => {
-    if (!tests.length) return null
-    const basic = tests.find((item) => item.name.toLowerCase().includes('cbc'))
-    const thyroid = tests.find((item) => item.name.toLowerCase().includes('thyroid'))
-    const lipid = tests.find((item) => item.name.toLowerCase().includes('lipid'))
+    if (!menu_items.length) return null
+    const basic = menu_items.find((item) => item.name.toLowerCase().includes('cbc'))
+    const thyroid = menu_items.find((item) => item.name.toLowerCase().includes('thyroid'))
+    const lipid = menu_items.find((item) => item.name.toLowerCase().includes('lipid'))
     const picks = [basic, thyroid, lipid].filter(Boolean)
     if (!picks.length) return null
 
     const total = picks.reduce((sum: number, item: any) => sum + Number(item.price || 0), 0)
     const discounted = Math.round(total * 0.9)
     return {
-      tests: picks,
+      menu_items: picks,
       total,
       discounted,
       title: 'AI Recommended Vital Screening',
     }
-  }, [tests])
+  }, [menu_items])
 
   const loadPhase1 = useCallback(async () => {
     if (!apiToken) return
@@ -102,20 +102,20 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
     try {
       const [profileData, testCatalog, upcomingData] = await Promise.all([
         getB2CProfile(apiToken),
-        getB2CTestCatalog(apiToken),
+        getB2CMenuItemCatalog(apiToken),
         getUpcomingAppointments(apiToken),
       ])
-      const [reportsData, scoreData, reminderData, trendData, walletData] = await Promise.all([
-        getPatientReportsPhase2(apiToken),
-        getPatientHealthScore(apiToken),
-        getPatientReminders(apiToken),
-        getPatientTrends(apiToken, trendBiomarker),
-        getPatientWallet(apiToken),
+      const [ordersData, scoreData, reminderData, trendData, walletData] = await Promise.all([
+        getCustomerOrdersPhase2(apiToken),
+        getCustomerHealthScore(apiToken),
+        getCustomerReminders(apiToken),
+        getCustomerTrends(apiToken, trendBiomarker),
+        getCustomerWallet(apiToken),
       ])
       setProfile(profileData)
-      setTests(testCatalog.tests || [])
+      setMenuItems(testCatalog.menu_items || [])
       setUpcoming(upcomingData.appointments || [])
-      setReports(reportsData.reports || [])
+      setOrders(ordersData.orders || [])
       setHealthScore({ score: scoreData.score, band: scoreData.band })
       setReminders(reminderData.reminders || [])
       setTrendPoints((trendData.points || []).map((item) => ({ date: item.date, value: item.value })))
@@ -138,7 +138,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
   const onRequestOtp = async (event: React.FormEvent) => {
     event.preventDefault()
     try {
-      const result = await requestPatientOtp(mobile)
+      const result = await requestCustomerOtp(mobile)
       if (result.otp_for_dev) {
         toast.success(`OTP generated: ${result.otp_for_dev}`)
       } else {
@@ -152,7 +152,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
   const onVerifyOtp = async (event: React.FormEvent) => {
     event.preventDefault()
     try {
-      const result = await verifyPatientOtp(mobile, otp)
+      const result = await verifyCustomerOtp(mobile, otp)
       toast.success(result.message)
       await loadPhase1()
     } catch (error: any) {
@@ -160,8 +160,8 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
     }
   }
 
-  const onToggleTest = (testId: number) => {
-    setSelectedTests((prev) =>
+  const onToggleMenuItem = (testId: number) => {
+    setSelectedMenuItems((prev) =>
       prev.includes(testId) ? prev.filter((id) => id !== testId) : [...prev, testId]
     )
   }
@@ -170,7 +170,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
     event.preventDefault()
     if (!apiToken) return
 
-    if (!selectedTests.length) {
+    if (!selectedMenuItems.length) {
       toast.error('Select at least one test')
       return
     }
@@ -182,12 +182,12 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
 
     try {
       await createB2CAppointment(apiToken, {
-        test_ids: selectedTests,
+        test_ids: selectedMenuItems,
         appointment_type: appointmentType,
         scheduled_time: new Date(scheduledTime).toISOString(),
       })
       toast.success('Appointment booked successfully')
-      setSelectedTests([])
+      setSelectedMenuItems([])
       await loadPhase1()
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Failed to create appointment')
@@ -217,9 +217,9 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
   const onAskAiSummary = async (report: any) => {
     if (!apiToken) return
     try {
-      const summary = await getPatientReportSummary(apiToken, report.id)
-      setSelectedReport(report)
-      setReportSummary({ ai_summary: summary.ai_summary, abnormal_flags: summary.abnormal_flags || {} })
+      const summary = await getCustomerOrderSummary(apiToken, report.id)
+      setSelectedOrder(report)
+      setOrderSummary({ ai_summary: summary.ai_summary, abnormal_flags: summary.abnormal_flags || {} })
       setShowSummaryModal(true)
       if (summary.critical_alert_required) {
         window.dispatchEvent(new Event('patient-critical-alert'))
@@ -234,7 +234,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
     if (!apiToken) return
     try {
       setTrendBiomarker(biomarker)
-      const trendData = await getPatientTrends(apiToken, biomarker)
+      const trendData = await getCustomerTrends(apiToken, biomarker)
       setTrendPoints((trendData.points || []).map((item) => ({ date: item.date, value: item.value })))
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Unable to load trend data')
@@ -250,7 +250,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
     setChatMessages((prev) => [...prev, { role: 'user', text: query }])
     setChatQuery('')
     try {
-      const result = await askPatientChatbot(apiToken, query)
+      const result = await askCustomerChatbot(apiToken, query)
       setChatMessages((prev) => [...prev, { role: 'assistant', text: result.response }])
     } catch (error: any) {
       const fallback = error?.response?.data?.detail || 'AI assistant is currently unavailable'
@@ -261,7 +261,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
   const onGenerateReferral = async () => {
     if (!apiToken) return
     try {
-      const data = await createPatientReferral(apiToken)
+      const data = await createCustomerReferral(apiToken)
       setReferralCode(data.referral_code)
       setReferralLink(data.referral_link)
       toast.success('Referral link generated')
@@ -288,7 +288,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
       return
     }
     try {
-      const saved = await createOrUpdatePatientGoal(apiToken, {
+      const saved = await createOrUpdateCustomerGoal(apiToken, {
         goal_type: goalType,
         target_date: new Date(goalTargetDate).toISOString(),
         status: goalStatus,
@@ -324,7 +324,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
         <div className="absolute -right-14 -top-14 h-36 w-36 rounded-full bg-[#f8c29a]/25" />
         <div className="absolute -bottom-16 -left-16 h-40 w-40 rounded-full bg-[#8db7a8]/15" />
         <div className="relative">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#9a6a4f]">Patient B2C Phase 1</p>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#9a6a4f]">Customer B2C Phase 1</p>
           <h2 className="mt-1 text-2xl font-black text-[#2f2a24]">Mobile-first Health Journey</h2>
           <p className="mt-2 max-w-2xl text-sm text-[#5d5348]">
             Secure OTP verification, test discovery, bookings, digital consent, and family context in one patient-safe flow.
@@ -399,7 +399,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl bg-[#fcf8f2] p-3 text-sm">
-              <p className="text-[#7f6f5f]">Patient ID</p>
+              <p className="text-[#7f6f5f]">Customer ID</p>
               <p className="font-semibold text-[#2f2a24]">{profile?.patient_id || 'N/A'}</p>
             </div>
             <div className="rounded-xl bg-[#fcf8f2] p-3 text-sm">
@@ -429,11 +429,11 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
 
       <section className="rounded-2xl border border-[#eadfce] bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-bold text-[#2f2a24]">Report Viewer</h3>
+          <h3 className="text-base font-bold text-[#2f2a24]">Order Viewer</h3>
           <p className="text-xs text-[#7f6f5f]">Open report link, then tap Ask AI for plain-English highlights.</p>
         </div>
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
-          {reports.map((report) => (
+          {orders.map((report) => (
             <div key={report.id} className="rounded-xl border border-[#eadfce] bg-[#fffdf9] p-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
@@ -450,7 +450,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    View Report
+                    View Order
                   </a>
                 ) : null}
                 <button
@@ -463,7 +463,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
               </div>
             </div>
           ))}
-          {!reports.length && <p className="text-sm text-[#7f6f5f]">No reports available yet.</p>}
+          {!orders.length && <p className="text-sm text-[#7f6f5f]">No orders available yet.</p>}
         </div>
       </section>
 
@@ -675,16 +675,16 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
       </section>
 
       <section className="rounded-2xl border border-[#eadfce] bg-white p-4 shadow-sm">
-        <h3 className="text-base font-bold text-[#2f2a24]">Book Tests & Appointments</h3>
+        <h3 className="text-base font-bold text-[#2f2a24]">Book MenuItems & Appointments</h3>
         <form className="mt-3 grid gap-4 lg:grid-cols-3" onSubmit={onBookAppointment}>
           <div className="lg:col-span-2">
-            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#8d7b66]">Test Catalog</p>
+            <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#8d7b66]">MenuItem Catalog</p>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {tests.map((test) => (
+              {menu_items.map((test) => (
                 <label
                   key={test.id}
                   className={`cursor-pointer rounded-xl border p-3 text-sm ${
-                    selectedTests.includes(test.id)
+                    selectedMenuItems.includes(test.id)
                       ? 'border-[#2f7d6b] bg-[#ebf7f3]'
                       : 'border-[#e9ddcf] bg-[#fffdfb]'
                   }`}
@@ -698,8 +698,8 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
                     <input
                       type="checkbox"
                       className="mt-1"
-                      checked={selectedTests.includes(test.id)}
-                      onChange={() => onToggleTest(test.id)}
+                      checked={selectedMenuItems.includes(test.id)}
+                      onChange={() => onToggleMenuItem(test.id)}
                     />
                   </div>
                   <p className="mt-2 text-sm font-bold text-[#c96f3f]">Rs {test.price}</p>
@@ -736,7 +736,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#8d6c23]">AI Package Card</p>
           <h3 className="mt-1 text-lg font-black text-[#45371d]">{recommendation.title}</h3>
           <p className="mt-1 text-sm text-[#5e4a25]">
-            Includes {recommendation.tests.map((item: any) => item.name).join(', ')}
+            Includes {recommendation.menu_items.map((item: any) => item.name).join(', ')}
           </p>
           <p className="mt-2 text-sm text-[#5e4a25]">
             Bundle Price: <span className="line-through">Rs {recommendation.total}</span>{' '}
@@ -755,7 +755,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
                 <th className="px-2 py-2">Type</th>
                 <th className="px-2 py-2">Scheduled</th>
                 <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2">Tests</th>
+                <th className="px-2 py-2">MenuItems</th>
               </tr>
             </thead>
             <tbody>
@@ -809,7 +809,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.14em] text-[#8d7b66]">Ask AI Summary</p>
-                <h4 className="text-lg font-bold text-[#2f2a24]">{selectedReport?.test_name || 'Report'}</h4>
+                <h4 className="text-lg font-bold text-[#2f2a24]">{selectedOrder?.test_name || 'Order'}</h4>
               </div>
               <button
                 className="rounded-lg border border-[#eadfce] px-3 py-1 text-sm"
@@ -868,7 +868,7 @@ export default function PatientB2CPhase1({ active }: PatientB2CPhase1Props) {
           <form className="flex gap-2 border-t border-[#eee5da] p-3" onSubmit={onSendChat}>
             <input
               className="flex-1 rounded-xl border border-[#dbcab8] px-3 py-2 text-sm"
-              placeholder="Ask about reports, fasting, HbA1c..."
+              placeholder="Ask about orders, fasting, HbA1c..."
               value={chatQuery}
               onChange={(event) => setChatQuery(event.target.value)}
             />

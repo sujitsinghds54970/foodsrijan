@@ -43,7 +43,7 @@ export interface FinanceExpense {
   reference_id?: string
 }
 
-export interface ProfitLossReport {
+export interface ProfitLossOrder {
   branch_id: number
   start: string
   end: string
@@ -52,7 +52,7 @@ export interface ProfitLossReport {
   net_profit: number
 }
 
-export interface GstReport {
+export interface GstOrder {
   branch_id: number
   month: number
   year: number

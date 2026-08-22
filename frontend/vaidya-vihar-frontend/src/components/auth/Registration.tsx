@@ -43,7 +43,7 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
   const [stats, setStats] = useState({
     modules: 0,
     visibility: 0,
-    patients: 0,
+    customers: 0,
   });
 
   const loadBranches = useCallback(async () => {
@@ -92,7 +92,7 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
     const counters = [
       { key: 'modules' as const, target: 20, duration: 900 },
       { key: 'visibility' as const, target: 999, duration: 1100 },
-      { key: 'patients' as const, target: 1000, duration: 1300 },
+      { key: 'customers' as const, target: 1000, duration: 1300 },
     ];
     counters.forEach(({ key, target, duration }) => {
       const steps = Math.max(1, Math.floor(duration / 30));
@@ -158,7 +158,7 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
     }
 
     if (formData.role === 'doctor' && !formData.branchId) {
-      toast.error('Branch selection is required for Doctor registration');
+      toast.error('Branch selection is required for Staff registration');
       return false;
     }
 
@@ -223,8 +223,8 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
   };
 
   const roleOptions = [
-    { value: 'patient', label: 'Patient' },
-    { value: 'doctor', label: 'Doctor' },
+    { value: 'patient', label: 'Customer' },
+    { value: 'doctor', label: 'Staff' },
   ];
 
   return (
@@ -236,7 +236,7 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
       <div className="relative z-10 grid lg:grid-cols-2 gap-8 w-full max-w-7xl items-start lg:items-center">
         <div className="text-white px-2 lg:px-6">
           <p className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.2em] bg-white/10 px-3 py-1 rounded-full border border-white/20">
-            Premium Diagnostic ERP
+            FOOD BUSINESS OPERATIONS
           </p>
           <div className="mt-6 flex items-center gap-4">
             {branding.logo ? (
@@ -247,11 +247,11 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
               </div>
             )}
             <h1 className="text-3xl md:text-4xl font-black leading-tight">
-              {branding.name || 'VaidyaVihar Diagnostic'}
+              {branding.name || 'FoodSrijan Group'}
             </h1>
           </div>
           <p className="mt-5 text-cyan-100 text-lg max-w-2xl font-semibold">
-            {branding.tagline || 'Accurate. Fast. Trusted.'}
+            {branding.tagline || 'One Platform. Infinite Possibilities.'}
           </p>
           <p className="mt-3 text-white/80 max-w-2xl">
             Register to access patient services and doctor workflows on a single secure platform.
@@ -270,8 +270,8 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
             </div>
             <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-8 text-center shadow-xl hover:scale-105 transition-transform duration-300">
               {FaHeartbeat({ className: 'mx-auto mb-3 h-8 w-8 text-rose-200' })}
-              <p className="text-3xl font-extrabold text-white">{stats.patients}+</p>
-              <p className="text-sm font-semibold text-white/90 mt-1">Happy Patients</p>
+              <p className="text-3xl font-extrabold text-white">{stats.customers}+</p>
+              <p className="text-sm font-semibold text-white/90 mt-1">Happy Customers</p>
             </div>
           </div>
         </div>
@@ -282,7 +282,7 @@ export default function Registration({ onSwitchToLogin }: RegistrationProps) {
               Create Account
             </h2>
             <p className="mt-2 text-sm text-slate-600">
-              Join {branding.name || 'VaidyaVihar Diagnostic'} System
+              Join {branding.name || 'FoodSrijan Group'} System
             </p>
           </div>
 

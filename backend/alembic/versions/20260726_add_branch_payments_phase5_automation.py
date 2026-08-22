@@ -36,7 +36,7 @@ def upgrade() -> None:
         "payment_reminders",
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False),
         sa.Column("branch_id", sa.Integer(), sa.ForeignKey("branches.id"), nullable=False),
-        sa.Column("patient_id", sa.Integer(), sa.ForeignKey("patients.id"), nullable=False),
+        sa.Column("patient_id", sa.Integer(), sa.ForeignKey("customers.id"), nullable=False),
         sa.Column("invoice_id", sa.Integer(), sa.ForeignKey("invoices.id"), nullable=True),
         sa.Column("reminder_type", sa.String(), nullable=True),
         sa.Column("channel", sa.String(), nullable=False),

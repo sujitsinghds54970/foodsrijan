@@ -18,21 +18,21 @@ from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Branch, Patient, User
+from app.models import Branch, Customer, User
 from app.models.branch_lis import (
     InstrumentCalibration,
-    LISReportArchive,
+    LISOrderArchive,
     OrderQueue,
-    ProficiencyTestRun,
+    ProficiencyMenuItemRun,
     QCResult,
     Sample,
-    TestCatalog,
-    TestPanel,
+    MenuItemCatalog,
+    MenuItemPanel,
     Worklist,
 )
 from app.models.daily_entry_module import DailyEntryModule
 from app.models.inventory import InventoryConsumptionHistory, InventoryItemV2
-from app.models.patient import PatientProfile
+from app.models.customer import CustomerProfile
 from app.services.email_service import get_email_service
 from app.services.sms_service import get_sms_service
 from app.services.whatsapp_service import get_whatsapp_service
@@ -42,10 +42,10 @@ router = APIRouter(prefix="/api/lis", tags=["Branch LIS"])
 
 
 ORDER_PRIORITIES = {"Routine", "STAT", "Emergency"}
-SAMPLE_STATUSES = {"Registered", "In Processing", "QC Passed", "Reported", "Delayed", "Rejected"}
+SAMPLE_STATUSES = {"Registered", "In Processing", "QC Passed", "Ordered", "Delayed", "Rejected"}
 
 
-class TestCatalogInput(BaseModel):
+class MenuItemCatalogInput(BaseModel):
     test_code: str
     test_name: str
     department: str = "General"
@@ -53,7 +53,7 @@ class TestCatalogInput(BaseModel):
     turnaround_minutes: int = Field(default=1440, ge=1, le=10080)
 
 
-class PanelTestItem(BaseModel):
+class PanelMenuItemItem(BaseModel):
     test_code: str
     test_name: str
     department: str = "General"
@@ -61,10 +61,10 @@ class PanelTestItem(BaseModel):
     turnaround_minutes: int = Field(default=1440, ge=1, le=10080)
 
 
-class TestPanelCreateRequest(BaseModel):
+class MenuItemPanelCreateRequest(BaseModel):
     panel_name: str
     description: Optional[str] = None
-    tests: List[PanelTestItem]
+    menu_items: List[PanelMenuItemItem]
 
 
 class OrderCreateRequest(BaseModel):
@@ -75,7 +75,7 @@ class OrderCreateRequest(BaseModel):
     doctor_name: Optional[str] = None
     priority: str = "Routine"
     panel_id: Optional[int] = None
-    tests: List[PanelTestItem] = Field(default_factory=list)
+    menu_items: List[PanelMenuItemItem] = Field(default_factory=list)
     notes: Optional[str] = None
 
 
@@ -97,7 +97,7 @@ class LISOrderSummary(BaseModel):
     status: str
     expected_tat_minutes: int
     due_at: Optional[str] = None
-    tests: List[Dict[str, object]]
+    menu_items: List[Dict[str, object]]
     created_at: str
 
 
@@ -107,7 +107,7 @@ class LISHealthScoreResponse(BaseModel):
     average_tat_minutes: float
     qc_failure_rate: float
     sample_rejection_rate: float
-    pending_tests: int
+    pending_menu_items: int
     branch_name: Optional[str] = None
     last_updated: str
 
@@ -116,7 +116,7 @@ class LISStatsResponse(BaseModel):
     todays_test_volume: int
     average_tat_minutes: float
     tat_breakdown: Dict[str, float]
-    pending_tests_count: int
+    pending_menu_items_count: int
     pending_by_department: Dict[str, int]
     sample_rejection_rate: float
     qc_status: str
@@ -168,7 +168,7 @@ class ProficiencyRunRequest(BaseModel):
     notes: Optional[str] = None
 
 
-class ReportGenerateRequest(BaseModel):
+class OrderGenerateRequest(BaseModel):
     order_id: int
     sample_id: Optional[int] = None
     template_name: str = "Default LIS Template"
@@ -178,7 +178,7 @@ class ReportGenerateRequest(BaseModel):
     summary: Optional[str] = None
 
 
-class BulkReportGenerateRequest(BaseModel):
+class BulkOrderGenerateRequest(BaseModel):
     order_ids: List[int]
     template_name: str = "Default LIS Template"
     signed_by: Optional[str] = None
@@ -199,10 +199,10 @@ def _normalize_priority(priority: str) -> str:
     return "Routine"
 
 
-def _split_tests_from_daily_entry(test_name: str) -> List[dict]:
-    tests = [part.strip() for part in (test_name or "").split(",") if part.strip()]
-    if not tests:
-        return [{"test_code": "GEN-TEST", "test_name": "General Test", "department": "General", "sample_type": "Blood", "turnaround_minutes": 1440}]
+def _split_menu_items_from_daily_entry(test_name: str) -> List[dict]:
+    menu_items = [part.strip() for part in (test_name or "").split(",") if part.strip()]
+    if not menu_items:
+        return [{"test_code": "GEN-TEST", "test_name": "General MenuItem", "department": "General", "sample_type": "Blood", "turnaround_minutes": 1440}]
     return [
         {
             "test_code": f"AUTO-{idx + 1}",
@@ -211,7 +211,7 @@ def _split_tests_from_daily_entry(test_name: str) -> List[dict]:
             "sample_type": "Blood",
             "turnaround_minutes": 1440,
         }
-        for idx, name in enumerate(tests)
+        for idx, name in enumerate(menu_items)
     ]
 
 
@@ -232,7 +232,7 @@ def _status_from_score(score: int) -> str:
 
 
 def _sample_is_pending(sample: Sample) -> bool:
-    return sample.status not in {"Reported", "Rejected"}
+    return sample.status not in {"Ordered", "Rejected"}
 
 
 def _order_summary(order: OrderQueue) -> LISOrderSummary:
@@ -247,7 +247,7 @@ def _order_summary(order: OrderQueue) -> LISOrderSummary:
         status=order.status,
         expected_tat_minutes=order.expected_tat_minutes,
         due_at=order.due_at.isoformat() if order.due_at else None,
-        tests=order.tests_json or [],
+        menu_items=order.menu_items_json or [],
         created_at=order.created_at.isoformat(),
     )
 
@@ -346,9 +346,9 @@ async def _deliver_report_channels(
             response = await whatsapp_service.send_report_ready_message(
                 mobile,
                 patient_name,
-                "LIS Report",
+                "LIS Order",
                 report_number,
-                f"/api/lis/reports/archive?report_number={report_number}",
+                f"/api/lis/orders/archive?report_number={report_number}",
             )
             sent_channels.append({"channel": "whatsapp", "status": "sent" if response.success else "failed"})
         elif normalized == "email":
@@ -362,27 +362,27 @@ async def _deliver_report_channels(
     return sent_channels
 
 
-def _ensure_patient_in_branch(db: Session, branch_id: int, patient_id: Optional[int]) -> Optional[Patient]:
+def _ensure_patient_in_branch(db: Session, branch_id: int, patient_id: Optional[int]) -> Optional[Customer]:
     if not patient_id:
         return None
-    patient = db.query(Patient).filter(Patient.id == patient_id, Patient.branch_id == branch_id).first()
+    patient = db.query(Customer).filter(Customer.id == patient_id, Customer.branch_id == branch_id).first()
     if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found in branch")
+        raise HTTPException(status_code=404, detail="Customer not found in branch")
     return patient
 
 
-def _resolve_tests_for_order(db: Session, branch_id: int, payload: OrderCreateRequest) -> List[dict]:
+def _resolve_menu_items_for_order(db: Session, branch_id: int, payload: OrderCreateRequest) -> List[dict]:
     if payload.panel_id:
         panel = (
-            db.query(TestPanel)
-            .filter(TestPanel.id == payload.panel_id, TestPanel.branch_id == branch_id, TestPanel.is_active.is_(True))
+            db.query(MenuItemPanel)
+            .filter(MenuItemPanel.id == payload.panel_id, MenuItemPanel.branch_id == branch_id, MenuItemPanel.is_active.is_(True))
             .first()
         )
         if not panel:
             raise HTTPException(status_code=404, detail="Panel not found for branch")
-        return list(panel.tests_json or [])
-    if payload.tests:
-        return [item.dict() for item in payload.tests]
+        return list(panel.menu_items_json or [])
+    if payload.menu_items:
+        return [item.dict() for item in payload.menu_items]
     if payload.daily_entry_id:
         entry = (
             db.query(DailyEntryModule)
@@ -391,25 +391,25 @@ def _resolve_tests_for_order(db: Session, branch_id: int, payload: OrderCreateRe
         )
         if not entry:
             raise HTTPException(status_code=404, detail="Daily entry not found for branch")
-        return _split_tests_from_daily_entry(entry.test_name)
-    raise HTTPException(status_code=400, detail="Provide tests, panel_id, or daily_entry_id")
+        return _split_menu_items_from_daily_entry(entry.test_name)
+    raise HTTPException(status_code=400, detail="Provide menu_items, panel_id, or daily_entry_id")
 
 
 @router.post("/catalog")
 def create_test_catalog_item(
-    payload: TestCatalogInput,
+    payload: MenuItemCatalogInput,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     branch_id = _require_branch_id(current_user)
     existing = (
-        db.query(TestCatalog)
-        .filter(TestCatalog.branch_id == branch_id, TestCatalog.test_code == payload.test_code.strip())
+        db.query(MenuItemCatalog)
+        .filter(MenuItemCatalog.branch_id == branch_id, MenuItemCatalog.test_code == payload.test_code.strip())
         .first()
     )
     if existing:
-        raise HTTPException(status_code=409, detail="Test code already exists in branch catalog")
-    item = TestCatalog(branch_id=branch_id, **payload.dict())
+        raise HTTPException(status_code=409, detail="MenuItem code already exists in branch catalog")
+    item = MenuItemCatalog(branch_id=branch_id, **payload.dict())
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -423,15 +423,15 @@ def list_test_catalog(
     db: Session = Depends(get_db),
 ):
     branch_id = _require_branch_id(current_user)
-    query = db.query(TestCatalog).filter(TestCatalog.branch_id == branch_id, TestCatalog.is_active.is_(True))
+    query = db.query(MenuItemCatalog).filter(MenuItemCatalog.branch_id == branch_id, MenuItemCatalog.is_active.is_(True))
     if q:
         token = f"%{q.strip()}%"
         query = query.filter(
-            (TestCatalog.test_code.ilike(token))
-            | (TestCatalog.test_name.ilike(token))
-            | (TestCatalog.department.ilike(token))
+            (MenuItemCatalog.test_code.ilike(token))
+            | (MenuItemCatalog.test_name.ilike(token))
+            | (MenuItemCatalog.department.ilike(token))
         )
-    rows = query.order_by(TestCatalog.test_name.asc()).limit(200).all()
+    rows = query.order_by(MenuItemCatalog.test_name.asc()).limit(200).all()
     return [
         {
             "id": row.id,
@@ -447,22 +447,22 @@ def list_test_catalog(
 
 @router.post("/panels")
 def create_test_panel(
-    payload: TestPanelCreateRequest,
+    payload: MenuItemPanelCreateRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     branch_id = _require_branch_id(current_user)
-    panel = TestPanel(
+    panel = MenuItemPanel(
         branch_id=branch_id,
         panel_name=payload.panel_name.strip(),
         description=payload.description,
-        tests_json=[test.dict() for test in payload.tests],
+        menu_items_json=[test.dict() for test in payload.menu_items],
         created_by=current_user.id,
     )
     db.add(panel)
     db.commit()
     db.refresh(panel)
-    return {"id": panel.id, "panel_name": panel.panel_name, "tests": panel.tests_json}
+    return {"id": panel.id, "panel_name": panel.panel_name, "menu_items": panel.menu_items_json}
 
 
 @router.get("/panels")
@@ -472,9 +472,9 @@ def list_test_panels(
 ):
     branch_id = _require_branch_id(current_user)
     rows = (
-        db.query(TestPanel)
-        .filter(TestPanel.branch_id == branch_id, TestPanel.is_active.is_(True))
-        .order_by(TestPanel.updated_at.desc())
+        db.query(MenuItemPanel)
+        .filter(MenuItemPanel.branch_id == branch_id, MenuItemPanel.is_active.is_(True))
+        .order_by(MenuItemPanel.updated_at.desc())
         .all()
     )
     return [
@@ -482,7 +482,7 @@ def list_test_panels(
             "id": row.id,
             "panel_name": row.panel_name,
             "description": row.description,
-            "tests": row.tests_json or [],
+            "menu_items": row.menu_items_json or [],
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
         for row in rows
@@ -497,7 +497,7 @@ def create_lis_order(
 ):
     branch_id = _require_branch_id(current_user)
     priority = _normalize_priority(payload.priority)
-    tests = _resolve_tests_for_order(db, branch_id, payload)
+    menu_items = _resolve_menu_items_for_order(db, branch_id, payload)
     patient = _ensure_patient_in_branch(db, branch_id, payload.patient_id)
 
     daily_entry: Optional[DailyEntryModule] = None
@@ -517,13 +517,13 @@ def create_lis_order(
         if duplicate:
             raise HTTPException(status_code=409, detail="Daily entry is already queued in LIS")
 
-    expected_tat = max(int(test.get("turnaround_minutes", 1440)) for test in tests)
+    expected_tat = max(int(test.get("turnaround_minutes", 1440)) for test in menu_items)
     if priority == "STAT":
         expected_tat = max(30, int(expected_tat * 0.7))
     elif priority == "Emergency":
         expected_tat = max(15, int(expected_tat * 0.5))
 
-    profile = db.query(PatientProfile).filter(PatientProfile.patient_id == patient.id).first() if patient else None
+    profile = db.query(CustomerProfile).filter(CustomerProfile.patient_id == patient.id).first() if patient else None
     patient_name = (
         payload.patient_name
         or (f"{patient.first_name} {patient.last_name}".strip() if patient else "")
@@ -548,14 +548,14 @@ def create_lis_order(
         status="Registered",
         expected_tat_minutes=expected_tat,
         due_at=datetime.utcnow() + timedelta(minutes=expected_tat),
-        tests_json=tests,
+        menu_items_json=menu_items,
         notes=payload.notes,
         created_by=current_user.id,
     )
     db.add(order)
     db.flush()
 
-    first_test = tests[0]
+    first_test = menu_items[0]
     sample = Sample(
         branch_id=branch_id,
         order_id=order.id,
@@ -641,7 +641,7 @@ def get_lis_health_score(
         .filter(Sample.branch_id == branch_id, Sample.registered_at >= now - timedelta(days=30))
         .all()
     )
-    pending_tests = sum(1 for sample in samples if _sample_is_pending(sample))
+    pending_menu_items = sum(1 for sample in samples if _sample_is_pending(sample))
     rejected = sum(1 for sample in samples if sample.status == "Rejected")
     sample_rejection_rate = round((rejected / len(samples) * 100.0), 2) if samples else 0.0
 
@@ -657,7 +657,7 @@ def get_lis_health_score(
     score = 100
     score -= min(35, int(qc_failure_rate * 2))
     score -= min(25, int(sample_rejection_rate * 2))
-    score -= min(20, int(pending_tests * 0.8))
+    score -= min(20, int(pending_menu_items * 0.8))
     score -= min(20, int(max(tat - 180, 0) / 30))
     score = max(0, min(100, score))
 
@@ -668,7 +668,7 @@ def get_lis_health_score(
         average_tat_minutes=tat,
         qc_failure_rate=qc_failure_rate,
         sample_rejection_rate=sample_rejection_rate,
-        pending_tests=pending_tests,
+        pending_menu_items=pending_menu_items,
         branch_name=branch.name if branch else None,
         last_updated=now.isoformat(),
     )
@@ -723,7 +723,7 @@ def get_lis_stats(
         todays_test_volume=len(todays_orders),
         average_tat_minutes=tat_average,
         tat_breakdown=tat_breakdown,
-        pending_tests_count=len(pending_samples),
+        pending_menu_items_count=len(pending_samples),
         pending_by_department=pending_by_department,
         sample_rejection_rate=sample_rejection_rate,
         qc_status=_qc_status_label(qc_failure_rate),
@@ -753,7 +753,7 @@ def update_sample_status(
         sample.completed_at = datetime.utcnow()
     elif payload.status == "In Processing":
         sample.started_at = datetime.utcnow()
-    elif payload.status == "Reported":
+    elif payload.status == "Ordered":
         sample.reported_at = datetime.utcnow()
         sample.completed_at = sample.completed_at or datetime.utcnow()
     elif payload.status == "QC Passed":
@@ -763,11 +763,11 @@ def update_sample_status(
     if order:
         open_samples = (
             db.query(func.count(Sample.id))
-            .filter(and_(Sample.order_id == order.id, Sample.status.notin_(["Reported", "Rejected"])))
+            .filter(and_(Sample.order_id == order.id, Sample.status.notin_(["Ordered", "Rejected"])))
             .scalar()
         )
         if open_samples == 0:
-            order.status = "Reported"
+            order.status = "Ordered"
         elif payload.status in {"In Processing", "QC Passed"}:
             order.status = "In Processing"
 
@@ -853,7 +853,7 @@ def get_analyzer_status(
         bucket["sample_count"] += 1
         if sample.status == "In Processing":
             bucket["in_processing"] += 1
-        if sample.status == "Reported":
+        if sample.status == "Ordered":
             bucket["reported"] += 1
 
     calibration_payload = [
@@ -1017,14 +1017,14 @@ def upsert_calibration(
     }
 
 
-@router.post("/proficiency-tests")
+@router.post("/proficiency-menu_items")
 def create_proficiency_test_run(
     payload: ProficiencyRunRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     branch_id = _require_branch_id(current_user)
-    run = ProficiencyTestRun(
+    run = ProficiencyMenuItemRun(
         branch_id=branch_id,
         program_name=payload.program_name.strip(),
         cycle_name=payload.cycle_name.strip(),
@@ -1039,16 +1039,16 @@ def create_proficiency_test_run(
     return {"id": run.id, "program_name": run.program_name, "status": run.participation_status, "score": run.score}
 
 
-@router.get("/proficiency-tests")
+@router.get("/proficiency-menu_items")
 def list_proficiency_test_runs(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     branch_id = _require_branch_id(current_user)
     rows = (
-        db.query(ProficiencyTestRun)
-        .filter(ProficiencyTestRun.branch_id == branch_id)
-        .order_by(ProficiencyTestRun.created_at.desc())
+        db.query(ProficiencyMenuItemRun)
+        .filter(ProficiencyMenuItemRun.branch_id == branch_id)
+        .order_by(ProficiencyMenuItemRun.created_at.desc())
         .all()
     )
     return [
@@ -1130,7 +1130,7 @@ def get_reagent_consumption_analytics(
             continue
         qty = float(row.quantity or 0)
         unit_cost = float(item.unit_cost or 0)
-        test_name = (row.test_name or "Unknown Test").strip()
+        test_name = (row.test_name or "Unknown MenuItem").strip()
         department = (item.department or "General").strip()
         analyzer = "Unassigned Analyzer"
         if row.notes and "analyzer=" in row.notes:
@@ -1149,9 +1149,9 @@ def get_reagent_consumption_analytics(
     }
 
 
-@router.post("/reports/generate")
+@router.post("/orders/generate")
 async def generate_lis_report(
-    payload: ReportGenerateRequest,
+    payload: OrderGenerateRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1168,15 +1168,15 @@ async def generate_lis_report(
         sample = db.query(Sample).filter(Sample.order_id == order.id, Sample.branch_id == branch_id).order_by(Sample.id.asc()).first()
 
     previous = (
-        db.query(LISReportArchive)
-        .filter(LISReportArchive.branch_id == branch_id, LISReportArchive.order_id == order.id)
-        .order_by(LISReportArchive.version.desc())
+        db.query(LISOrderArchive)
+        .filter(LISOrderArchive.branch_id == branch_id, LISOrderArchive.order_id == order.id)
+        .order_by(LISOrderArchive.version.desc())
         .first()
     )
     next_version = 1 if not previous else int(previous.version) + 1
     report_number = _report_number(branch_id)
-    patient = db.query(Patient).filter(Patient.id == order.patient_id, Patient.branch_id == branch_id).first() if order.patient_id else None
-    profile = db.query(PatientProfile).filter(PatientProfile.patient_id == patient.id).first() if patient else None
+    patient = db.query(Customer).filter(Customer.id == order.patient_id, Customer.branch_id == branch_id).first() if order.patient_id else None
+    profile = db.query(CustomerProfile).filter(CustomerProfile.patient_id == patient.id).first() if patient else None
 
     report_payload = {
         "report_number": report_number,
@@ -1185,7 +1185,7 @@ async def generate_lis_report(
         "patient_code": order.patient_code,
         "doctor_name": order.doctor_name,
         "priority": order.priority,
-        "tests": order.tests_json or [],
+        "menu_items": order.menu_items_json or [],
         "summary": payload.summary or "Results validated and approved for release.",
         "legal_note": payload.legal_note or "Digitally signed LIS report for compliance use.",
     }
@@ -1197,7 +1197,7 @@ async def generate_lis_report(
         report_number=report_number,
         channels=payload.channels,
     )
-    archive = LISReportArchive(
+    archive = LISOrderArchive(
         branch_id=branch_id,
         order_id=order.id,
         sample_id=sample.id if sample else None,
@@ -1213,10 +1213,10 @@ async def generate_lis_report(
     )
     db.add(archive)
     if sample:
-        sample.status = "Reported"
+        sample.status = "Ordered"
         sample.reported_at = datetime.utcnow()
         sample.completed_at = sample.completed_at or datetime.utcnow()
-    order.status = "Reported"
+    order.status = "Ordered"
     db.commit()
     db.refresh(archive)
     return {
@@ -1229,9 +1229,9 @@ async def generate_lis_report(
     }
 
 
-@router.post("/reports/bulk-generate")
-async def bulk_generate_lis_reports(
-    payload: BulkReportGenerateRequest,
+@router.post("/orders/bulk-generate")
+async def bulk_generate_lis_orders(
+    payload: BulkOrderGenerateRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1244,7 +1244,7 @@ async def bulk_generate_lis_reports(
         if not order:
             continue
         report = await generate_lis_report(
-            ReportGenerateRequest(
+            OrderGenerateRequest(
                 order_id=order.id,
                 template_name=payload.template_name,
                 signed_by=payload.signed_by,
@@ -1254,10 +1254,10 @@ async def bulk_generate_lis_reports(
             db=db,
         )
         results.append({"order_id": order.id, **report})
-    return {"total_requested": len(payload.order_ids), "generated": len(results), "reports": results}
+    return {"total_requested": len(payload.order_ids), "generated": len(results), "orders": results}
 
 
-@router.get("/reports/archive")
+@router.get("/orders/archive")
 def get_lis_report_archive(
     search: Optional[str] = Query(default=None),
     report_number: Optional[str] = Query(default=None),
@@ -1265,17 +1265,17 @@ def get_lis_report_archive(
     db: Session = Depends(get_db),
 ):
     branch_id = _require_branch_id(current_user)
-    query = db.query(LISReportArchive).filter(LISReportArchive.branch_id == branch_id)
+    query = db.query(LISOrderArchive).filter(LISOrderArchive.branch_id == branch_id)
     if report_number:
-        query = query.filter(LISReportArchive.report_number == report_number.strip())
+        query = query.filter(LISOrderArchive.report_number == report_number.strip())
     if search:
         token = f"%{search.strip()}%"
-        query = query.join(OrderQueue, OrderQueue.id == LISReportArchive.order_id).filter(
-            (LISReportArchive.report_number.ilike(token))
+        query = query.join(OrderQueue, OrderQueue.id == LISOrderArchive.order_id).filter(
+            (LISOrderArchive.report_number.ilike(token))
             | (OrderQueue.patient_name.ilike(token))
             | (OrderQueue.patient_code.ilike(token))
         )
-    rows = query.order_by(LISReportArchive.created_at.desc(), LISReportArchive.version.desc()).limit(500).all()
+    rows = query.order_by(LISOrderArchive.created_at.desc(), LISOrderArchive.version.desc()).limit(500).all()
     return [
         {
             "id": row.id,
@@ -1310,7 +1310,7 @@ def lis_analytics_performance(
         department = sample.department or "General"
         entry = by_department.setdefault(department, {"department": department, "volume": 0, "reported": 0, "tat_total": 0.0, "tat_count": 0})
         entry["volume"] += 1
-        if sample.status == "Reported":
+        if sample.status == "Ordered":
             entry["reported"] += 1
         if sample.started_at and sample.completed_at:
             entry["tat_total"] += (sample.completed_at - sample.started_at).total_seconds() / 60.0
@@ -1467,7 +1467,7 @@ def lis_compliance_report(
 ):
     branch_id = _require_branch_id(current_user)
     qc_recent = db.query(QCResult).filter(QCResult.branch_id == branch_id, QCResult.created_at >= datetime.utcnow() - timedelta(days=30)).all()
-    proficiency = db.query(ProficiencyTestRun).filter(ProficiencyTestRun.branch_id == branch_id).order_by(ProficiencyTestRun.created_at.desc()).limit(12).all()
+    proficiency = db.query(ProficiencyMenuItemRun).filter(ProficiencyMenuItemRun.branch_id == branch_id).order_by(ProficiencyMenuItemRun.created_at.desc()).limit(12).all()
     calibration_due = db.query(InstrumentCalibration).filter(InstrumentCalibration.branch_id == branch_id).all()
     overdue_calibration = [
         row for row in calibration_due if row.next_due_at is not None and row.next_due_at < datetime.utcnow()
@@ -1494,8 +1494,8 @@ def enqueue_daily_ops_entry_to_lis(
     if not entry:
         raise HTTPException(status_code=404, detail="Daily entry not found for LIS queueing")
 
-    tests = _split_tests_from_daily_entry(entry.test_name)
-    expected_tat = max(int(test.get("turnaround_minutes", 1440)) for test in tests)
+    menu_items = _split_menu_items_from_daily_entry(entry.test_name)
+    expected_tat = max(int(test.get("turnaround_minutes", 1440)) for test in menu_items)
     order = OrderQueue(
         branch_id=branch_id,
         daily_entry_id=entry.id,
@@ -1509,7 +1509,7 @@ def enqueue_daily_ops_entry_to_lis(
         status="Registered",
         expected_tat_minutes=expected_tat,
         due_at=datetime.utcnow() + timedelta(minutes=expected_tat),
-        tests_json=tests,
+        menu_items_json=menu_items,
         notes=entry.remarks,
         created_by=created_by,
     )
@@ -1520,8 +1520,8 @@ def enqueue_daily_ops_entry_to_lis(
         order_id=order.id,
         sample_code=_new_sample_code(branch_id),
         barcode_value=_new_sample_code(branch_id),
-        sample_type=str(tests[0].get("sample_type") or "Blood"),
-        department=str(tests[0].get("department") or "General"),
+        sample_type=str(menu_items[0].get("sample_type") or "Blood"),
+        department=str(menu_items[0].get("department") or "General"),
         status="Registered",
         expected_completion_at=order.due_at,
     )

@@ -2,9 +2,9 @@
 QR Code Service for VaidyaVihar Diagnostic ERP
 
 Generates QR codes for:
-- Patient ID cards
+- Customer ID cards
 - Sample tracking
-- Report access
+- Order access
 - Appointment verification
 """
 
@@ -181,7 +181,7 @@ class QRCodeService:
             "type": "sample",
             "sample_id": sample_id,
             "patient_id": patient_id,
-            "tests": test_types,
+            "menu_items": test_types,
             "collection_date": collection_date,
             "branch": branch_code,
             "generated_at": datetime.now().isoformat()

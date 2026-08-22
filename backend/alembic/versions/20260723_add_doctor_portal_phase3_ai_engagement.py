@@ -24,7 +24,7 @@ def upgrade() -> None:
         sa.Column("benefits", sa.JSON(), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(["doctor_id"], ["doctors.id"]),
+        sa.ForeignKeyConstraint(["doctor_id"], ["staff.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_doctor_loyalty_rewards_id", "doctor_loyalty_rewards", ["id"], unique=False)

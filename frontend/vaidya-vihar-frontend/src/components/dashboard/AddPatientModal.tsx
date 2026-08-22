@@ -11,16 +11,16 @@ import {
 import { useForm, Controller } from 'react-hook-form';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { Patient } from '../../types/daily-entry';
+import { Customer } from '../../types/daily-entry';
 
-interface AddPatientModalProps {
+interface AddCustomerModalProps {
   open: boolean;
   onClose: () => void;
-  onPatientAdded: (patient: Patient) => void;
+  onCustomerAdded: (patient: Customer) => void;
   branchId: number;
 }
 
-interface PatientFormData {
+interface CustomerFormData {
   first_name: string;
   last_name: string;
   phone: string;
@@ -29,13 +29,13 @@ interface PatientFormData {
   address?: string;
 }
 
-const AddPatientModal: React.FC<AddPatientModalProps> = ({
+const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
   open,
   onClose,
-  onPatientAdded,
+  onCustomerAdded,
   branchId,
 }) => {
-  const { control, handleSubmit, reset, formState: { errors } } = useForm<PatientFormData>({
+  const { control, handleSubmit, reset, formState: { errors } } = useForm<CustomerFormData>({
     defaultValues: {
       first_name: '',
       last_name: '',
@@ -45,15 +45,15 @@ const AddPatientModal: React.FC<AddPatientModalProps> = ({
   });
   const [loading, setLoading] = useState(false);
 
-  const onSubmit = async (data: PatientFormData) => {
+  const onSubmit = async (data: CustomerFormData) => {
     setLoading(true);
     try {
-      const response = await axios.post('/api/patients', {
+      const response = await axios.post('/api/customers', {
         ...data,
         branch_id: branchId,
       });
-      onPatientAdded(response.data);
-      toast.success('Patient added successfully!');
+      onCustomerAdded(response.data);
+      toast.success('Customer added successfully!');
       reset();
       onClose();
     } catch (error: any) {
@@ -65,7 +65,7 @@ const AddPatientModal: React.FC<AddPatientModalProps> = ({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Add New Patient (Daily Entry)</DialogTitle>
+      <DialogTitle>Add New Customer (Daily Entry)</DialogTitle>
       <form onSubmit={handleSubmit(onSubmit)}>
         <DialogContent>
           <Controller
@@ -159,7 +159,7 @@ const AddPatientModal: React.FC<AddPatientModalProps> = ({
         <DialogActions>
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" variant="contained" disabled={loading}>
-            {loading ? 'Adding...' : 'Add Patient'}
+            {loading ? 'Adding...' : 'Add Customer'}
           </Button>
         </DialogActions>
       </form>
@@ -167,5 +167,5 @@ const AddPatientModal: React.FC<AddPatientModalProps> = ({
   );
 };
 
-export default AddPatientModal;
+export default AddCustomerModal;
 

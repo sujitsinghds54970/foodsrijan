@@ -1,6 +1,6 @@
 """
 OTP Authentication Routes
-Unified OTP login system for all user roles (Patient, Staff, Director, Doctor, CEO)
+Unified OTP login system for all user roles (Customer, Staff, Director, Staff, CEO)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status

@@ -2,25 +2,25 @@ import React, { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import axios from 'axios'
 
-export default function Reports() {
+export default function Orders() {
   const { user } = useAuth()
-  const [reportType, setReportType] = useState('daily')
+  const [reportType, setOrderType] = useState('daily')
   const [dateRange, setDateRange] = useState({
     start_date: new Date().toISOString().split('T')[0],
     end_date: new Date().toISOString().split('T')[0]
   })
   const [loading, setLoading] = useState(false)
-  const [reportData, setReportData] = useState<any[]>([])
+  const [reportData, setOrderData] = useState<any[]>([])
 
   const reportTypes = [
-    { value: 'daily', label: 'Daily Entry Report', description: 'Patient visits and fees for specific dates' },
+    { value: 'daily', label: 'Daily Entry Order', description: 'Customer visits and fees for specific dates' },
     { value: 'monthly', label: 'Monthly Summary', description: 'Monthly patient statistics and revenue' },
-    { value: 'patient-history', label: 'Patient History', description: 'Complete patient visit history' },
-    { value: 'revenue', label: 'Revenue Report', description: 'Financial summary and analysis' },
-    { value: 'staff-performance', label: 'Staff Performance', description: 'Doctor consultation statistics' }
+    { value: 'patient-history', label: 'Customer History', description: 'Complete patient visit history' },
+    { value: 'revenue', label: 'Revenue Order', description: 'Financial summary and analysis' },
+    { value: 'staff-performance', label: 'Staff Performance', description: 'Staff consultation statistics' }
   ]
 
-  const generateReport = async () => {
+  const generateOrder = async () => {
     try {
       setLoading(true)
       
@@ -50,7 +50,7 @@ export default function Reports() {
       }
 
       const response = await axios.get(endpoint, { params })
-      setReportData(response.data || [])
+      setOrderData(response.data || [])
       
     } catch (error) {
       console.error('Error generating report:', error)
@@ -95,7 +95,7 @@ export default function Reports() {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
       
-      alert('Report exported successfully!')
+      alert('Order exported successfully!')
       
     } catch (error) {
       console.error('Error exporting report:', error)
@@ -183,25 +183,25 @@ export default function Reports() {
       <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
-            <p className="text-gray-600 mt-1">Generate and export comprehensive reports</p>
+            <h1 className="text-2xl font-bold text-gray-900">Orders & Analytics</h1>
+            <p className="text-gray-600 mt-1">Generate and export comprehensive orders</p>
           </div>
         </div>
       </div>
 
-      {/* Report Configuration */}
+      {/* Order Configuration */}
       <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Report Configuration</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Configuration</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Report Type */}
+          {/* Order Type */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Report Type
+              Order Type
             </label>
             <select
               value={reportType}
-              onChange={(e) => setReportType(e.target.value)}
+              onChange={(e) => setOrderType(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {reportTypes.map((type) => (
@@ -273,7 +273,7 @@ export default function Reports() {
         {/* Action Buttons */}
         <div className="flex space-x-3 mt-6">
           <button
-            onClick={generateReport}
+            onClick={generateOrder}
             disabled={loading}
             className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-2"
           >
@@ -287,7 +287,7 @@ export default function Reports() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             )}
-            <span>{loading ? 'Generating...' : 'Generate Report'}</span>
+            <span>{loading ? 'Generating...' : 'Generate Order'}</span>
           </button>
           
           <button
@@ -312,11 +312,11 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Report Preview */}
+      {/* Order Preview */}
       {reportData.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
           <div className="p-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Report Preview</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Order Preview</h2>
             <p className="text-sm text-gray-500">
               {reportTypes.find(t => t.value === reportType)?.label} - {dateRange.start_date} to {dateRange.end_date}
             </p>
@@ -329,7 +329,7 @@ export default function Reports() {
                     Date
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Patients
+                    Customers
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Revenue
@@ -346,7 +346,7 @@ export default function Reports() {
                       {row.date || row.visit_date || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {row.patient_count || row.total_patients || 'N/A'}
+                      {row.patient_count || row.total_customers || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       ₹{(row.total_revenue || row.revenue || 0).toLocaleString()}
@@ -364,7 +364,7 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Quick Reports */}
+      {/* Quick Orders */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
           <div className="flex items-center space-x-3">
@@ -378,12 +378,12 @@ export default function Reports() {
           </div>
           <button 
             onClick={() => {
-              setReportType('daily')
+              setOrderType('daily')
               setDateRange({
                 start_date: new Date().toISOString().split('T')[0],
                 end_date: new Date().toISOString().split('T')[0]
               })
-              generateReport()
+              generateOrder()
             }}
             className="w-full mt-4 bg-blue-50 text-blue-700 py-2 rounded-lg hover:bg-blue-100 transition-colors"
           >
@@ -397,15 +397,15 @@ export default function Reports() {
               <span className="text-white text-lg">📈</span>
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">Monthly Report</h3>
+              <h3 className="font-semibold text-gray-900">Monthly Order</h3>
               <p className="text-sm text-gray-500">Complete monthly analysis</p>
             </div>
           </div>
           <button 
             onClick={() => {
-              setReportType('monthly')
+              setOrderType('monthly')
               getCurrentMonth()
-              generateReport()
+              generateOrder()
             }}
             className="w-full mt-4 bg-green-50 text-green-700 py-2 rounded-lg hover:bg-green-100 transition-colors"
           >
@@ -425,9 +425,9 @@ export default function Reports() {
           </div>
           <button 
             onClick={() => {
-              setReportType('revenue')
+              setOrderType('revenue')
               getCurrentMonth()
-              generateReport()
+              generateOrder()
             }}
             className="w-full mt-4 bg-purple-50 text-purple-700 py-2 rounded-lg hover:bg-purple-100 transition-colors"
           >

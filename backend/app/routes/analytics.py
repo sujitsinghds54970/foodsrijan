@@ -80,14 +80,14 @@ def build_daily_snapshot(db: Session, snapshot_date: date, branch_id: int) -> Da
     pathology_count = 0
     ct_mri_count = 0
     other_count = 0
-    total_tests = 0
+    total_menu_items = 0
 
     for entry in entries:
         total_revenue += _to_float(entry.total_amount)
         patient_count += 1
 
         tokens = _extract_test_tokens(entry.test_name)
-        total_tests += len(tokens) if tokens else 1
+        total_menu_items += len(tokens) if tokens else 1
 
         modality = _classify_modality(entry.test_name)
         if modality == "xray":
@@ -127,7 +127,7 @@ def build_daily_snapshot(db: Session, snapshot_date: date, branch_id: int) -> Da
     snapshot.pathology_count = pathology_count
     snapshot.ct_mri_count = ct_mri_count
     snapshot.other_count = other_count
-    snapshot.total_tests = total_tests
+    snapshot.total_menu_items = total_menu_items
     snapshot.avg_bill_value = avg_bill_value
 
     db.flush()
@@ -239,7 +239,7 @@ def analytics_dashboard_branch(
     total_expenses = sum(_to_float(r.total_expenses) for r in rows)
     net_profit = sum(_to_float(r.net_profit) for r in rows)
     patient_count = sum(int(r.patient_count or 0) for r in rows)
-    total_tests = sum(int(r.total_tests or 0) for r in rows)
+    total_menu_items = sum(int(r.total_menu_items or 0) for r in rows)
 
     modality_split = {
         "xray": sum(int(r.xray_count or 0) for r in rows),
@@ -262,7 +262,7 @@ def analytics_dashboard_branch(
             "total_expenses": round(total_expenses, 2),
             "net_profit": round(net_profit, 2),
             "patient_count": patient_count,
-            "total_tests": total_tests,
+            "total_menu_items": total_menu_items,
             "avg_bill_value": round((total_revenue / patient_count) if patient_count else 0.0, 2),
         },
         "modality_split": modality_split,
@@ -313,7 +313,7 @@ def analytics_trends(
             "date": row.date.isoformat(),
             "revenue": round(_to_float(row.total_revenue), 2),
             "expenses": round(_to_float(row.total_expenses), 2),
-            "patients": int(row.patient_count or 0),
+            "customers": int(row.patient_count or 0),
         }
         for row in rows
     ]
@@ -322,17 +322,17 @@ def analytics_trends(
     for row in rows:
         key = row.date.strftime("%Y-%m")
         if key not in monthly_map:
-            monthly_map[key] = {"revenue": 0.0, "expenses": 0.0, "patients": 0.0}
+            monthly_map[key] = {"revenue": 0.0, "expenses": 0.0, "customers": 0.0}
         monthly_map[key]["revenue"] += _to_float(row.total_revenue)
         monthly_map[key]["expenses"] += _to_float(row.total_expenses)
-        monthly_map[key]["patients"] += int(row.patient_count or 0)
+        monthly_map[key]["customers"] += int(row.patient_count or 0)
 
     monthly = [
         {
             "month": key,
             "revenue": round(values["revenue"], 2),
             "expenses": round(values["expenses"], 2),
-            "patients": int(values["patients"]),
+            "customers": int(values["customers"]),
         }
         for key, values in sorted(monthly_map.items())
     ]
@@ -346,7 +346,7 @@ def analytics_trends(
     }
 
 
-@router.get("/api/analytics/doctors/top-referrers")
+@router.get("/api/analytics/staff/top-referrers")
 def analytics_top_referrers(
     branch_id: int = Query(...),
     start_date: Optional[date] = Query(None),
@@ -453,9 +453,9 @@ def analytics_forecast_next_month(
     margin = int(round(predicted * 0.05))
     return {
         "branch_id": branch_id,
-        "predicted_patients": predicted,
+        "predicted_customers": predicted,
         "confidence_margin_percent": 5,
         "lower_bound": max(predicted - margin, 0),
         "upper_bound": predicted + margin,
-        "series_used": [{"month": month, "patients": value} for month, value in points],
+        "series_used": [{"month": month, "customers": value} for month, value in points],
     }

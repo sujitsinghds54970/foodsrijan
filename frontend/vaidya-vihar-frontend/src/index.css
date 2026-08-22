@@ -5,27 +5,34 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
-  /* Premium Color Palette - Classy & Modern */
-  --bg-app: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+  --brand-primary: #E85D3A;
+  --brand-secondary: #2D3436;
+  --brand-accent: #FDCB6E;
+  --brand-success: #00B894;
+  --brand-bg: #F8F9FA;
+  --brand-text: #2D3436;
+  --brand-white: #FFFFFF;
+  --brand-shadow: 0 4px 6px rgba(45, 52, 54, 0.08);
+  --brand-radius: 12px;
+  --bg-app: linear-gradient(135deg, #2D3436 0%, #596365 100%);
   --bg-surface: #ffffff;
   --bg-surface-soft: #fafbff;
   --bg-dark: #0a0a1f;
-  --bg-gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  --bg-gradient-secondary: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  --bg-gradient-success: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  --bg-gradient-premium: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-  --bg-gradient-royal: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+  --bg-gradient-primary: linear-gradient(135deg, #E85D3A 0%, #f47d5d 100%);
+  --bg-gradient-secondary: linear-gradient(135deg, #2D3436 0%, #596365 100%);
+  --bg-gradient-success: linear-gradient(135deg, #00B894 0%, #55d6b6 100%);
+  --bg-gradient-premium: linear-gradient(135deg, #FDCB6E 0%, #f6a94b 100%);
   
   /* Text Colors */
-  --text-primary: #1a1a2e;
+  --text-primary: #2D3436;
   --text-secondary: #64748b;
   --text-muted: #94a3b8;
   --text-white: #ffffff;
   
   /* Brand Colors - Premium Red & Gold Accents */
-  --brand-red: #dc2626;
-  --brand-red-dark: #991b1b;
-  --brand-gold: #f59e0b;
+  --brand-red: #E85D3A;
+  --brand-red-dark: #b94127;
+  --brand-gold: #FDCB6E;
   --brand-purple: #8b5cf6;
   --brand-blue: #3b82f6;
   --brand-cyan: #06b6d4;
@@ -33,7 +40,7 @@
   
   /* Borders & Shadows */
   --border-soft: #e2e8f0;
-  --border-premium: rgba(139, 92, 246, 0.2);
+  --border-premium: rgba(232, 93, 58, 0.2);
   --shadow-soft: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   --shadow-card: 0 10px 40px rgba(0, 0, 0, 0.08);
   --shadow-premium: 0 20px 60px rgba(139, 92, 246, 0.3);
@@ -65,10 +72,7 @@ body {
     'Ubuntu', 'Cantarell', 'Helvetica Neue', sans-serif;
   color: var(--text-primary);
   background: 
-    radial-gradient(circle at 10% 20%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 90% 80%, rgba(236, 72, 153, 0.12) 0%, transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 70%),
-    linear-gradient(180deg, #fafbff 0%, #f0f4ff 50%, #e8efff 100%);
+    linear-gradient(135deg, #fffaf6 0%, #f8f9fa 55%, #eef8f5 100%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -87,7 +91,7 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #8b5cf6 0%, #ec4899 100%);
+  background: linear-gradient(180deg, #E85D3A 0%, #FDCB6E 100%);
   border-radius: 10px;
   border: 2px solid #f1f5f9;
   transition: all 0.3s ease;
@@ -244,8 +248,8 @@ input, textarea, select {
 
 input:focus, textarea:focus, select:focus {
   outline: none;
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+  border-color: #E85D3A;
+  box-shadow: 0 0 0 3px rgba(232, 93, 58, 0.12);
 }
 
 /* Premium Badge */

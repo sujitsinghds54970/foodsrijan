@@ -2,7 +2,7 @@
 AI Routes for VaidyaVihar Diagnostic ERP
 
 Provides AI-powered endpoints:
-- Test recommendations based on symptoms
+- MenuItem recommendations based on symptoms
 - Risk assessment
 - Predictive analytics
 """
@@ -34,7 +34,7 @@ class SymptomInput(BaseModel):
     description: Optional[str] = Field(None, description="Additional description")
 
 
-class TestRecommendationRequest(BaseModel):
+class MenuItemRecommendationRequest(BaseModel):
     """Request for test recommendations"""
     symptoms: List[SymptomInput]
     age: int = Field(..., ge=0, le=150)
@@ -42,14 +42,14 @@ class TestRecommendationRequest(BaseModel):
     medical_history: Optional[List[str]] = Field(default_factory=list)
 
 
-class TestRecommendationResponse(BaseModel):
-    """Test recommendation response"""
+class MenuItemRecommendationResponse(BaseModel):
+    """MenuItem recommendation response"""
     recommendations: List[Dict]
-    total_tests: int
+    total_menu_items: int
     total_estimated_cost: float
-    critical_tests: int
-    moderate_tests: int
-    routine_tests: int
+    critical_menu_items: int
+    moderate_menu_items: int
+    routine_menu_items: int
 
 
 class RiskAssessmentRequest(BaseModel):
@@ -75,7 +75,7 @@ class RiskAssessmentResponse(BaseModel):
 
 @router.post("/ai/test-recommendations")
 def get_ai_test_recommendations(
-    request: TestRecommendationRequest,
+    request: MenuItemRecommendationRequest,
     current_user = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
@@ -83,8 +83,8 @@ def get_ai_test_recommendations(
     Get AI-powered test recommendations based on symptoms.
     
     The AI analyzes:
-    - Reported symptoms and their severity
-    - Patient age and gender
+    - Ordered symptoms and their severity
+    - Customer age and gender
     - Medical history
     - Standard diagnostic protocols
     """
@@ -114,7 +114,7 @@ def get_ai_test_recommendations(
     moderate = sum(1 for r in recommendations if r.priority == "moderate")
     routine = len(recommendations) - critical - moderate
     
-    return TestRecommendationResponse(
+    return MenuItemRecommendationResponse(
         recommendations=[
             {
                 "test_code": r.test_code,
@@ -127,11 +127,11 @@ def get_ai_test_recommendations(
             }
             for r in recommendations
         ],
-        total_tests=len(recommendations),
+        total_menu_items=len(recommendations),
         total_estimated_cost=total_cost,
-        critical_tests=critical,
-        moderate_tests=moderate,
-        routine_tests=routine
+        critical_menu_items=critical,
+        moderate_menu_items=moderate,
+        routine_menu_items=routine
     )
 
 
@@ -221,7 +221,7 @@ def predict_no_show(
     Predict probability of patient no-show for an appointment.
     
     Args:
-        patient_id: Patient ID
+        patient_id: Customer ID
         appointment_history: List of past appointments with status
         day_of_week: Day of week (0=Monday, 6=Sunday)
         time_slot: Appointment time (HH:MM format)
@@ -286,12 +286,12 @@ def get_diagnostic_protocol(
     """
     Get standard diagnostic protocol for a condition.
     
-    Returns recommended tests and workflow for a specific condition.
+    Returns recommended menu_items and workflow for a specific condition.
     """
     protocols = {
         "diabetes": {
-            "screening_tests": ["FBS", "HbA1c", "PPBS"],
-            "complication_tests": ["KFT", "LFT", "Lipid Profile", "Urine Routine", "Fundus Examination"],
+            "screening_menu_items": ["FBS", "HbA1c", "PPBS"],
+            "complication_menu_items": ["KFT", "LFT", "Lipid Profile", "Urine Routine", "Fundus Examination"],
             "follow_up_frequency": "Every 3 months for HbA1c",
             "lifestyle_recommendations": [
                 "Monitor blood sugar daily",
@@ -301,8 +301,8 @@ def get_diagnostic_protocol(
             ]
         },
         "hypertension": {
-            "screening_tests": ["BP Monitoring", "ECG", "KFT", "Lipid Profile"],
-            "complication_tests": ["2D Echo", "Fundus Examination", "KFT"],
+            "screening_menu_items": ["BP Monitoring", "ECG", "KFT", "Lipid Profile"],
+            "complication_menu_items": ["2D Echo", "Fundus Examination", "KFT"],
             "follow_up_frequency": "Every 1-3 months",
             "lifestyle_recommendations": [
                 "Low sodium diet",
@@ -312,8 +312,8 @@ def get_diagnostic_protocol(
             ]
         },
         "thyroid_disorder": {
-            "screening_tests": ["T3", "T4", "TSH"],
-            "additional_tests": ["Anti-TPO Antibody"],
+            "screening_menu_items": ["T3", "T4", "TSH"],
+            "additional_menu_items": ["Anti-TPO Antibody"],
             "follow_up_frequency": "Every 6 weeks until stable, then every 6-12 months",
             "lifestyle_recommendations": [
                 "Regular sleep schedule",
@@ -322,8 +322,8 @@ def get_diagnostic_protocol(
             ]
         },
         "anemia": {
-            "screening_tests": ["CBC", "Hemoglobin", "RBC Count"],
-            "additional_tests": ["Iron Studies", "Vitamin B12", "Folate", "Peripheral Smear"],
+            "screening_menu_items": ["CBC", "Hemoglobin", "RBC Count"],
+            "additional_menu_items": ["Iron Studies", "Vitamin B12", "Folate", "Peripheral Smear"],
             "follow_up_frequency": "4-6 weeks after treatment",
             "lifestyle_recommendations": [
                 "Iron-rich diet",
@@ -332,8 +332,8 @@ def get_diagnostic_protocol(
             ]
         },
         "fever_of_unknown_origin": {
-            "screening_tests": ["CBC", "CRP", "ESR", "Blood Culture", "Urine Culture", "CXR"],
-            "additional_tests": ["WIDAL", "Dengue NS1", "Malaria Parasite", "Liver Function Test"],
+            "screening_menu_items": ["CBC", "CRP", "ESR", "Blood Culture", "Urine Culture", "CXR"],
+            "additional_menu_items": ["WIDAL", "Dengue NS1", "Malaria Parasite", "Liver Function MenuItem"],
             "follow_up_frequency": "As per investigation results",
             "lifestyle_recommendations": [
                 "Adequate hydration",
@@ -362,7 +362,7 @@ def get_health_tips(
     current_user = Depends(require_staff)
 ):
     """
-    Get health tips for patients based on category.
+    Get health tips for customers based on category.
     """
     tips = {
         "general": [
@@ -374,7 +374,7 @@ def get_health_tips(
         ],
         "blood_test": [
             "Fast for 8-12 hours before fasting blood sugar test",
-            "Avoid alcohol for 24 hours before liver function tests",
+            "Avoid alcohol for 24 hours before liver function menu_items",
             "Inform about current medications",
             "Stay relaxed before blood draw"
         ],

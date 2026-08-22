@@ -1,11 +1,11 @@
 """
-Doctor Management Routes for VaidyaVihar Diagnostic ERP
+Staff Management Routes for VaidyaVihar Diagnostic ERP
 
 Provides comprehensive doctor management including:
-- Doctor registration and profile management
+- Staff registration and profile management
 - Multi-branch assignment across city
 - City-wide patient report distribution
-- Doctor portal access
+- Staff portal access
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
@@ -18,10 +18,10 @@ import random
 
 from app.database import get_db
 from app.utils.auth_system import auth_guard, require_staff, get_current_user, require_role
-from app.models import User, Branch, Patient, LabResult, Doctor as DoctorModel
-from app.models.doctor import (
-    Doctor, DoctorBranch, ReportDistribution, ReportTemplate, 
-    DoctorNotification, DoctorSchedule
+from app.models import User, Branch, Customer, LabResult, Staff as StaffModel
+from app.models.staff import (
+    Staff, StaffBranch, OrderDistribution, OrderTemplate, 
+    StaffNotification, StaffSchedule
 )
 from pydantic import BaseModel, Field, EmailStr
 from enum import Enum
@@ -31,7 +31,7 @@ router = APIRouter()
 
 # ============ Pydantic Schemas ============
 
-class DoctorCreate(BaseModel):
+class StaffCreate(BaseModel):
     """Schema for creating a new doctor"""
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
@@ -63,9 +63,9 @@ class DoctorCreate(BaseModel):
         "urgent_alerts": True
     }
     
-    # Report preferences
+    # Order preferences
     report_preferences: Optional[dict] = {
-        "auto_receive_reports": True,
+        "auto_receive_orders": True,
         "pdf_format": True,
         "dicom_format": False,
         "email_delivery": True,
@@ -74,7 +74,7 @@ class DoctorCreate(BaseModel):
     }
 
 
-class DoctorUpdate(BaseModel):
+class StaffUpdate(BaseModel):
     """Schema for updating doctor"""
     first_name: Optional[str] = Field(None, max_length=100)
     last_name: Optional[str] = Field(None, max_length=100)
@@ -96,17 +96,17 @@ class DoctorUpdate(BaseModel):
     
     can_access_dashboard: Optional[bool] = None
     can_view_patient_history: Optional[bool] = None
-    can_download_reports: Optional[bool] = None
-    can_print_reports: Optional[bool] = None
+    can_download_orders: Optional[bool] = None
+    can_print_orders: Optional[bool] = None
     
     is_active: Optional[bool] = None
 
 
-class DoctorBranchAssign(BaseModel):
+class StaffBranchAssign(BaseModel):
     """Schema for assigning doctor to branch"""
     branch_id: int
     is_primary: bool = False
-    receive_all_reports: bool = True
+    receive_all_orders: bool = True
     preferred_test_types: Optional[List[str]] = [
         "blood_test", "urine_test", "xray", "ultrasound", "ct_scan", 
         "mri", "ecg", "echo", "pathology", "microbiology"
@@ -114,8 +114,8 @@ class DoctorBranchAssign(BaseModel):
     notes: Optional[str] = None
 
 
-class DoctorResponse(BaseModel):
-    """Doctor response schema"""
+class StaffResponse(BaseModel):
+    """Staff response schema"""
     id: int
     doctor_id: str
     first_name: str
@@ -137,9 +137,9 @@ class DoctorResponse(BaseModel):
         from_attributes = True
 
 
-class DoctorListResponse(BaseModel):
+class StaffListResponse(BaseModel):
     """Paginated doctor list response"""
-    doctors: List[DoctorResponse]
+    staff: List[StaffResponse]
     total: int
     page: int
     limit: int
@@ -154,37 +154,37 @@ def generate_doctor_id():
     return f"DOC-{number:05d}"
 
 
-# ============ Doctor CRUD Routes ============
+# ============ Staff CRUD Routes ============
 
-@router.post("/doctors/", response_model=DoctorResponse, status_code=201)
+@router.post("/staff/", response_model=StaffResponse, status_code=201)
 def create_doctor(
-    doctor_data: DoctorCreate,
+    doctor_data: StaffCreate,
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
     """Create a new doctor record"""
     
     # Check for duplicate email
-    existing = db.query(Doctor).filter(Doctor.email == doctor_data.email).first()
+    existing = db.query(Staff).filter(Staff.email == doctor_data.email).first()
     if existing:
         raise HTTPException(
             status_code=400,
-            detail="Doctor with this email already exists"
+            detail="Staff with this email already exists"
         )
     
     # Check for duplicate phone
-    existing = db.query(Doctor).filter(Doctor.phone == doctor_data.phone).first()
+    existing = db.query(Staff).filter(Staff.phone == doctor_data.phone).first()
     if existing:
         raise HTTPException(
             status_code=400,
-            detail="Doctor with this phone number already exists"
+            detail="Staff with this phone number already exists"
         )
     
     # Generate doctor ID
     doctor_id = generate_doctor_id()
     
     # Create doctor
-    db_doctor = Doctor(
+    db_doctor = Staff(
         doctor_id=doctor_id,
         first_name=doctor_data.first_name,
         last_name=doctor_data.last_name,
@@ -224,8 +224,8 @@ def create_doctor(
     return db_doctor
 
 
-@router.get("/doctors/", response_model=DoctorListResponse)
-def get_doctors(
+@router.get("/staff/", response_model=StaffListResponse)
+def get_staff(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     search: Optional[str] = Query(None),
@@ -237,41 +237,41 @@ def get_doctors(
     db: Session = Depends(get_db)
 ):
     """
-    Get list of all doctors across all branches.
+    Get list of all staff across all branches.
     Supports city-wide search and filtering.
     """
-    query = db.query(Doctor)
+    query = db.query(Staff)
     
     # Search filter
     if search:
         search_filter = or_(
-            Doctor.first_name.ilike(f"%{search}%"),
-            Doctor.last_name.ilike(f"%{search}%"),
-            Doctor.email.ilike(f"%{search}%"),
-            Doctor.phone.ilike(f"%{search}%"),
-            Doctor.specialization.ilike(f"%{search}%"),
-            Doctor.qualification.ilike(f"%{search}%")
+            Staff.first_name.ilike(f"%{search}%"),
+            Staff.last_name.ilike(f"%{search}%"),
+            Staff.email.ilike(f"%{search}%"),
+            Staff.phone.ilike(f"%{search}%"),
+            Staff.specialization.ilike(f"%{search}%"),
+            Staff.qualification.ilike(f"%{search}%")
         )
         query = query.filter(search_filter)
     
     # Specialization filter
     if specialization:
-        query = query.filter(Doctor.specialization == specialization)
+        query = query.filter(Staff.specialization == specialization)
     
     # City filter
     if city:
-        query = query.filter(Doctor.clinic_city.ilike(f"%{city}%"))
+        query = query.filter(Staff.clinic_city.ilike(f"%{city}%"))
     
     # Active filter
     if is_active is not None:
-        query = query.filter(Doctor.is_active == is_active)
+        query = query.filter(Staff.is_active == is_active)
     
-    # Branch filter (doctors assigned to specific branch)
+    # Branch filter (staff assigned to specific branch)
     if branch_id:
-        query = query.join(DoctorBranch).filter(
+        query = query.join(StaffBranch).filter(
             and_(
-                DoctorBranch.branch_id == branch_id,
-                DoctorBranch.is_active == True
+                StaffBranch.branch_id == branch_id,
+                StaffBranch.is_active == True
             )
         )
     
@@ -279,14 +279,14 @@ def get_doctors(
     total = query.count()
     
     # Apply pagination
-    doctors = query.order_by(desc(Doctor.created_at)).offset(skip).limit(limit).all()
+    staff = query.order_by(desc(Staff.created_at)).offset(skip).limit(limit).all()
     
     # Calculate pagination
     total_pages = (total + limit - 1) // limit
     page = (skip // limit) + 1
     
     return {
-        "doctors": doctors,
+        "staff": staff,
         "total": total,
         "page": page,
         "limit": limit,
@@ -294,17 +294,17 @@ def get_doctors(
     }
 
 
-@router.get("/doctors/{doctor_id}", response_model=DoctorResponse)
+@router.get("/staff/{doctor_id}", response_model=StaffResponse)
 def get_doctor(
     doctor_id: int,
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
     """Get doctor details by ID"""
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    doctor = db.query(Staff).filter(Staff.id == doctor_id).first()
     
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
     
     # Get branch information
     branches = []
@@ -323,18 +323,18 @@ def get_doctor(
     return response_data
 
 
-@router.put("/doctors/{doctor_id}", response_model=DoctorResponse)
+@router.put("/staff/{doctor_id}", response_model=StaffResponse)
 def update_doctor(
     doctor_id: int,
-    doctor_data: DoctorUpdate,
+    doctor_data: StaffUpdate,
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
     """Update doctor information"""
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    doctor = db.query(Staff).filter(Staff.id == doctor_id).first()
     
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
     
     # Update fields
     update_data = doctor_data.dict(exclude_unset=True)
@@ -357,17 +357,17 @@ def update_doctor(
     return doctor
 
 
-@router.delete("/doctors/{doctor_id}")
+@router.delete("/staff/{doctor_id}")
 def deactivate_doctor(
     doctor_id: int,
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
     """Deactivate a doctor"""
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    doctor = db.query(Staff).filter(Staff.id == doctor_id).first()
     
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
     
     # Deactivate doctor
     doctor.is_active = False
@@ -389,23 +389,23 @@ def deactivate_doctor(
         description=f"Deactivated doctor {doctor.first_name} {doctor.last_name}"
     )
     
-    return {"message": "Doctor deactivated successfully"}
+    return {"message": "Staff deactivated successfully"}
 
 
-# ============ Doctor Branch Assignment Routes ============
+# ============ Staff Branch Assignment Routes ============
 
-@router.post("/doctors/{doctor_id}/branches")
+@router.post("/staff/{doctor_id}/branches")
 def assign_doctor_to_branch(
     doctor_id: int,
-    assignment: DoctorBranchAssign,
+    assignment: StaffBranchAssign,
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
     """Assign a doctor to a branch"""
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    doctor = db.query(Staff).filter(Staff.id == doctor_id).first()
     
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
     
     # Validate branch exists
     branch = db.query(Branch).filter(Branch.id == assignment.branch_id).first()
@@ -413,29 +413,29 @@ def assign_doctor_to_branch(
         raise HTTPException(status_code=404, detail="Branch not found")
     
     # Check if already assigned
-    existing = db.query(DoctorBranch).filter(
+    existing = db.query(StaffBranch).filter(
         and_(
-            DoctorBranch.doctor_id == doctor_id,
-            DoctorBranch.branch_id == assignment.branch_id
+            StaffBranch.doctor_id == doctor_id,
+            StaffBranch.branch_id == assignment.branch_id
         )
     ).first()
     
     if existing:
         # Reactivate if already exists
         existing.is_active = True
-        existing.receive_all_reports = assignment.receive_all_reports
+        existing.receive_all_orders = assignment.receive_all_orders
         existing.preferred_test_types = assignment.preferred_test_types
         existing.notes = assignment.notes
         existing.assigned_by = current_user.id
         db.commit()
-        return {"message": "Doctor assignment updated", "assignment": existing.id}
+        return {"message": "Staff assignment updated", "assignment": existing.id}
     
     # Create new assignment
-    db_assignment = DoctorBranch(
+    db_assignment = StaffBranch(
         doctor_id=doctor_id,
         branch_id=assignment.branch_id,
         is_primary=assignment.is_primary,
-        receive_all_reports=assignment.receive_all_reports,
+        receive_all_orders=assignment.receive_all_orders,
         preferred_test_types=assignment.preferred_test_types,
         notes=assignment.notes,
         assigned_by=current_user.id,
@@ -456,10 +456,10 @@ def assign_doctor_to_branch(
         description=f"Assigned Dr. {doctor.first_name} {doctor.last_name} to {branch.name}"
     )
     
-    return {"message": "Doctor assigned to branch successfully", "assignment_id": db_assignment.id}
+    return {"message": "Staff assigned to branch successfully", "assignment_id": db_assignment.id}
 
 
-@router.delete("/doctors/{doctor_id}/branches/{branch_id}")
+@router.delete("/staff/{doctor_id}/branches/{branch_id}")
 def remove_doctor_from_branch(
     doctor_id: int,
     branch_id: int,
@@ -467,10 +467,10 @@ def remove_doctor_from_branch(
     db: Session = Depends(get_db)
 ):
     """Remove a doctor from a branch"""
-    assignment = db.query(DoctorBranch).filter(
+    assignment = db.query(StaffBranch).filter(
         and_(
-            DoctorBranch.doctor_id == doctor_id,
-            DoctorBranch.branch_id == branch_id
+            StaffBranch.doctor_id == doctor_id,
+            StaffBranch.branch_id == branch_id
         )
     ).first()
     
@@ -484,10 +484,10 @@ def remove_doctor_from_branch(
     
     db.commit()
     
-    return {"message": "Doctor removed from branch"}
+    return {"message": "Staff removed from branch"}
 
 
-@router.get("/doctors/{doctor_id}/branches")
+@router.get("/staff/{doctor_id}/branches")
 def get_doctor_branches(
     doctor_id: int,
     include_inactive: bool = False,
@@ -495,17 +495,17 @@ def get_doctor_branches(
     db: Session = Depends(get_db)
 ):
     """Get all branches a doctor is assigned to"""
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    doctor = db.query(Staff).filter(Staff.id == doctor_id).first()
     
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
     
-    query = db.query(DoctorBranch).filter(DoctorBranch.doctor_id == doctor_id)
+    query = db.query(StaffBranch).filter(StaffBranch.doctor_id == doctor_id)
     
     if not include_inactive:
-        query = query.filter(DoctorBranch.is_active == True)
+        query = query.filter(StaffBranch.is_active == True)
     
-    assignments = query.order_by(desc(DoctorBranch.is_primary)).all()
+    assignments = query.order_by(desc(StaffBranch.is_primary)).all()
     
     result = []
     for assignment in assignments:
@@ -516,7 +516,7 @@ def get_doctor_branches(
             "branch_name": branch.name if branch else None,
             "branch_location": branch.location if branch else None,
             "is_primary": assignment.is_primary,
-            "receive_all_reports": assignment.receive_all_reports,
+            "receive_all_orders": assignment.receive_all_orders,
             "preferred_test_types": assignment.preferred_test_types,
             "assigned_date": assignment.assigned_date,
             "is_active": assignment.is_active
@@ -525,10 +525,10 @@ def get_doctor_branches(
     return result
 
 
-# ============ City-Wide Doctor Search ============
+# ============ City-Wide Staff Search ============
 
-@router.get("/doctors/search/city-wide")
-def search_doctors_city_wide(
+@router.get("/staff/search/city-wide")
+def search_staff_city_wide(
     q: str = Query(..., min_length=2),
     specialization: Optional[str] = Query(None),
     test_type: Optional[str] = Query(None),
@@ -537,36 +537,36 @@ def search_doctors_city_wide(
     db: Session = Depends(get_db)
 ):
     """
-    Search doctors across all branches in the city.
-    Returns doctors who can receive specific test types.
+    Search staff across all branches in the city.
+    Returns staff who can receive specific test types.
     """
-    query = db.query(Doctor).filter(Doctor.is_active == True)
+    query = db.query(Staff).filter(Staff.is_active == True)
     
     # Text search
     search_filter = or_(
-        Doctor.first_name.ilike(f"%{q}%"),
-        Doctor.last_name.ilike(f"%{q}%"),
-        Doctor.email.ilike(f"%{q}%"),
-        Doctor.specialization.ilike(f"%{q}%"),
-        Doctor.qualification.ilike(f"%{q}%")
+        Staff.first_name.ilike(f"%{q}%"),
+        Staff.last_name.ilike(f"%{q}%"),
+        Staff.email.ilike(f"%{q}%"),
+        Staff.specialization.ilike(f"%{q}%"),
+        Staff.qualification.ilike(f"%{q}%")
     )
     query = query.filter(search_filter)
     
     # Specialization filter
     if specialization:
-        query = query.filter(Doctor.specialization == specialization)
+        query = query.filter(Staff.specialization == specialization)
     
-    # Get doctors
-    doctors = query.limit(limit).all()
+    # Get staff
+    staff = query.limit(limit).all()
     
     result = []
-    for doctor in doctors:
+    for doctor in staff:
         # Check if doctor can receive specific test type
         can_receive = True
         if test_type:
             can_receive = False
             for branch_assignment in doctor.branches:
-                if branch_assignment.is_active and branch_assignment.receive_all_reports:
+                if branch_assignment.is_active and branch_assignment.receive_all_orders:
                     can_receive = True
                     break
                 if branch_assignment.is_active and test_type in (branch_assignment.preferred_test_types or []):
@@ -587,7 +587,7 @@ def search_doctors_city_wide(
                 "branches_count": len([b for b in doctor.branches if b.is_active])
             })
     
-    return {"doctors": result, "total": len(result)}
+    return {"staff": result, "total": len(result)}
 
 
 @router.get("/specializations")
@@ -597,11 +597,11 @@ def get_specializations(
 ):
     """Get list of all specializations"""
     specializations = db.query(
-        Doctor.specialization,
-        func.count(Doctor.id).label("doctor_count")
+        Staff.specialization,
+        func.count(Staff.id).label("doctor_count")
     ).filter(
-        Doctor.is_active == True
-    ).group_by(Doctor.specialization).all()
+        Staff.is_active == True
+    ).group_by(Staff.specialization).all()
     
     return [
         {"specialization": s, "doctor_count": c}
@@ -609,9 +609,9 @@ def get_specializations(
     ]
 
 
-# ============ Doctor Portal Authentication ============
+# ============ Staff Portal Authentication ============
 
-@router.post("/doctors/{doctor_id}/generate-portal-access")
+@router.post("/staff/{doctor_id}/generate-portal-access")
 def generate_doctor_portal_access(
     doctor_id: int,
     current_user: User = Depends(require_role(["admin", "branch_admin"])),
@@ -621,10 +621,10 @@ def generate_doctor_portal_access(
     from passlib.context import CryptContext
     import secrets
     
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    doctor = db.query(Staff).filter(Staff.id == doctor_id).first()
     
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
     
     # Generate password
     password = secrets.token_urlsafe(8)
@@ -636,8 +636,8 @@ def generate_doctor_portal_access(
     doctor.hashed_password = hashed
     doctor.can_access_dashboard = True
     doctor.can_view_patient_history = True
-    doctor.can_download_reports = True
-    doctor.can_print_reports = True
+    doctor.can_download_orders = True
+    doctor.can_print_orders = True
     
     db.commit()
     
@@ -659,7 +659,7 @@ def generate_doctor_portal_access(
     }
 
 
-@router.get("/doctors/{doctor_id}/portal-dashboard")
+@router.get("/staff/{doctor_id}/portal-dashboard")
 def get_doctor_portal_dashboard(
     doctor_id: int,
     days: int = Query(30, ge=1, le=365),
@@ -667,10 +667,10 @@ def get_doctor_portal_dashboard(
     db: Session = Depends(get_db)
 ):
     """Get dashboard data for doctor portal"""
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    doctor = db.query(Staff).filter(Staff.id == doctor_id).first()
     
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
     
     # Calculate date range
     end_date = datetime.utcnow()
@@ -679,35 +679,35 @@ def get_doctor_portal_dashboard(
     # Get branch IDs doctor is assigned to
     branch_ids = [db.branch_id for db in doctor.branches if db.is_active]
     
-    # Get received reports count
-    received_reports = db.query(func.count(ReportDistribution.id)).filter(
+    # Get received orders count
+    received_orders = db.query(func.count(OrderDistribution.id)).filter(
         and_(
-            ReportDistribution.doctor_id == doctor_id,
-            ReportDistribution.created_at >= start_date,
-            ReportDistribution.created_at <= end_date
+            OrderDistribution.doctor_id == doctor_id,
+            OrderDistribution.created_at >= start_date,
+            OrderDistribution.created_at <= end_date
         )
     ).scalar()
     
-    # Get unread reports count
-    unread_reports = db.query(func.count(ReportDistribution.id)).filter(
+    # Get unread orders count
+    unread_orders = db.query(func.count(OrderDistribution.id)).filter(
         and_(
-            ReportDistribution.doctor_id == doctor_id,
-            ReportDistribution.delivery_status.in_(["pending", "sent", "delivered"])
+            OrderDistribution.doctor_id == doctor_id,
+            OrderDistribution.delivery_status.in_(["pending", "sent", "delivered"])
         )
     ).scalar()
     
-    # Get reports by type
-    reports_by_type = db.query(
-        ReportDistribution.report_type,
-        func.count(ReportDistribution.id)
+    # Get orders by type
+    orders_by_type = db.query(
+        OrderDistribution.report_type,
+        func.count(OrderDistribution.id)
     ).filter(
-        ReportDistribution.doctor_id == doctor_id
-    ).group_by(ReportDistribution.report_type).all()
+        OrderDistribution.doctor_id == doctor_id
+    ).group_by(OrderDistribution.report_type).all()
     
-    # Get recent reports
-    recent_reports = db.query(ReportDistribution).filter(
-        ReportDistribution.doctor_id == doctor_id
-    ).order_by(desc(ReportDistribution.created_at)).limit(10).all()
+    # Get recent orders
+    recent_orders = db.query(OrderDistribution).filter(
+        OrderDistribution.doctor_id == doctor_id
+    ).order_by(desc(OrderDistribution.created_at)).limit(10).all()
     
     return {
         "doctor": {
@@ -716,15 +716,15 @@ def get_doctor_portal_dashboard(
             "specialization": doctor.specialization
         },
         "statistics": {
-            "total_reports_received": received_reports or 0,
-            "unread_reports": unread_reports or 0,
-            "reports_this_month": received_reports or 0
+            "total_orders_received": received_orders or 0,
+            "unread_orders": unread_orders or 0,
+            "orders_this_month": received_orders or 0
         },
-        "reports_by_type": [
+        "orders_by_type": [
             {"type": rpt_type, "count": count}
-            for rpt_type, count in reports_by_type
+            for rpt_type, count in orders_by_type
         ],
-        "recent_reports": [
+        "recent_orders": [
             {
                 "id": r.id,
                 "distribution_id": r.distribution_id,
@@ -733,7 +733,7 @@ def get_doctor_portal_dashboard(
                 "delivery_status": r.delivery_status,
                 "created_at": r.created_at
             }
-            for r in recent_reports
+            for r in recent_orders
         ],
         "assigned_branches": [
             {
@@ -747,78 +747,78 @@ def get_doctor_portal_dashboard(
 
 # ============ Analytics ============
 
-@router.get("/doctors/analytics/overview")
-def get_doctors_analytics(
+@router.get("/staff/analytics/overview")
+def get_staff_analytics(
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
     branch_id: Optional[int] = Query(None),
     current_user: User = Depends(require_role(["admin", "branch_admin"])),
     db: Session = Depends(get_db)
 ):
-    """Get analytics overview for doctors"""
+    """Get analytics overview for staff"""
     
     if not start_date:
         start_date = datetime.utcnow() - timedelta(days=30)
     if not end_date:
         end_date = datetime.utcnow()
     
-    # Build base query for doctors
-    query = db.query(Doctor).filter(Doctor.is_active == True)
+    # Build base query for staff
+    query = db.query(Staff).filter(Staff.is_active == True)
     
-    # If branch specified, filter doctors assigned to that branch
+    # If branch specified, filter staff assigned to that branch
     if branch_id:
-        query = query.join(DoctorBranch).filter(
+        query = query.join(StaffBranch).filter(
             and_(
-                DoctorBranch.branch_id == branch_id,
-                DoctorBranch.is_active == True
+                StaffBranch.branch_id == branch_id,
+                StaffBranch.is_active == True
             )
         )
     
-    total_doctors = query.count()
+    total_staff = query.count()
     
     # Get specialization distribution
     specialization_stats = db.query(
-        Doctor.specialization,
-        func.count(Doctor.id)
+        Staff.specialization,
+        func.count(Staff.id)
     ).filter(
-        Doctor.is_active == True
-    ).group_by(Doctor.specialization).all()
+        Staff.is_active == True
+    ).group_by(Staff.specialization).all()
     
     # Get branch distribution
     branch_distribution = db.query(
-        DoctorBranch.branch_id,
-        func.count(DoctorBranch.doctor_id)
+        StaffBranch.branch_id,
+        func.count(StaffBranch.doctor_id)
     ).filter(
-        DoctorBranch.is_active == True
-    ).group_by(DoctorBranch.branch_id).all()
+        StaffBranch.is_active == True
+    ).group_by(StaffBranch.branch_id).all()
     
     branches = {b.id: b.name for b in db.query(Branch).all()}
     
     # Get report distribution stats
     if branch_id:
         report_stats = db.query(
-            ReportDistribution.report_type,
-            func.count(ReportDistribution.id)
+            OrderDistribution.report_type,
+            func.count(OrderDistribution.id)
         ).filter(
             and_(
-                ReportDistribution.created_at >= start_date,
-                ReportDistribution.created_at <= end_date,
-                ReportDistribution.branch_id == branch_id
+                OrderDistribution.created_at >= start_date,
+                OrderDistribution.created_at <= end_date,
+                OrderDistribution.branch_id == branch_id
             )
-        ).group_by(ReportDistribution.report_type).all()
+        ).group_by(OrderDistribution.report_type).all()
     else:
         report_stats = db.query(
-            ReportDistribution.report_type,
-            func.count(ReportDistribution.id)
+            OrderDistribution.report_type,
+            func.count(OrderDistribution.id)
         ).filter(
             and_(
-                ReportDistribution.created_at >= start_date,
-                ReportDistribution.created_at <= end_date
+                OrderDistribution.created_at >= start_date,
+                OrderDistribution.created_at <= end_date
             )
-        ).group_by(ReportDistribution.report_type).all()
+        ).group_by(OrderDistribution.report_type).all()
     
     return {
-        "total_doctors": total_doctors,
+        "total_staff": total_staff,
         "specialization_distribution": [
             {"specialization": s, "count": c}
             for s, c in specialization_stats
@@ -840,25 +840,25 @@ def get_doctors_analytics(
 
 # ============ Export ============
 
-@router.get("/doctors/export")
-def export_doctors(
+@router.get("/staff/export")
+def export_staff(
     format: str = Query("excel", pattern="^(excel|csv|pdf)$"),
     current_user: User = Depends(require_role(["admin", "branch_admin"])),
     db: Session = Depends(get_db)
 ):
     """Export doctor list to Excel, CSV, or PDF"""
-    doctors = db.query(Doctor).filter(Doctor.is_active == True).all()
+    staff = db.query(Staff).filter(Staff.is_active == True).all()
     
     # Prepare data for export
     data = []
-    for doctor in doctors:
+    for doctor in staff:
         branch_names = ", ".join([
             db_branch.branch.name if db_branch.branch else ""
             for db_branch in doctor.branches if db_branch.is_active
         ])
         
         data.append({
-            "Doctor ID": doctor.doctor_id,
+            "Staff ID": doctor.doctor_id,
             "Name": f"Dr. {doctor.first_name} {doctor.last_name}",
             "Email": doctor.email,
             "Phone": doctor.phone,
@@ -875,6 +875,6 @@ def export_doctors(
     return {
         "message": f"Export initiated in {format} format",
         "record_count": len(data),
-        "download_url": f"/api/export/download/doctors.{format}"
+        "download_url": f"/api/export/download/staff.{format}"
     }
 

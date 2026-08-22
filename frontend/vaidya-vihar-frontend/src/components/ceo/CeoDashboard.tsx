@@ -661,7 +661,7 @@ export default function CeoDashboard() {
                       <th className="px-3 py-2">Branch</th>
                       <th className="px-3 py-2">Revenue</th>
                       <th className="px-3 py-2">Staff Attrition %</th>
-                      <th className="px-3 py-2">Patient Count</th>
+                      <th className="px-3 py-2">Customer Count</th>
                       <th className="px-3 py-2">Performance</th>
                     </tr>
                   </thead>

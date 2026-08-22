@@ -76,13 +76,13 @@ type TransactionRow = {
   gateway_reference?: string | null
 }
 
-type PatientFinancial = {
+type CustomerFinancial = {
   patient_id: number
   patient_code?: string | null
   full_name: string
   mobile?: string | null
   email?: string | null
-  total_tests: number
+  total_menu_items: number
   total_billed: number
   total_paid: number
   outstanding_balance: number
@@ -408,8 +408,8 @@ export default function BranchPaymentsDashboard() {
   const [bankReconcileResult, setBankReconcileResult] = useState<BankReconcileResponse | null>(null)
   const [selectedBankFile, setSelectedBankFile] = useState<File | null>(null)
   const [selectedTransaction, setSelectedTransaction] = useState<TransactionRow | null>(null)
-  const [patientFinancial, setPatientFinancial] = useState<PatientFinancial | null>(null)
-  const [patientLoading, setPatientLoading] = useState(false)
+  const [patientFinancial, setCustomerFinancial] = useState<CustomerFinancial | null>(null)
+  const [patientLoading, setCustomerLoading] = useState(false)
   const [simulatorAction, setSimulatorAction] = useState('10% discount for early payment')
   const [simulation, setSimulation] = useState<SimulationResponse | null>(null)
   const [invoiceResult, setInvoiceResult] = useState<GeneratedInvoiceResponse | null>(null)
@@ -427,7 +427,7 @@ export default function BranchPaymentsDashboard() {
     notes: '',
     legalText: '',
     dueDays: '0',
-    itemName: 'Diagnostic Test',
+    itemName: 'Diagnostic MenuItem',
     unitPrice: '1500',
     quantity: '1',
     gstRate: '',
@@ -436,18 +436,18 @@ export default function BranchPaymentsDashboard() {
 
   const requestConfig = useMemo(() => ({ headers: authHeaders(token) }), [token])
 
-  const openPatientFinancial = useCallback(
+  const openCustomerFinancial = useCallback(
     async (patientId?: number) => {
       if (!patientId) return
-      setPatientLoading(true)
+      setCustomerLoading(true)
       try {
-        const response = await axios.get(`${API_BASE}/api/branch/patients/${patientId}/financial`, requestConfig)
-        setPatientFinancial(response.data)
+        const response = await axios.get(`${API_BASE}/api/branch/customers/${patientId}/financial`, requestConfig)
+        setCustomerFinancial(response.data)
         setActiveTab('people')
       } catch (error) {
         toast.error(axios.isAxiosError(error) ? error.response?.data?.detail || error.message : 'Failed to load patient financial profile')
       } finally {
-        setPatientLoading(false)
+        setCustomerLoading(false)
       }
     },
     [requestConfig]
@@ -495,18 +495,18 @@ export default function BranchPaymentsDashboard() {
         cell: info => <span className="text-sm text-slate-700">{formatDateTime(info.getValue())}</span>,
       }),
       columnHelper.accessor('patient_name', {
-        header: 'Patient',
+        header: 'Customer',
         cell: info => (
           <button
             className="text-left font-semibold text-indigo-700 hover:underline"
-            onClick={() => void openPatientFinancial(info.row.original.patient_id ? Number(info.row.original.patient_id) : undefined)}
+            onClick={() => void openCustomerFinancial(info.row.original.patient_id ? Number(info.row.original.patient_id) : undefined)}
           >
             {info.getValue()}
           </button>
         ),
       }),
       columnHelper.accessor('test_name', {
-        header: 'Test',
+        header: 'MenuItem',
         cell: info => <span className="text-sm text-slate-700">{info.getValue()}</span>,
       }),
       columnHelper.accessor('method', {
@@ -542,16 +542,16 @@ export default function BranchPaymentsDashboard() {
         ),
       }),
     ],
-    [openPatientFinancial, reconcileTransaction]
+    [openCustomerFinancial, reconcileTransaction]
   )
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const duesColumns = useMemo(
     () => [
       duesColumnHelper.accessor('patient_name', {
-        header: 'Patient',
+        header: 'Customer',
         cell: info => (
-          <button className="font-semibold text-indigo-700 hover:underline" onClick={() => void openPatientFinancial(info.row.original.patient_id)}>
+          <button className="font-semibold text-indigo-700 hover:underline" onClick={() => void openCustomerFinancial(info.row.original.patient_id)}>
             {info.getValue()}
           </button>
         ),
@@ -581,7 +581,7 @@ export default function BranchPaymentsDashboard() {
             </button>
             <button
               className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white"
-              onClick={() => void openPatientFinancial(row.original.patient_id)}
+              onClick={() => void openCustomerFinancial(row.original.patient_id)}
             >
               View Profile
             </button>
@@ -589,7 +589,7 @@ export default function BranchPaymentsDashboard() {
         ),
       }),
     ],
-    [openPatientFinancial, sendReminder]
+    [openCustomerFinancial, sendReminder]
   )
 
   const transactionTable = useReactTable({
@@ -690,7 +690,7 @@ export default function BranchPaymentsDashboard() {
 
   const generateInvoice = useCallback(async () => {
     if (!invoiceDraft.patientId.trim()) {
-      toast.error('Patient ID is required')
+      toast.error('Customer ID is required')
       return
     }
     setInvoiceLoading(true)
@@ -921,7 +921,7 @@ export default function BranchPaymentsDashboard() {
               <SectionTitle title="Transaction Grid" subtitle="Search by patient, date range, method, amount, or status." />
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
                 {[
-                  { key: 'patient_name', label: 'Patient Name', placeholder: 'Search patient', value: filters.patient_name },
+                  { key: 'patient_name', label: 'Customer Name', placeholder: 'Search patient', value: filters.patient_name },
                   { key: 'date_from', label: 'From Date', placeholder: 'YYYY-MM-DD', value: filters.date_from },
                   { key: 'date_to', label: 'To Date', placeholder: 'YYYY-MM-DD', value: filters.date_to },
                   { key: 'method', label: 'Method', placeholder: 'Cash/UPI/Card/Insurance', value: filters.method },
@@ -1012,7 +1012,7 @@ export default function BranchPaymentsDashboard() {
                           className="font-semibold text-indigo-700 hover:underline"
                           onClick={e => {
                             e.stopPropagation()
-                            void openPatientFinancial(item.patient_id ? Number(item.patient_id) : undefined)
+                            void openCustomerFinancial(item.patient_id ? Number(item.patient_id) : undefined)
                           }}
                         >
                           {item.patient_name}
@@ -1212,7 +1212,7 @@ export default function BranchPaymentsDashboard() {
       {activeTab === 'people' && (
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            <SectionTitle title="Outstanding Dues" subtitle="Patients with pending balances sorted by amount and aging." />
+            <SectionTitle title="Outstanding Dues" subtitle="Customers with pending balances sorted by amount and aging." />
             <div className="overflow-hidden rounded-2xl border">
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50">
@@ -1250,7 +1250,7 @@ export default function BranchPaymentsDashboard() {
 
           <div className="space-y-6">
             <div className="rounded-2xl border bg-white p-5 shadow-sm">
-              <SectionTitle title="Patient Financial Profile" subtitle="Open a patient from the feed or dues table." />
+              <SectionTitle title="Customer Financial Profile" subtitle="Open a patient from the feed or dues table." />
               {patientLoading ? (
                 <p className="text-sm text-slate-500">Loading profile...</p>
               ) : patientFinancial ? (
@@ -1259,15 +1259,15 @@ export default function BranchPaymentsDashboard() {
                     <div>
                       <p className="text-2xl font-bold text-slate-900">{patientFinancial.full_name}</p>
                       <p className="text-sm text-slate-500">
-                        {patientFinancial.patient_code || `Patient #${patientFinancial.patient_id}`} · {patientFinancial.branch_name || 'Branch scoped'}
+                        {patientFinancial.patient_code || `Customer #${patientFinancial.patient_id}`} · {patientFinancial.branch_name || 'Branch scoped'}
                       </p>
                     </div>
-                    <button className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold" onClick={() => setPatientFinancial(null)}>
+                    <button className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold" onClick={() => setCustomerFinancial(null)}>
                       Close
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <MetricCard title="Total Tests" value={String(patientFinancial.total_tests)} />
+                    <MetricCard title="Total MenuItems" value={String(patientFinancial.total_menu_items)} />
                     <MetricCard title="Outstanding" value={formatCurrency(patientFinancial.outstanding_balance)} tone="rose" />
                     <MetricCard title="Billed" value={formatCurrency(patientFinancial.total_billed)} tone="amber" />
                     <MetricCard title="Paid" value={formatCurrency(patientFinancial.total_paid)} tone="emerald" />
@@ -1401,7 +1401,7 @@ export default function BranchPaymentsDashboard() {
             </div>
 
             <div className="rounded-2xl border bg-white p-5 shadow-sm">
-              <SectionTitle title="Collection Efficiency Report" subtitle="Quick efficiency snapshot for the branch." />
+              <SectionTitle title="Collection Efficiency Order" subtitle="Quick efficiency snapshot for the branch." />
               <div className="space-y-3 text-sm">
                 <div className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
                   <span>Collection Rate</span>
@@ -1472,7 +1472,7 @@ export default function BranchPaymentsDashboard() {
               <SectionTitle title="GST Invoice Generator" subtitle="Generate a GST-compliant invoice with PCPNDT notes." />
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="text-sm">
-                  <span className="font-medium text-slate-600">Patient ID</span>
+                  <span className="font-medium text-slate-600">Customer ID</span>
                   <input
                     className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2"
                     value={invoiceDraft.patientId}
@@ -1577,8 +1577,8 @@ export default function BranchPaymentsDashboard() {
         <Modal title="Transaction Detail" onClose={() => setSelectedTransaction(null)}>
           <div className="space-y-3">
             <div className="grid gap-3 md:grid-cols-2">
-              <DetailItem label="Patient" value={selectedTransaction.patient_name} />
-              <DetailItem label="Test" value={selectedTransaction.test_name} />
+              <DetailItem label="Customer" value={selectedTransaction.patient_name} />
+              <DetailItem label="MenuItem" value={selectedTransaction.test_name} />
               <DetailItem label="Method" value={selectedTransaction.method} />
               <DetailItem label="Status" value={selectedTransaction.status} />
               <DetailItem label="Receipt" value={selectedTransaction.receipt_number || '—'} />
@@ -1589,9 +1589,9 @@ export default function BranchPaymentsDashboard() {
             <DetailItem label="Notes" value={selectedTransaction.notes || '—'} />
             <button
               className="rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white"
-              onClick={() => void openPatientFinancial(selectedTransaction.patient_id ? Number(selectedTransaction.patient_id) : undefined)}
+              onClick={() => void openCustomerFinancial(selectedTransaction.patient_id ? Number(selectedTransaction.patient_id) : undefined)}
             >
-              Open Patient Financial Profile
+              Open Customer Financial Profile
             </button>
           </div>
         </Modal>
@@ -1603,14 +1603,14 @@ export default function BranchPaymentsDashboard() {
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-2xl font-bold text-slate-900">{patientFinancial.full_name}</h3>
-                <p className="text-sm text-slate-500">{patientFinancial.patient_code || `Patient #${patientFinancial.patient_id}`}</p>
+                <p className="text-sm text-slate-500">{patientFinancial.patient_code || `Customer #${patientFinancial.patient_id}`}</p>
               </div>
-              <button className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold" onClick={() => setPatientFinancial(null)}>
+              <button className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold" onClick={() => setCustomerFinancial(null)}>
                 Close
               </button>
             </div>
             <div className="grid gap-3 md:grid-cols-4">
-              <MetricCard title="Tests" value={String(patientFinancial.total_tests)} />
+              <MetricCard title="MenuItems" value={String(patientFinancial.total_menu_items)} />
               <MetricCard title="Billed" value={formatCurrency(patientFinancial.total_billed)} tone="amber" />
               <MetricCard title="Paid" value={formatCurrency(patientFinancial.total_paid)} tone="emerald" />
               <MetricCard title="Outstanding" value={formatCurrency(patientFinancial.outstanding_balance)} tone="rose" />

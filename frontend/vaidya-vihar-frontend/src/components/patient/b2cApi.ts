@@ -24,7 +24,7 @@ export interface B2CProfile {
   family_members_json: Array<Record<string, unknown>>
 }
 
-export interface B2CTestItem {
+export interface B2CMenuItemItem {
   id: number
   name: string
   category: string
@@ -40,7 +40,7 @@ export interface B2CAppointment {
   status: string
 }
 
-export interface PatientReport {
+export interface CustomerOrder {
   id: number
   patient_id: string
   test_name: string
@@ -50,7 +50,7 @@ export interface PatientReport {
   download_url?: string
 }
 
-export interface PatientWallet {
+export interface CustomerWallet {
   available_points: number
   payment_history: Array<{
     id: number
@@ -65,7 +65,7 @@ export interface PatientWallet {
   }>
 }
 
-export interface PatientFamilyProfile {
+export interface CustomerFamilyProfile {
   patient_id: number
   patient_code: string
   family_group?: string | null
@@ -96,7 +96,7 @@ export interface HomeCollectionMapResponse {
   message: string
 }
 
-export interface PatientVaultDocumentItem {
+export interface CustomerVaultDocumentItem {
   id: number
   original_filename: string
   file_url: string
@@ -135,12 +135,12 @@ export interface WearableSyncItem {
   last_synced_at: string
 }
 
-export async function requestPatientOtp(mobile: string) {
+export async function requestCustomerOtp(mobile: string) {
   const response = await axios.post(`${API_BASE}/api/patient/auth/otp`, { mobile })
   return response.data as { success: boolean; message: string; otp_for_dev?: string }
 }
 
-export async function verifyPatientOtp(mobile: string, otp: string) {
+export async function verifyCustomerOtp(mobile: string, otp: string) {
   const response = await axios.post(`${API_BASE}/api/patient/auth/verify`, { mobile, otp })
   return response.data as { success: boolean; message: string }
 }
@@ -152,11 +152,11 @@ export async function getB2CProfile(token: string) {
   return response.data as B2CProfile
 }
 
-export async function getB2CTestCatalog(token: string) {
+export async function getB2CMenuItemCatalog(token: string) {
   const response = await axios.get(`${API_BASE}/api/patient/test-catalog`, {
     headers: authHeaders(token),
   })
-  return response.data as { tests: B2CTestItem[] }
+  return response.data as { menu_items: B2CMenuItemItem[] }
 }
 
 export async function createB2CAppointment(
@@ -189,15 +189,15 @@ export async function getUpcomingAppointments(token: string) {
   return response.data as { appointments: B2CAppointment[] }
 }
 
-export async function getPatientReportsPhase2(token: string) {
-  const response = await axios.get(`${API_BASE}/api/patient/reports`, {
+export async function getCustomerOrdersPhase2(token: string) {
+  const response = await axios.get(`${API_BASE}/api/patient/orders`, {
     headers: authHeaders(token),
   })
-  return response.data as { reports: PatientReport[] }
+  return response.data as { orders: CustomerOrder[] }
 }
 
-export async function getPatientReportSummary(token: string, reportId: number) {
-  const response = await axios.get(`${API_BASE}/api/patient/reports/${reportId}/summary`, {
+export async function getCustomerOrderSummary(token: string, reportId: number) {
+  const response = await axios.get(`${API_BASE}/api/patient/orders/${reportId}/summary`, {
     headers: authHeaders(token),
   })
   return response.data as {
@@ -215,7 +215,7 @@ export async function getPatientReportSummary(token: string, reportId: number) {
   }
 }
 
-export async function getPatientTrends(token: string, biomarker: string) {
+export async function getCustomerTrends(token: string, biomarker: string) {
   const response = await axios.get(`${API_BASE}/api/patient/trends/${encodeURIComponent(biomarker)}`, {
     headers: authHeaders(token),
   })
@@ -225,7 +225,7 @@ export async function getPatientTrends(token: string, biomarker: string) {
   }
 }
 
-export async function getPatientHealthScore(token: string) {
+export async function getCustomerHealthScore(token: string) {
   const response = await axios.get(`${API_BASE}/api/patient/health-score`, {
     headers: authHeaders(token),
   })
@@ -236,7 +236,7 @@ export async function getPatientHealthScore(token: string) {
   }
 }
 
-export async function getPatientReminders(token: string) {
+export async function getCustomerReminders(token: string) {
   const response = await axios.get(`${API_BASE}/api/patient/reminders`, {
     headers: authHeaders(token),
   })
@@ -251,7 +251,7 @@ export async function getPatientReminders(token: string) {
   }
 }
 
-export async function askPatientChatbot(token: string, query: string) {
+export async function askCustomerChatbot(token: string, query: string) {
   const response = await axios.post(
     `${API_BASE}/api/patient/chatbot`,
     { query },
@@ -263,14 +263,14 @@ export async function askPatientChatbot(token: string, query: string) {
   }
 }
 
-export async function getPatientWallet(token: string) {
+export async function getCustomerWallet(token: string) {
   const response = await axios.get(`${API_BASE}/api/patient/wallet`, {
     headers: authHeaders(token),
   })
-  return response.data as PatientWallet
+  return response.data as CustomerWallet
 }
 
-export async function createPatientReferral(token: string) {
+export async function createCustomerReferral(token: string) {
   const response = await axios.post(`${API_BASE}/api/patient/referral`, {}, {
     headers: authHeaders(token),
   })
@@ -281,7 +281,7 @@ export async function createPatientReferral(token: string) {
   }
 }
 
-export async function createOrUpdatePatientGoal(
+export async function createOrUpdateCustomerGoal(
   token: string,
   payload: { goal_type: string; target_date: string; status: string }
 ) {
@@ -298,28 +298,28 @@ export async function createOrUpdatePatientGoal(
   }
 }
 
-export async function getPatientFamilyProfile(token: string) {
+export async function getCustomerFamilyProfile(token: string) {
   const response = await axios.get(`${API_BASE}/api/patient/family-profile`, {
     headers: authHeaders(token),
   })
-  return response.data as PatientFamilyProfile
+  return response.data as CustomerFamilyProfile
 }
 
-export async function getPatientHomeCollectionMap(token: string) {
+export async function getCustomerHomeCollectionMap(token: string) {
   const response = await axios.get(`${API_BASE}/api/patient/home-collection/map`, {
     headers: authHeaders(token),
   })
   return response.data as HomeCollectionMapResponse
 }
 
-export async function getPatientVaultDocuments(token: string) {
+export async function getCustomerVaultDocuments(token: string) {
   const response = await axios.get(`${API_BASE}/api/patient/vault`, {
     headers: authHeaders(token),
   })
-  return response.data as { items: PatientVaultDocumentItem[]; headline: string }
+  return response.data as { items: CustomerVaultDocumentItem[]; headline: string }
 }
 
-export async function uploadPatientVaultDocument(token: string, file: File, documentLabel?: string) {
+export async function uploadCustomerVaultDocument(token: string, file: File, documentLabel?: string) {
   const formData = new FormData()
   formData.append('file', file)
   if (documentLabel) {
@@ -331,24 +331,24 @@ export async function uploadPatientVaultDocument(token: string, file: File, docu
       'Content-Type': 'multipart/form-data',
     },
   })
-  return response.data as { document: PatientVaultDocumentItem; message: string }
+  return response.data as { document: CustomerVaultDocumentItem; message: string }
 }
 
-export async function triggerPatientCriticalAlert(token: string, payload: { report_id: number; alert_type?: string; note?: string }) {
+export async function triggerCustomerCriticalAlert(token: string, payload: { report_id: number; alert_type?: string; note?: string }) {
   const response = await axios.post(`${API_BASE}/api/patient/alerts/critical`, payload, {
     headers: authHeaders(token),
   })
   return response.data as { id: number; alert_type: string; triggered_at: string; channels: string[]; message: string }
 }
 
-export async function getPatientEmergencyAlerts(token: string) {
+export async function getCustomerEmergencyAlerts(token: string) {
   const response = await axios.get(`${API_BASE}/api/patient/emergency-alerts`, {
     headers: authHeaders(token),
   })
   return response.data as { items: EmergencyAlertItem[] }
 }
 
-export async function requestPatientSecondOpinion(
+export async function requestCustomerSecondOpinion(
   token: string,
   payload: { report_id: number; specialist_panel: string }
 ) {
@@ -358,21 +358,21 @@ export async function requestPatientSecondOpinion(
   return response.data as SecondOpinionRequestItem
 }
 
-export async function getPatientSecondOpinionRequests(token: string) {
+export async function getCustomerSecondOpinionRequests(token: string) {
   const response = await axios.get(`${API_BASE}/api/patient/second-opinion`, {
     headers: authHeaders(token),
   })
   return response.data as { items: SecondOpinionRequestItem[] }
 }
 
-export async function getPatientWearables(token: string) {
+export async function getCustomerWearables(token: string) {
   const response = await axios.get(`${API_BASE}/api/patient/wearables`, {
     headers: authHeaders(token),
   })
   return response.data as { items: WearableSyncItem[]; headline: string }
 }
 
-export async function connectPatientWearable(
+export async function connectCustomerWearable(
   token: string,
   payload: { provider: 'Apple Health' | 'Google Fit' | 'Fitbit'; token?: string }
 ) {

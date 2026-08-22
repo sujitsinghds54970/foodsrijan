@@ -1,15 +1,15 @@
 import { useState } from 'react'
 
-import { DoctorItem, ShareResultItem } from './types'
+import { StaffItem, ShareResultItem } from './types'
 
 type Props = {
   open: boolean
-  selectedDoctors: DoctorItem[]
+  selectedStaffs: StaffItem[]
   onClose: () => void
   onSend: (files: File[]) => Promise<ShareResultItem[]>
 }
 
-export default function BulkPdfModal({ open, selectedDoctors, onClose, onSend }: Props) {
+export default function BulkPdfModal({ open, selectedStaffs, onClose, onSend }: Props) {
   const [files, setFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [results, setResults] = useState<ShareResultItem[]>([])
@@ -21,7 +21,7 @@ export default function BulkPdfModal({ open, selectedDoctors, onClose, onSend }:
       <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b">
           <h3 className="text-2xl font-black text-slate-900">Send Bulk PDF</h3>
-          <p className="text-slate-500 mt-1">Selected doctors: {selectedDoctors.length}</p>
+          <p className="text-slate-500 mt-1">Selected staff: {selectedStaffs.length}</p>
         </div>
 
         <div className="p-6 space-y-4">
@@ -42,13 +42,13 @@ export default function BulkPdfModal({ open, selectedDoctors, onClose, onSend }:
 
           <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
             <p className="font-semibold">Message Template</p>
-            <p className="mt-1">Dear Dr. [Name], Please find attached patient reports and referral updates from VaidyaVihar Diagnostic.</p>
+            <p className="mt-1">Dear Dr. [Name], Please find attached patient orders and referral updates from VaidyaVihar Diagnostic.</p>
           </div>
 
           <div className="flex justify-end gap-3">
             <button className="px-4 py-2 rounded-lg border" onClick={onClose}>Close</button>
             <button
-              disabled={submitting || files.length === 0 || selectedDoctors.length === 0}
+              disabled={submitting || files.length === 0 || selectedStaffs.length === 0}
               className="px-4 py-2 rounded-lg bg-blue-600 text-white font-bold disabled:opacity-50"
               onClick={async () => {
                 setSubmitting(true)

@@ -103,7 +103,9 @@ export default function CeoProfile() {
 
   return (
     <section className="bg-white rounded-xl shadow-lg p-6">
-      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">CEO Profile</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Company Settings</p>
+      <h2 className="mt-2 text-2xl font-black text-slate-900">FoodSrijan Group</h2>
+      <p className="mt-1 text-sm text-slate-500">Company Profile, Branding, Team, and Compliance</p>
 
       <div className="mt-6 flex flex-col items-center">
         {profileImage ? (

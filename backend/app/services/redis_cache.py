@@ -57,7 +57,7 @@ class RedisCache:
         try:
             self._pool = ConnectionPool(**self.config)
             self._client = redis.Redis(connection_pool=self._pool)
-            # Test connection
+            # MenuItem connection
             await self._client.ping()
             print("Redis cache connected successfully")
             return True

@@ -27,26 +27,26 @@ import {
   YAxis,
 } from 'recharts'
 import {
-  CeoDoctorCommissionSimulatorResponse,
-  CeoDoctorEngagementRelationshipResponse,
-  CeoDoctorFinancialCommissionResponse,
-  CeoDoctorGrowthAcquisitionResponse,
-  CeoDoctorGrowthWhatIfResponse,
-  CeoDoctorNetworkHealthResponse,
-  CeoDoctorOperationalExcellenceResponse,
-  CeoDoctorPayoutAutomationResponse,
-  CeoDoctorPerformanceAnalyticsResponse,
-  CeoDoctorWowFeaturesResponse,
-  getCeoDoctorCommissionSimulation,
-  getCeoDoctorEngagementRelationship,
-  getCeoDoctorFinancialCommission,
-  getCeoDoctorGrowthAcquisition,
-  getCeoDoctorGrowthWhatIfSimulation,
-  getCeoDoctorNetworkHealth,
-  getCeoDoctorOperationalExcellence,
-  getCeoDoctorPerformanceAnalytics,
-  getCeoDoctorWowFeatures,
-  triggerCeoDoctorPayoutAutomation,
+  CeoStaffCommissionSimulatorResponse,
+  CeoStaffEngagementRelationshipResponse,
+  CeoStaffFinancialCommissionResponse,
+  CeoStaffGrowthAcquisitionResponse,
+  CeoStaffGrowthWhatIfResponse,
+  CeoStaffNetworkHealthResponse,
+  CeoStaffOperationalExcellenceResponse,
+  CeoStaffPayoutAutomationResponse,
+  CeoStaffPerformanceAnalyticsResponse,
+  CeoStaffWowFeaturesResponse,
+  getCeoStaffCommissionSimulation,
+  getCeoStaffEngagementRelationship,
+  getCeoStaffFinancialCommission,
+  getCeoStaffGrowthAcquisition,
+  getCeoStaffGrowthWhatIfSimulation,
+  getCeoStaffNetworkHealth,
+  getCeoStaffOperationalExcellence,
+  getCeoStaffPerformanceAnalytics,
+  getCeoStaffWowFeatures,
+  triggerCeoStaffPayoutAutomation,
 } from './api'
 
 const CARD_CLASS = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm'
@@ -61,36 +61,36 @@ const getScoreColor = (score: number) => {
   return '#ef4444'
 }
 
-type LeaderboardRow = CeoDoctorPerformanceAnalyticsResponse['leaderboard'][number]
+type LeaderboardRow = CeoStaffPerformanceAnalyticsResponse['leaderboard'][number]
 
-const CeoDoctorNetwork = () => {
+const CeoStaffNetwork = () => {
   const [loading, setLoading] = useState(true)
-  const [networkHealth, setNetworkHealth] = useState<CeoDoctorNetworkHealthResponse | null>(null)
-  const [performance, setPerformance] = useState<CeoDoctorPerformanceAnalyticsResponse | null>(null)
-  const [financial, setFinancial] = useState<CeoDoctorFinancialCommissionResponse | null>(null)
-  const [engagement, setEngagement] = useState<CeoDoctorEngagementRelationshipResponse | null>(null)
-  const [growth, setGrowth] = useState<CeoDoctorGrowthAcquisitionResponse | null>(null)
-  const [operational, setOperational] = useState<CeoDoctorOperationalExcellenceResponse | null>(null)
-  const [wow, setWow] = useState<CeoDoctorWowFeaturesResponse | null>(null)
+  const [networkHealth, setNetworkHealth] = useState<CeoStaffNetworkHealthResponse | null>(null)
+  const [performance, setPerformance] = useState<CeoStaffPerformanceAnalyticsResponse | null>(null)
+  const [financial, setFinancial] = useState<CeoStaffFinancialCommissionResponse | null>(null)
+  const [engagement, setEngagement] = useState<CeoStaffEngagementRelationshipResponse | null>(null)
+  const [growth, setGrowth] = useState<CeoStaffGrowthAcquisitionResponse | null>(null)
+  const [operational, setOperational] = useState<CeoStaffOperationalExcellenceResponse | null>(null)
+  const [wow, setWow] = useState<CeoStaffWowFeaturesResponse | null>(null)
   const [sorting, setSorting] = useState<SortingState>([{ id: 'total_referrals', desc: true }])
   const [branchFilter, setBranchFilter] = useState('all')
   const [specialtyFilter, setSpecialtyFilter] = useState('all')
   const [timePeriodFilter, setTimePeriodFilter] = useState('all')
-  const [selectedTrendDoctorId, setSelectedTrendDoctorId] = useState<number | null>(null)
-  const [selectedDoctorId, setSelectedDoctorId] = useState<number | null>(null)
+  const [selectedTrendStaffId, setSelectedTrendStaffId] = useState<number | null>(null)
+  const [selectedStaffId, setSelectedStaffId] = useState<number | null>(null)
 
   const [commissionStructure, setCommissionStructure] = useState('tiered')
   const [baseCommission, setBaseCommission] = useState(7)
-  const [commissionSimulation, setCommissionSimulation] = useState<CeoDoctorCommissionSimulatorResponse | null>(null)
+  const [commissionSimulation, setCommissionSimulation] = useState<CeoStaffCommissionSimulatorResponse | null>(null)
   const [simulationLoading, setSimulationLoading] = useState(false)
   const [payoutLoading, setPayoutLoading] = useState(false)
-  const [payoutResult, setPayoutResult] = useState<CeoDoctorPayoutAutomationResponse | null>(null)
+  const [payoutResult, setPayoutResult] = useState<CeoStaffPayoutAutomationResponse | null>(null)
 
   const [growthSpecialty, setGrowthSpecialty] = useState('Cardiology')
   const [growthCommissionIncrease, setGrowthCommissionIncrease] = useState(5)
-  const [growthWhatIf, setGrowthWhatIf] = useState<CeoDoctorGrowthWhatIfResponse | null>(null)
+  const [growthWhatIf, setGrowthWhatIf] = useState<CeoStaffGrowthWhatIfResponse | null>(null)
   const [growthSimLoading, setGrowthSimLoading] = useState(false)
-  const [doctorLoadError, setDoctorLoadError] = useState(false)
+  const [doctorLoadError, setStaffLoadError] = useState(false)
 
   const [onboardingDraft, setOnboardingDraft] = useState({ doctor_name: '', city: '', specialty: '' })
   const [onboardingQueue, setOnboardingQueue] = useState<Array<{ doctor_name: string; city: string; specialty: string }>>([])
@@ -98,16 +98,16 @@ const CeoDoctorNetwork = () => {
   useEffect(() => {
     const load = async () => {
       setLoading(true)
-      setDoctorLoadError(false)
+      setStaffLoadError(false)
       try {
         const results = await Promise.allSettled([
-          getCeoDoctorNetworkHealth(),
-          getCeoDoctorPerformanceAnalytics(),
-          getCeoDoctorFinancialCommission(),
-          getCeoDoctorEngagementRelationship(),
-          getCeoDoctorGrowthAcquisition(),
-          getCeoDoctorOperationalExcellence(),
-          getCeoDoctorWowFeatures(),
+          getCeoStaffNetworkHealth(),
+          getCeoStaffPerformanceAnalytics(),
+          getCeoStaffFinancialCommission(),
+          getCeoStaffEngagementRelationship(),
+          getCeoStaffGrowthAcquisition(),
+          getCeoStaffOperationalExcellence(),
+          getCeoStaffWowFeatures(),
         ])
         const networkResp = results[0].status === 'fulfilled' ? results[0].value : null
         const performanceResp = results[1].status === 'fulfilled' ? results[1].value : null
@@ -120,16 +120,16 @@ const CeoDoctorNetwork = () => {
         if (networkResp) setNetworkHealth(networkResp)
         if (performanceResp) {
           setPerformance(performanceResp)
-          setSelectedTrendDoctorId(performanceResp.referral_trend.by_doctor[0]?.doctor_id ?? null)
+          setSelectedTrendStaffId(performanceResp.referral_trend.by_doctor[0]?.doctor_id ?? null)
         }
         if (financialResp) setFinancial(financialResp)
         if (engagementResp) setEngagement(engagementResp)
         if (growthResp) setGrowth(growthResp)
         if (operationalResp) setOperational(operationalResp)
         if (wowResp) setWow(wowResp)
-        setDoctorLoadError(results.some((item) => item.status === 'rejected'))
+        setStaffLoadError(results.some((item) => item.status === 'rejected'))
       } catch {
-        setDoctorLoadError(true)
+        setStaffLoadError(true)
       } finally {
         setLoading(false)
       }
@@ -140,7 +140,7 @@ const CeoDoctorNetwork = () => {
   const runCommissionSimulation = async () => {
     setSimulationLoading(true)
     try {
-      const response = await getCeoDoctorCommissionSimulation({
+      const response = await getCeoStaffCommissionSimulation({
         structure: commissionStructure,
         base_commission_percent: baseCommission,
       })
@@ -155,7 +155,7 @@ const CeoDoctorNetwork = () => {
   const runPayoutAutomation = async () => {
     setPayoutLoading(true)
     try {
-      const response = await triggerCeoDoctorPayoutAutomation()
+      const response = await triggerCeoStaffPayoutAutomation()
       setPayoutResult(response)
       toast.success('Mock payout automation completed')
     } catch (error: any) {
@@ -168,7 +168,7 @@ const CeoDoctorNetwork = () => {
   const runGrowthWhatIf = async () => {
     setGrowthSimLoading(true)
     try {
-      const response = await getCeoDoctorGrowthWhatIfSimulation({
+      const response = await getCeoStaffGrowthWhatIfSimulation({
         specialty: growthSpecialty,
         commission_increase_percent: growthCommissionIncrease,
       })
@@ -187,7 +187,7 @@ const CeoDoctorNetwork = () => {
     }
     setOnboardingQueue((prev) => [...prev, { ...onboardingDraft }])
     setOnboardingDraft({ doctor_name: '', city: '', specialty: '' })
-    toast.success('Doctor added to mock onboarding queue')
+    toast.success('Staff added to mock onboarding queue')
   }
 
   const filteredLeaderboard = useMemo(() => {
@@ -203,7 +203,7 @@ const CeoDoctorNetwork = () => {
   const columns = useMemo<ColumnDef<LeaderboardRow>[]>(
     () => [
       { id: 'rank', header: '#', cell: ({ row }) => <span className="font-semibold text-slate-700">{row.index + 1}</span> },
-      { accessorKey: 'doctor_name', header: 'Doctor' },
+      { accessorKey: 'doctor_name', header: 'Staff' },
       { accessorKey: 'branch', header: 'Branch' },
       { accessorKey: 'specialty', header: 'Specialty' },
       { accessorKey: 'total_referrals', header: 'Referrals' },
@@ -216,7 +216,7 @@ const CeoDoctorNetwork = () => {
         cell: ({ row }) => (
           <button
             type="button"
-            onClick={() => setSelectedDoctorId(row.original.doctor_id)}
+            onClick={() => setSelectedStaffId(row.original.doctor_id)}
             className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700"
           >
             View
@@ -241,19 +241,19 @@ const CeoDoctorNetwork = () => {
     return [{ name: 'Network Health', value, fill: getScoreColor(value) }]
   }, [networkHealth])
 
-  const selectedDoctorTrend = useMemo(
-    () => performance?.referral_trend.by_doctor.find((row) => row.doctor_id === selectedTrendDoctorId) || null,
-    [performance, selectedTrendDoctorId]
+  const selectedStaffTrend = useMemo(
+    () => performance?.referral_trend.by_doctor.find((row) => row.doctor_id === selectedTrendStaffId) || null,
+    [performance, selectedTrendStaffId]
   )
 
-  const selectedDoctorSummary = useMemo(
-    () => performance?.doctor_summaries.find((doctor) => doctor.doctor_id === selectedDoctorId) || null,
-    [performance, selectedDoctorId]
+  const selectedStaffSummary = useMemo(
+    () => performance?.doctor_summaries.find((doctor) => doctor.doctor_id === selectedStaffId) || null,
+    [performance, selectedStaffId]
   )
 
-  const selectedDoctorProfile = useMemo(
-    () => engagement?.doctor_profiles.find((doctor) => doctor.doctor_id === selectedDoctorId) || null,
-    [engagement, selectedDoctorId]
+  const selectedStaffProfile = useMemo(
+    () => engagement?.doctor_profiles.find((doctor) => doctor.doctor_id === selectedStaffId) || null,
+    [engagement, selectedStaffId]
   )
 
   const branchOptions = useMemo(
@@ -273,7 +273,7 @@ const CeoDoctorNetwork = () => {
     return (
       <div className="flex min-h-[420px] items-center justify-center">
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-          Loading Doctor Network dashboard...
+          Loading Staff Network dashboard...
         </div>
       </div>
     )
@@ -283,19 +283,19 @@ const CeoDoctorNetwork = () => {
     <div className="space-y-6">
       {doctorLoadError && (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-amber-800">Doctor network data is partially unavailable</p>
+          <p className="text-sm font-semibold text-amber-800">Staff network data is partially unavailable</p>
           <p className="mt-1 text-xs text-amber-700">Some widgets are showing fallback values while data services recover.</p>
         </section>
       )}
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-black text-slate-900">Doctor Network</h1>
+        <h1 className="text-2xl font-black text-slate-900">Staff Network</h1>
         <p className="mt-1 text-sm text-slate-600">Referral ecosystem command center for super admin strategy and network growth.</p>
       </section>
 
       <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-6 shadow-sm">
         <div className="grid grid-cols-12 gap-4">
           <div className="col-span-12 lg:col-span-6">
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">{wow?.doctor_360_briefing.title || 'Doctor 360 AI Briefing'}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">{wow?.doctor_360_briefing.title || 'Staff 360 AI Briefing'}</p>
             <p className="mt-2 text-sm leading-relaxed text-slate-700">{wow?.doctor_360_briefing.message || 'Briefing is loading.'}</p>
           </div>
           <div className="col-span-12 lg:col-span-3">
@@ -317,7 +317,7 @@ const CeoDoctorNetwork = () => {
             </div>
           </div>
           <div className="col-span-12 lg:col-span-3">
-            <p className="text-sm font-semibold text-slate-700">Doctor Loyalty Program</p>
+            <p className="text-sm font-semibold text-slate-700">Staff Loyalty Program</p>
             <div className="mt-2 space-y-2">
               {(wow?.doctor_loyalty_program.tiers || []).map((tier) => (
                 <div key={tier.name} className="rounded-md border border-indigo-100 bg-white px-3 py-2 text-xs text-slate-700">
@@ -332,7 +332,7 @@ const CeoDoctorNetwork = () => {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-bold text-slate-900">Doctor Network Command Center (The Pulse)</h2>
+        <h2 className="text-xl font-bold text-slate-900">Staff Network Command Center (The Pulse)</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-4`}>
             <p className="text-sm font-semibold text-slate-700">Network Health Score</p>
@@ -352,8 +352,8 @@ const CeoDoctorNetwork = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 md:col-span-6 lg:col-span-4`}>
-            <p className="text-xs uppercase text-slate-500">Total Active Doctors</p>
-            <p className="mt-1 text-3xl font-black text-slate-900">{networkHealth?.total_doctors || 0}</p>
+            <p className="text-xs uppercase text-slate-500">Total Active Staffs</p>
+            <p className="mt-1 text-3xl font-black text-slate-900">{networkHealth?.total_staff || 0}</p>
             <p className="mt-2 text-xs font-semibold text-emerald-700">MoM Growth: +{Number(networkHealth?.growth_mom_percent || 0).toFixed(1)}%</p>
             <div className="mt-5 rounded-lg bg-indigo-50 p-3">
               <p className="text-xs uppercase text-indigo-700">Revenue Contribution</p>
@@ -362,7 +362,7 @@ const CeoDoctorNetwork = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 md:col-span-6 lg:col-span-4`}>
-            <p className="text-sm font-semibold text-slate-700">Doctor Engagement Score</p>
+            <p className="text-sm font-semibold text-slate-700">Staff Engagement Score</p>
             <div className="mt-4">
               <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
                 <span>Engagement</span>
@@ -379,7 +379,7 @@ const CeoDoctorNetwork = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12`}>
-            <p className="mb-3 text-sm font-semibold text-slate-700">Network Heatmap (Referring Doctors by Region)</p>
+            <p className="mb-3 text-sm font-semibold text-slate-700">Network Heatmap (Referring Staffs by Region)</p>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
               {(networkHealth?.regional_density || []).map((item) => (
                 <div
@@ -397,11 +397,11 @@ const CeoDoctorNetwork = () => {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-bold text-slate-900">Doctor Performance &amp; Referral Analytics</h2>
+        <h2 className="text-xl font-bold text-slate-900">Staff Performance &amp; Referral Analytics</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12`}>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <p className="text-sm font-semibold text-slate-700">Doctor Leaderboard</p>
+              <p className="text-sm font-semibold text-slate-700">Staff Leaderboard</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <select value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
                   {branchOptions.map((branch) => <option key={branch} value={branch}>{branch === 'all' ? 'All Branches' : branch}</option>)}
@@ -449,8 +449,8 @@ const CeoDoctorNetwork = () => {
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold text-slate-700">Referral Trend Analysis</p>
               <select
-                value={selectedTrendDoctorId ?? ''}
-                onChange={(event) => setSelectedTrendDoctorId(Number(event.target.value))}
+                value={selectedTrendStaffId ?? ''}
+                onChange={(event) => setSelectedTrendStaffId(Number(event.target.value))}
                 className="rounded-md border border-slate-300 px-3 py-1 text-sm"
               >
                 {(performance?.referral_trend.by_doctor || []).map((doctor) => <option key={doctor.doctor_id} value={doctor.doctor_id}>{doctor.doctor_name}</option>)}
@@ -465,7 +465,7 @@ const CeoDoctorNetwork = () => {
                   <Tooltip />
                   <Legend />
                   <Line type="monotone" dataKey="referrals" name="Network Referrals" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4 }} />
-                  <Line type="monotone" data={selectedDoctorTrend?.points || []} dataKey="referrals" name={`${selectedDoctorTrend?.doctor_name || 'Doctor'} Referrals`} stroke="#0ea5e9" strokeWidth={3} dot={{ r: 4 }} />
+                  <Line type="monotone" data={selectedStaffTrend?.points || []} dataKey="referrals" name={`${selectedStaffTrend?.doctor_name || 'Staff'} Referrals`} stroke="#0ea5e9" strokeWidth={3} dot={{ r: 4 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -483,13 +483,13 @@ const CeoDoctorNetwork = () => {
               ))}
             </div>
             <div className="mt-4 rounded-md bg-emerald-50 p-3">
-              <p className="text-xs uppercase text-emerald-700">Patient Conversion Rate</p>
+              <p className="text-xs uppercase text-emerald-700">Customer Conversion Rate</p>
               <p className="text-2xl font-black text-emerald-700">{performance?.patient_conversion_rate_percent || 0}%</p>
             </div>
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-5`}>
-            <p className="text-sm font-semibold text-slate-700">Test Mix Analysis</p>
+            <p className="text-sm font-semibold text-slate-700">MenuItem Mix Analysis</p>
             <div className="mt-3 h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -504,7 +504,7 @@ const CeoDoctorNetwork = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-7`}>
-            <p className="text-sm font-semibold text-slate-700">Top Doctor Revenue &amp; Commission</p>
+            <p className="text-sm font-semibold text-slate-700">Top Staff Revenue &amp; Commission</p>
             <div className="mt-3 h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={filteredLeaderboard}>
@@ -523,7 +523,7 @@ const CeoDoctorNetwork = () => {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-bold text-slate-900">Doctor Financials &amp; Commission Management</h2>
+        <h2 className="text-xl font-bold text-slate-900">Staff Financials &amp; Commission Management</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12`}>
             <p className="text-sm font-semibold text-slate-700">Commission Dashboard</p>
@@ -531,7 +531,7 @@ const CeoDoctorNetwork = () => {
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                   <tr>
-                    <th className="px-3 py-2">Doctor</th>
+                    <th className="px-3 py-2">Staff</th>
                     <th className="px-3 py-2">Earned</th>
                     <th className="px-3 py-2">Paid</th>
                     <th className="px-3 py-2">Pending</th>
@@ -622,12 +622,12 @@ const CeoDoctorNetwork = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12`}>
-            <p className="text-sm font-semibold text-slate-700">Doctor-wise Profitability</p>
+            <p className="text-sm font-semibold text-slate-700">Staff-wise Profitability</p>
             <div className="mt-3 overflow-x-auto rounded-md border border-slate-200">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                   <tr>
-                    <th className="px-3 py-2">Doctor</th>
+                    <th className="px-3 py-2">Staff</th>
                     <th className="px-3 py-2">Revenue</th>
                     <th className="px-3 py-2">Referral Cost</th>
                     <th className="px-3 py-2">Service Cost</th>
@@ -652,18 +652,18 @@ const CeoDoctorNetwork = () => {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-bold text-slate-900">Doctor Engagement &amp; Relationship Management</h2>
+        <h2 className="text-xl font-bold text-slate-900">Staff Engagement &amp; Relationship Management</h2>
         <div className="grid grid-cols-12 gap-4">
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-6`}>
-            <p className="text-sm font-semibold text-slate-700">Doctor Profile &amp; Insights</p>
-            {selectedDoctorProfile ? (
+            <p className="text-sm font-semibold text-slate-700">Staff Profile &amp; Insights</p>
+            {selectedStaffProfile ? (
               <div className="mt-3 space-y-2 text-sm text-slate-700">
-                <p><span className="font-semibold">Doctor:</span> {selectedDoctorProfile.doctor_name}</p>
-                <p><span className="font-semibold">Branch:</span> {selectedDoctorProfile.branch}</p>
-                <p><span className="font-semibold">Specialty:</span> {selectedDoctorProfile.specialty}</p>
-                <p><span className="font-semibold">Engagement Score:</span> {selectedDoctorProfile.engagement_score}/100</p>
-                <p><span className="font-semibold">Preferred Channel:</span> {selectedDoctorProfile.preferred_channel}</p>
-                <p><span className="font-semibold">Last Interaction:</span> {selectedDoctorProfile.last_interaction}</p>
+                <p><span className="font-semibold">Staff:</span> {selectedStaffProfile.doctor_name}</p>
+                <p><span className="font-semibold">Branch:</span> {selectedStaffProfile.branch}</p>
+                <p><span className="font-semibold">Specialty:</span> {selectedStaffProfile.specialty}</p>
+                <p><span className="font-semibold">Engagement Score:</span> {selectedStaffProfile.engagement_score}/100</p>
+                <p><span className="font-semibold">Preferred Channel:</span> {selectedStaffProfile.preferred_channel}</p>
+                <p><span className="font-semibold">Last Interaction:</span> {selectedStaffProfile.last_interaction}</p>
               </div>
             ) : (
               <p className="mt-3 text-sm text-slate-500">Select a doctor from the leaderboard and click “View” to see profile insights.</p>
@@ -686,7 +686,7 @@ const CeoDoctorNetwork = () => {
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-4`}>
             <p className="text-sm font-semibold text-slate-700">Flight Risk AI Predictor</p>
             <div className="mt-3 space-y-2">
-              {(engagement?.flight_risk_doctors || []).map((doctor) => (
+              {(engagement?.flight_risk_staff || []).map((doctor) => (
                 <div key={doctor.doctor_id} className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
                   <p className="text-sm font-semibold text-slate-800">{doctor.doctor_name}</p>
                   <p className="text-xs uppercase text-rose-700">Risk: {doctor.risk_level}</p>
@@ -697,7 +697,7 @@ const CeoDoctorNetwork = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-4`}>
-            <p className="text-sm font-semibold text-slate-700">Doctor NPS &amp; Feedback</p>
+            <p className="text-sm font-semibold text-slate-700">Staff NPS &amp; Feedback</p>
             <div className="mt-3 rounded-md bg-indigo-50 p-3">
               <p className="text-xs uppercase text-indigo-700">NPS Score</p>
               <p className="text-3xl font-black text-indigo-800">{engagement?.doctor_nps_feedback.nps_score || 0}</p>
@@ -715,7 +715,7 @@ const CeoDoctorNetwork = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-4`}>
-            <p className="text-sm font-semibold text-slate-700">Doctor Communication Hub</p>
+            <p className="text-sm font-semibold text-slate-700">Staff Communication Hub</p>
             <p className="mt-3 text-sm text-slate-600">{engagement?.communication_hub.message || 'Communication workflows will be shown here.'}</p>
             <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">
               Segment-based campaigns (specialty/branch/engagement tier) are available as a placeholder.
@@ -723,7 +723,7 @@ const CeoDoctorNetwork = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12`}>
-            <p className="text-sm font-semibold text-slate-700">White-Label Doctor Portal</p>
+            <p className="text-sm font-semibold text-slate-700">White-Label Staff Portal</p>
             <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-4">
               <p className="text-sm font-semibold text-emerald-800">{engagement?.white_label_portal.available ? 'Available' : 'Not Available'}</p>
               <p className="text-xs text-slate-600">{engagement?.white_label_portal.message || 'Portal status will be shown here.'}</p>
@@ -741,7 +741,7 @@ const CeoDoctorNetwork = () => {
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                   <tr>
-                    <th className="px-3 py-2">Doctor</th>
+                    <th className="px-3 py-2">Staff</th>
                     <th className="px-3 py-2">City</th>
                     <th className="px-3 py-2">Specialty</th>
                     <th className="px-3 py-2">Estimated Monthly Referrals</th>
@@ -762,13 +762,13 @@ const CeoDoctorNetwork = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-5`}>
-            <p className="text-sm font-semibold text-slate-700">New Doctor Onboarding</p>
+            <p className="text-sm font-semibold text-slate-700">New Staff Onboarding</p>
             <div className="mt-3 space-y-2">
               <input
                 value={onboardingDraft.doctor_name}
                 onChange={(event) => setOnboardingDraft((prev) => ({ ...prev, doctor_name: event.target.value }))}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                placeholder="Doctor Name"
+                placeholder="Staff Name"
               />
               <input
                 value={onboardingDraft.city}
@@ -856,12 +856,12 @@ const CeoDoctorNetwork = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12`}>
-            <p className="text-sm font-semibold text-slate-700">Competitor Doctor Leakage Report</p>
+            <p className="text-sm font-semibold text-slate-700">Competitor Staff Leakage Order</p>
             <div className="mt-3 overflow-x-auto rounded-md border border-slate-200">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                   <tr>
-                    <th className="px-3 py-2">Doctor</th>
+                    <th className="px-3 py-2">Staff</th>
                     <th className="px-3 py-2">City</th>
                     <th className="px-3 py-2">Estimated Leakage</th>
                     <th className="px-3 py-2">Competitor Signal</th>
@@ -898,7 +898,7 @@ const CeoDoctorNetwork = () => {
                 <p className="text-2xl font-black text-rose-700">{Number(operational?.service_level_dashboard.sample_rejection_rate_percent || 0).toFixed(1)}%</p>
               </div>
               <div className="rounded-md bg-emerald-50 p-3">
-                <p className="text-xs uppercase text-emerald-700">Report Quality Score</p>
+                <p className="text-xs uppercase text-emerald-700">Order Quality Score</p>
                 <p className="text-2xl font-black text-emerald-700">{operational?.service_level_dashboard.report_quality_score || 0}/100</p>
               </div>
             </div>
@@ -916,7 +916,7 @@ const CeoDoctorNetwork = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12 lg:col-span-5`}>
-            <p className="text-sm font-semibold text-slate-700">Patient Journey Completion Rate</p>
+            <p className="text-sm font-semibold text-slate-700">Customer Journey Completion Rate</p>
             <div className="mt-4">
               <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
                 <span>Completion</span>
@@ -930,18 +930,18 @@ const CeoDoctorNetwork = () => {
               </div>
             </div>
             <div className="mt-5 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-              Tracks referred patients who complete full diagnostic journey and report closure.
+              Tracks referred customers who complete full diagnostic journey and report closure.
             </div>
           </div>
 
           <div className={`${CARD_CLASS} col-span-12`}>
-            <p className="text-sm font-semibold text-slate-700">Doctor Issue Tracker</p>
+            <p className="text-sm font-semibold text-slate-700">Staff Issue Tracker</p>
             <div className="mt-3 overflow-x-auto rounded-md border border-slate-200">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                   <tr>
                     <th className="px-3 py-2">Issue ID</th>
-                    <th className="px-3 py-2">Doctor</th>
+                    <th className="px-3 py-2">Staff</th>
                     <th className="px-3 py-2">Issue Type</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2">Updated</th>
@@ -974,36 +974,36 @@ const CeoDoctorNetwork = () => {
         </div>
       </section>
 
-      {selectedDoctorSummary && (
+      {selectedStaffSummary && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="text-xl font-bold text-slate-900">{selectedDoctorSummary.doctor_name}</h3>
-                <p className="text-xs uppercase text-slate-500">Doctor Performance Summary</p>
+                <h3 className="text-xl font-bold text-slate-900">{selectedStaffSummary.doctor_name}</h3>
+                <p className="text-xs uppercase text-slate-500">Staff Performance Summary</p>
               </div>
-              <button type="button" onClick={() => setSelectedDoctorId(null)} className="rounded-md bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+              <button type="button" onClick={() => setSelectedStaffId(null)} className="rounded-md bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
                 Close
               </button>
             </div>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="rounded-md bg-indigo-50 p-3">
                 <p className="text-xs uppercase text-indigo-700">Total Referrals</p>
-                <p className="text-2xl font-black text-indigo-800">{selectedDoctorSummary.total_referrals}</p>
+                <p className="text-2xl font-black text-indigo-800">{selectedStaffSummary.total_referrals}</p>
               </div>
               <div className="rounded-md bg-emerald-50 p-3">
                 <p className="text-xs uppercase text-emerald-700">Revenue Generated</p>
-                <p className="text-xl font-black text-emerald-800">{toCurrency(selectedDoctorSummary.revenue_generated)}</p>
+                <p className="text-xl font-black text-emerald-800">{toCurrency(selectedStaffSummary.revenue_generated)}</p>
               </div>
               <div className="rounded-md bg-amber-50 p-3">
                 <p className="text-xs uppercase text-amber-700">Commission Earned</p>
-                <p className="text-xl font-black text-amber-800">{toCurrency(selectedDoctorSummary.commission_earned)}</p>
+                <p className="text-xl font-black text-amber-800">{toCurrency(selectedStaffSummary.commission_earned)}</p>
               </div>
             </div>
             <div className="mt-4">
               <p className="text-sm font-semibold text-slate-700">Interaction History</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600">
-                {selectedDoctorSummary.interaction_history.map((item, idx) => <li key={`${selectedDoctorSummary.doctor_id}-${idx}`}>{item}</li>)}
+                {selectedStaffSummary.interaction_history.map((item, idx) => <li key={`${selectedStaffSummary.doctor_id}-${idx}`}>{item}</li>)}
               </ul>
             </div>
           </div>
@@ -1013,4 +1013,4 @@ const CeoDoctorNetwork = () => {
   )
 }
 
-export default CeoDoctorNetwork
+export default CeoStaffNetwork

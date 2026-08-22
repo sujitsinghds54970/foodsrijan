@@ -11,4 +11,4 @@ class BillingEntry(Base):
     status = Column(String, default="pending")  # pending, paid, partial, refunded
 
     patient_id = Column(Integer, ForeignKey("patient_entries.id"))
-    patient = relationship("PatientEntry", backref="billing_entries")
+    patient = relationship("CustomerEntry", backref="billing_entries")

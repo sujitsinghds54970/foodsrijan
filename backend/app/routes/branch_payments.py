@@ -21,9 +21,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import SessionLocal, get_db
-from app.models import Branch, DailyEntry, Patient, User
+from app.models import Branch, DailyEntry, Customer, User
 from app.models.branch_bank_details import BranchBankDetails
-from app.models.patient import PatientProfile
+from app.models.customer import CustomerProfile
 from app.models.payment import InsuranceClaim, Invoice, Payment, PaymentMode, PaymentReminder, PaymentStatus, ReconciliationLog, Refund
 from app.services.email_service import get_email_service
 from app.services.sms_service import get_sms_service
@@ -152,7 +152,7 @@ class BulkReconciliationResponse(BaseModel):
     created_at: str
 
 
-class SettlementReport(BaseModel):
+class SettlementOrder(BaseModel):
     date: str
     gateway: str
     amount_collected: float
@@ -295,14 +295,14 @@ def _safe_datetime(value: Optional[datetime], fallback: Optional[datetime] = Non
     return fallback or datetime.utcnow()
 
 
-def _patient_full_name(patient: Optional[Patient]) -> str:
+def _patient_full_name(patient: Optional[Customer]) -> str:
     if not patient:
-        return "Unknown Patient"
+        return "Unknown Customer"
     name = f"{patient.first_name or ''} {patient.last_name or ''}".strip()
-    return name or patient.patient_id or "Unknown Patient"
+    return name or patient.patient_id or "Unknown Customer"
 
 
-def _patient_identifier(patient: Optional[Patient], profile: Optional[PatientProfile]) -> Optional[str]:
+def _patient_identifier(patient: Optional[Customer], profile: Optional[CustomerProfile]) -> Optional[str]:
     if profile and profile.patient_code:
         return profile.patient_code
     if patient and patient.patient_id:
@@ -319,7 +319,7 @@ def _test_name_from_invoice(invoice: Invoice) -> str:
     return invoice.invoice_number
 
 
-def _build_payment_event(payment: Payment, profile_map: Dict[int, PatientProfile]) -> Tuple[Dict[str, object], float]:
+def _build_payment_event(payment: Payment, profile_map: Dict[int, CustomerProfile]) -> Tuple[Dict[str, object], float]:
     invoice = payment.invoice
     patient = invoice.patient if invoice else None
     profile = profile_map.get(invoice.patient_id) if invoice and invoice.patient_id else None
@@ -358,11 +358,11 @@ def _daily_test_name(entry: DailyEntry) -> str:
     return text or "Daily Entry"
 
 
-def _load_patient_profiles(db: Session, patient_ids: Sequence[int]) -> Dict[int, PatientProfile]:
+def _load_patient_profiles(db: Session, patient_ids: Sequence[int]) -> Dict[int, CustomerProfile]:
     ids = [int(pid) for pid in patient_ids if pid]
     if not ids:
         return {}
-    profiles = db.query(PatientProfile).filter(PatientProfile.patient_id.in_(ids)).all()
+    profiles = db.query(CustomerProfile).filter(CustomerProfile.patient_id.in_(ids)).all()
     return {int(profile.patient_id): profile for profile in profiles if profile.patient_id is not None}
 
 
@@ -374,7 +374,7 @@ def _invoice_paid_amount(invoice: Invoice) -> float:
     )
 
 
-def _build_daily_entry_event(entry: DailyEntry, profile_map: Dict[int, PatientProfile]) -> Tuple[Dict[str, object], float, float, Optional[date]]:
+def _build_daily_entry_event(entry: DailyEntry, profile_map: Dict[int, CustomerProfile]) -> Tuple[Dict[str, object], float, float, Optional[date]]:
     profile = profile_map.get(entry.patient_id) if entry.patient_id else None
     patient = entry.patient
     billed_amount = _amount(entry.total_amount)
@@ -656,13 +656,13 @@ def _smart_payment_alerts(db: Session, branch_id: int) -> List[SmartAlertItem]:
     denied_claims = (
         db.query(InsuranceClaim)
         .join(Invoice, InsuranceClaim.invoice_id == Invoice.id)
-        .join(Patient, InsuranceClaim.patient_id == Patient.id)
+        .join(Customer, InsuranceClaim.patient_id == Customer.id)
         .filter(Invoice.branch_id == branch_id, InsuranceClaim.status.in_(["rejected", "denied", "declined"]))
         .order_by(InsuranceClaim.updated_at.desc())
         .all()
     )
     for claim in denied_claims[:3]:
-        patient = db.query(Patient).filter(Patient.id == claim.patient_id, Patient.branch_id == branch_id).first()
+        patient = db.query(Customer).filter(Customer.id == claim.patient_id, Customer.branch_id == branch_id).first()
         alerts.append(
             SmartAlertItem(
                 alert_id=alert_id,
@@ -939,7 +939,7 @@ def auto_reconcile_all_payments(
     )
 
 
-@router.get("/settlement", response_model=List[SettlementReport])
+@router.get("/settlement", response_model=List[SettlementOrder])
 def get_settlement_report(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -949,13 +949,13 @@ def get_settlement_report(
     settlement_amounts = _settlement_amounts(transactions)
     bank_details = db.query(BranchBankDetails).filter(BranchBankDetails.branch_id == branch_id, BranchBankDetails.is_active.is_(True)).first()
 
-    reports: List[SettlementReport] = []
+    orders: List[SettlementOrder] = []
     for gateway in ("Cash", "UPI", "Card", "Insurance"):
         collected = settlement_amounts[gateway]
         discrepancy = round(collected * (0.0 if gateway == "Cash" else 0.02), 2)
         settled = round(collected - discrepancy, 2)
-        reports.append(
-            SettlementReport(
+        orders.append(
+            SettlementOrder(
                 date=datetime.utcnow().date().isoformat(),
                 gateway=gateway,
                 amount_collected=round(collected, 2),
@@ -968,7 +968,7 @@ def get_settlement_report(
             )
         )
 
-    return reports
+    return orders
 
 
 @router.get("/discrepancy-alerts", response_model=List[DiscrepancyAlert])
@@ -1214,8 +1214,8 @@ async def _send_reminder_channels(
     db: Session,
     *,
     branch_id: int,
-    patient: Patient,
-    summary: PatientFinancialResponse,
+    patient: Customer,
+    summary: CustomerFinancialResponse,
     invoice: Optional[Invoice],
     message: str,
     reminder_type: str,
@@ -1332,10 +1332,10 @@ async def _dispatch_due_payment_reminders(
             paid_amount = _invoice_paid_amount(invoice)
             if billed_amount <= paid_amount:
                 continue
-            patient = invoice.patient or db.query(Patient).filter(Patient.id == invoice.patient_id, Patient.branch_id == current_branch_id).first()
+            patient = invoice.patient or db.query(Customer).filter(Customer.id == invoice.patient_id, Customer.branch_id == current_branch_id).first()
             if not patient:
                 continue
-            profile = db.query(PatientProfile).filter(PatientProfile.patient_id == patient.id).first()
+            profile = db.query(CustomerProfile).filter(CustomerProfile.patient_id == patient.id).first()
             summary = _patient_financial_summary(db, current_branch_id, patient.id)
             message = (
                 f"Dear {summary.full_name}, your payment of {fmtMoney(summary.outstanding_balance)} "
@@ -1448,13 +1448,13 @@ class RefundItem(BaseModel):
     reference: Optional[str] = None
 
 
-class PatientFinancialResponse(BaseModel):
+class CustomerFinancialResponse(BaseModel):
     patient_id: int
     patient_code: Optional[str] = None
     full_name: str
     mobile: Optional[str] = None
     email: Optional[str] = None
-    total_tests: int
+    total_menu_items: int
     total_billed: float
     total_paid: float
     outstanding_balance: float
@@ -1662,12 +1662,12 @@ class SimulationResponse(BaseModel):
     note: str
 
 
-def _patient_display_name(patient: Optional[Patient], profile: Optional[PatientProfile]) -> str:
+def _patient_display_name(patient: Optional[Customer], profile: Optional[CustomerProfile]) -> str:
     if profile and profile.full_name:
         return profile.full_name
     if patient:
         return _patient_full_name(patient)
-    return "Unknown Patient"
+    return "Unknown Customer"
 
 
 def _service_gst_rate(service_type: Optional[str], item: InvoiceLineItemInput) -> float:
@@ -1734,11 +1734,11 @@ def _generate_invoice_payload(
     due_days: int = 0,
 ) -> GeneratedInvoiceResponse:
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
-    patient = db.query(Patient).filter(Patient.id == patient_id, Patient.branch_id == branch_id).first()
+    patient = db.query(Customer).filter(Customer.id == patient_id, Customer.branch_id == branch_id).first()
     if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found for this branch")
+        raise HTTPException(status_code=404, detail="Customer not found for this branch")
 
-    profile = db.query(PatientProfile).filter(PatientProfile.patient_id == patient_id).first()
+    profile = db.query(CustomerProfile).filter(CustomerProfile.patient_id == patient_id).first()
     invoice_number = f"INV-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{patient_id}"
     line_items: List[InvoiceLineItemBreakdown] = []
     taxable_total = 0.0
@@ -1821,12 +1821,12 @@ def _generate_invoice_payload(
     )
 
 
-def _patient_financial_summary(db: Session, branch_id: int, patient_id: int) -> PatientFinancialResponse:
-    patient = db.query(Patient).filter(Patient.id == patient_id, Patient.branch_id == branch_id).first()
+def _patient_financial_summary(db: Session, branch_id: int, patient_id: int) -> CustomerFinancialResponse:
+    patient = db.query(Customer).filter(Customer.id == patient_id, Customer.branch_id == branch_id).first()
     if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found for this branch")
+        raise HTTPException(status_code=404, detail="Customer not found for this branch")
 
-    profile = db.query(PatientProfile).filter(PatientProfile.patient_id == patient_id).first()
+    profile = db.query(CustomerProfile).filter(CustomerProfile.patient_id == patient_id).first()
     invoices = (
         db.query(Invoice)
         .filter(Invoice.branch_id == branch_id, Invoice.patient_id == patient_id)
@@ -1857,7 +1857,7 @@ def _patient_financial_summary(db: Session, branch_id: int, patient_id: int) -> 
     history: List[FinancialHistoryItem] = []
     total_billed = 0.0
     total_paid = 0.0
-    total_tests = 0
+    total_menu_items = 0
     last_payment_at: Optional[str] = None
 
     for invoice in invoices:
@@ -1865,7 +1865,7 @@ def _patient_financial_summary(db: Session, branch_id: int, patient_id: int) -> 
         paid_amount = _invoice_paid_amount(invoice)
         total_billed += invoice_total
         total_paid += paid_amount
-        total_tests += len(invoice.items or [])
+        total_menu_items += len(invoice.items or [])
         history.append(
             FinancialHistoryItem(
                 id=f"invoice-{invoice.id}",
@@ -1885,7 +1885,7 @@ def _patient_financial_summary(db: Session, branch_id: int, patient_id: int) -> 
         paid = _amount(entry.amount_paid)
         total_billed += billed
         total_paid += paid
-        total_tests += 1
+        total_menu_items += 1
         history.append(
             FinancialHistoryItem(
                 id=f"daily-{entry.id}",
@@ -1932,13 +1932,13 @@ def _patient_financial_summary(db: Session, branch_id: int, patient_id: int) -> 
     history.sort(key=lambda row: row.timestamp, reverse=True)
     outstanding = round(max(total_billed - total_paid, 0.0), 2)
 
-    return PatientFinancialResponse(
+    return CustomerFinancialResponse(
         patient_id=patient.id,
         patient_code=profile.patient_code if profile else patient.patient_id,
         full_name=_patient_display_name(patient, profile),
         mobile=profile.mobile if profile else patient.phone,
         email=profile.email if profile else patient.email,
-        total_tests=total_tests,
+        total_menu_items=total_menu_items,
         total_billed=round(total_billed, 2),
         total_paid=round(total_paid, 2),
         outstanding_balance=outstanding,
@@ -1950,11 +1950,11 @@ def _patient_financial_summary(db: Session, branch_id: int, patient_id: int) -> 
 
 
 def _outstanding_due_rows(db: Session, branch_id: int) -> List[OutstandingDueRow]:
-    patients = db.query(Patient).filter(Patient.branch_id == branch_id, Patient.is_active.is_(True)).all()
+    customers = db.query(Customer).filter(Customer.branch_id == branch_id, Customer.is_active.is_(True)).all()
     rows: List[OutstandingDueRow] = []
     today = datetime.utcnow().date()
-    for patient in patients:
-        profile = db.query(PatientProfile).filter(PatientProfile.patient_id == patient.id).first()
+    for patient in customers:
+        profile = db.query(CustomerProfile).filter(CustomerProfile.patient_id == patient.id).first()
         summary = _patient_financial_summary(db, branch_id, patient.id)
         if summary.outstanding_balance <= 0:
             continue
@@ -1989,7 +1989,7 @@ def _outstanding_due_rows(db: Session, branch_id: int) -> List[OutstandingDueRow
     return rows
 
 
-@router.get("/patients/{id}/financial", response_model=PatientFinancialResponse)
+@router.get("/customers/{id}/financial", response_model=CustomerFinancialResponse)
 def get_patient_financial_profile(
     id: int,
     current_user: User = Depends(get_current_user),
@@ -2023,9 +2023,9 @@ async def send_payment_reminders(
     total_sent = 0
 
     for pid in patient_ids:
-        patient = db.query(Patient).filter(Patient.id == pid, Patient.branch_id == branch_id).first()
+        patient = db.query(Customer).filter(Customer.id == pid, Customer.branch_id == branch_id).first()
         if not patient:
-            raise HTTPException(status_code=404, detail=f"Patient {pid} not found for this branch")
+            raise HTTPException(status_code=404, detail=f"Customer {pid} not found for this branch")
         summary = _patient_financial_summary(db, branch_id, pid)
         message = payload.message or (
             f"Dear {summary.full_name}, your outstanding balance is {fmtMoney(summary.outstanding_balance)}. "

@@ -65,7 +65,7 @@ export default function AnalyticsDashboard({ forcedBranchId }: AnalyticsDashboar
 
     try {
       setLoading(true)
-      const [dashboardData, trendsData, topDoctorsData, forecastData] = await Promise.all([
+      const [dashboardData, trendsData, topStaffsData, forecastData] = await Promise.all([
         fetchAnalyticsDashboard(branchId, token),
         fetchAnalyticsTrends(branchId, startDate, endDate, token),
         fetchTopReferrers(branchId, startDate, endDate, token),
@@ -74,7 +74,7 @@ export default function AnalyticsDashboard({ forcedBranchId }: AnalyticsDashboar
 
       setDashboard(dashboardData)
       setTrends(trendsData)
-      setTopReferrers(topDoctorsData)
+      setTopReferrers(topStaffsData)
       setForecast(forecastData)
     } catch (error: any) {
       toast.error(error?.response?.data?.detail || 'Failed to load analytics data')
@@ -119,11 +119,11 @@ export default function AnalyticsDashboard({ forcedBranchId }: AnalyticsDashboar
     ]
   }, [dashboard])
 
-  const topDoctorsChart = useMemo(() => {
+  const topStaffsChart = useMemo(() => {
     return (topReferrers?.items || []).slice(0, 5).map((row) => ({
       doctor: row.doctor_name,
       revenue: row.total_revenue,
-      patients: row.patient_count,
+      customers: row.patient_count,
     }))
   }, [topReferrers?.items])
 
@@ -166,7 +166,7 @@ export default function AnalyticsDashboard({ forcedBranchId }: AnalyticsDashboar
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
           <p className="text-sm font-bold text-emerald-700">Next Month Forecast</p>
           <p className="text-emerald-900">
-            Predicted Patients: {forecast.predicted_patients} (+/-{forecast.confidence_margin_percent}%)
+            Predicted Customers: {forecast.predicted_customers} (+/-{forecast.confidence_margin_percent}%)
           </p>
           <p className="mt-1 text-xs text-emerald-700">
             Range: {forecast.lower_bound} - {forecast.upper_bound}
@@ -177,7 +177,7 @@ export default function AnalyticsDashboard({ forcedBranchId }: AnalyticsDashboar
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <KpiCard title="Current Month Revenue" value={formatInr(dashboard?.kpis.total_revenue || 0)} />
         <KpiCard title="Current Month Net Profit" value={formatInr(dashboard?.kpis.net_profit || 0)} />
-        <KpiCard title="Patient Count" value={String(dashboard?.kpis.patient_count || 0)} />
+        <KpiCard title="Customer Count" value={String(dashboard?.kpis.patient_count || 0)} />
         <KpiCard title="Avg Bill Value" value={formatInr(dashboard?.kpis.avg_bill_value || 0)} />
       </div>
 
@@ -219,17 +219,17 @@ export default function AnalyticsDashboard({ forcedBranchId }: AnalyticsDashboar
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-2xl bg-white p-5 shadow-sm">
-          <h3 className="mb-3 text-lg font-semibold text-slate-900">Top 5 Referring Doctors</h3>
+          <h3 className="mb-3 text-lg font-semibold text-slate-900">Top 5 Referring Staffs</h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topDoctorsChart}>
+              <BarChart data={topStaffsChart}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="doctor" hide />
                 <YAxis />
                 <Tooltip />
                 <Legend />
                 <Bar dataKey="revenue" fill="#0284c7" />
-                <Bar dataKey="patients" fill="#a855f7" />
+                <Bar dataKey="customers" fill="#a855f7" />
               </BarChart>
             </ResponsiveContainer>
           </div>

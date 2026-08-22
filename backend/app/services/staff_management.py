@@ -1,20 +1,20 @@
 """
-COMPLETE STAFF MANAGEMENT MODULE FOR MULTI-BRANCH DIAGNOSTIC ERP SYSTEM
+COMPLETE StaffEmployee MANAGEMENT MODULE FOR MULTI-BRANCH DIAGNOSTIC ERP SYSTEM
 Production-Ready | Branch-Isolated | Excel-Based Storage | Comprehensive HR Features
 
 Author: Vaidya Vihar Diagnostic ERP Team
 Version: 1.0.0
 Created: 2026-03-22
 
-This module provides complete staff management functionality including:
-- Staff Profile Management
+This module provides complete StaffEmployee management functionality including:
+- StaffEmployee Profile Management
 - Attendance Tracking
 - Salary Processing
 - Performance Management
-- Staff Scheduling
+- StaffEmployee Scheduling
 - Document Management
 - Self-Service Portal
-- Analytics & Reporting
+- Analytics & Ordering
 """
 
 import os
@@ -109,19 +109,19 @@ class UserRole(Enum):
     HR_MANAGER = "HR Manager"
     BRANCH_MANAGER = "Branch Manager"
     DEPARTMENT_HEAD = "Department Head"
-    STAFF = "Staff"
+    StaffEmployee = "StaffEmployee"
 
 # Custom Exceptions
 class StaffManagementError(Exception):
-    """Base exception for staff management"""
+    """Base exception for StaffEmployee management"""
     pass
 
 class StaffNotFoundError(StaffManagementError):
-    """Staff member not found"""
+    """StaffEmployee member not found"""
     pass
 
 class DuplicateStaffError(StaffManagementError):
-    """Duplicate staff member"""
+    """Duplicate StaffEmployee member"""
     pass
 
 class InsufficientLeaveBalanceError(StaffManagementError):
@@ -143,12 +143,12 @@ class BranchConfig:
     branch_id: str
     branch_name: str
     branch_code: str
-    base_data_path: str = "./data/staff"
+    base_data_path: str = "./data/StaffEmployee"
     timezone: str = "Asia/Kolkata"
 
 @dataclass
 class StaffMember:
-    """Staff member data structure"""
+    """StaffEmployee member data structure"""
     employee_id: str
     full_name: str
     date_of_birth: date
@@ -280,10 +280,10 @@ class EncryptionManager:
             return ""
 
 class StaffManagementSystem:
-    """Main Staff Management System"""
+    """Main StaffEmployee Management System"""
     
     def __init__(self, branch_config: BranchConfig):
-        """Initialize staff management system"""
+        """Initialize StaffEmployee management system"""
         self.branch_config = branch_config
         self.branch_id = branch_config.branch_id
         self.branch_code = branch_config.branch_code
@@ -296,7 +296,7 @@ class StaffManagementSystem:
         
         # Threading locks for concurrent access
         self.locks = {
-            'staff_master': threading.Lock(),
+            'staff_': threading.Lock(),
             'attendance': threading.Lock(),
             'salary': threading.Lock(),
             'performance': threading.Lock(),
@@ -305,23 +305,23 @@ class StaffManagementSystem:
         }
         
         # Cache for frequently accessed data
-        self._staff_cache = {}
+        self._StaffEmployee_cache = {}
         self._cache_timestamp = {}
         self._cache_ttl = 300  # 5 minutes
         
         # Initialize Excel files
         self._initialize_excel_files()
         
-        logger.info(f"Staff Management System initialized for branch: {self.branch_id}")
+        logger.info(f"StaffEmployee Management System initialized for branch: {self.branch_id}")
     
     def _initialize_excel_files(self):
         """Initialize all required Excel files"""
         current_year = datetime.now().year
         current_month = datetime.now().month
         
-        # Staff Master file
-        staff_master_path = self._get_excel_file_path('staff_master')
-        self._ensure_file_exists(staff_master_path, 'staff_master')
+        # StaffEmployee Master file
+        StaffEmployee_master_path = self._get_excel_file_path('staff_')
+        self._ensure_file_exists(StaffEmployee_master_path, 'staff_')
         
         # Attendance file for current month
         attendance_path = self._get_excel_file_path('attendance', year=current_year, month=current_month)
@@ -339,57 +339,57 @@ class StaffManagementSystem:
         schedule_path = self._get_excel_file_path('schedule')
         self._ensure_file_exists(schedule_path, 'schedule')
     
-    # ==================== STAFF MANAGEMENT CORE FUNCTIONS ====================
+    # ==================== StaffEmployee MANAGEMENT CORE FUNCTIONS ====================
     
-    def add_staff_member(self, staff_data: Dict[str, Any]) -> str:
-        """Add new staff member
+    def add_StaffEmployee_member(self, StaffEmployee_data: Dict[str, Any]) -> str:
+        """Add new StaffEmployee member
         
         Args:
-            staff_data: Dictionary containing staff information
+            StaffEmployee_data: Dictionary containing StaffEmployee information
             
         Returns:
             employee_id: Generated employee ID
             
         Raises:
-            DuplicateStaffError: If staff with same email/phone exists
+            DuplicateStaffError: If StaffEmployee with same email/phone exists
         """
         try:
             # Generate employee ID
             employee_id = self._generate_employee_id()
             
             # Check for duplicates
-            staff_master_path = self._get_excel_file_path('staff_master')
-            personal_df = self._read_excel_safe(staff_master_path, 'Personal_Details')
+            StaffEmployee_master_path = self._get_excel_file_path('staff_')
+            personal_df = self._read_excel_safe(StaffEmployee_master_path, 'Personal_Details')
             
             if not personal_df.empty:
-                if staff_data.get('email') in personal_df['email'].values:
-                    raise DuplicateStaffError(f"Staff with email {staff_data['email']} already exists")
-                if staff_data.get('phone') in personal_df['phone'].values:
-                    raise DuplicateStaffError(f"Staff with phone {staff_data['phone']} already exists")
+                if StaffEmployee_data.get('email') in personal_df['email'].values:
+                    raise DuplicateStaffError(f"StaffEmployee with email {StaffEmployee_data['email']} already exists")
+                if StaffEmployee_data.get('phone') in personal_df['phone'].values:
+                    raise DuplicateStaffError(f"StaffEmployee with phone {StaffEmployee_data['phone']} already exists")
             
             # Encrypt sensitive data
-            encrypted_pan = self.encryption_manager.encrypt(staff_data.get('pan_number', ''))
-            encrypted_aadhar = self.encryption_manager.encrypt(staff_data.get('aadhar_number', ''))
-            encrypted_bank = self.encryption_manager.encrypt(staff_data.get('bank_account_number', ''))
+            encrypted_pan = self.encryption_manager.encrypt(StaffEmployee_data.get('pan_number', ''))
+            encrypted_aadhar = self.encryption_manager.encrypt(StaffEmployee_data.get('aadhar_number', ''))
+            encrypted_bank = self.encryption_manager.encrypt(StaffEmployee_data.get('bank_account_number', ''))
             
             # Prepare personal details
             personal_data = {
                 'employee_id': employee_id,
-                'full_name': staff_data['full_name'],
-                'date_of_birth': staff_data.get('date_of_birth'),
-                'gender': staff_data.get('gender'),
-                'blood_group': staff_data.get('blood_group'),
-                'phone': staff_data['phone'],
-                'email': staff_data['email'],
-                'emergency_contact': staff_data.get('emergency_contact'),
-                'emergency_contact_name': staff_data.get('emergency_contact_name'),
-                'emergency_contact_relation': staff_data.get('emergency_contact_relation'),
-                'address': staff_data.get('address'),
+                'full_name': StaffEmployee_data['full_name'],
+                'date_of_birth': StaffEmployee_data.get('date_of_birth'),
+                'gender': StaffEmployee_data.get('gender'),
+                'blood_group': StaffEmployee_data.get('blood_group'),
+                'phone': StaffEmployee_data['phone'],
+                'email': StaffEmployee_data['email'],
+                'emergency_contact': StaffEmployee_data.get('emergency_contact'),
+                'emergency_contact_name': StaffEmployee_data.get('emergency_contact_name'),
+                'emergency_contact_relation': StaffEmployee_data.get('emergency_contact_relation'),
+                'address': StaffEmployee_data.get('address'),
                 'pan_number': encrypted_pan,
                 'aadhar_number': encrypted_aadhar,
                 'bank_account_number': encrypted_bank,
-                'bank_name': staff_data.get('bank_name'),
-                'bank_ifsc': staff_data.get('bank_ifsc'),
+                'bank_name': StaffEmployee_data.get('bank_name'),
+                'bank_ifsc': StaffEmployee_data.get('bank_ifsc'),
                 'is_active': True,
                 'created_at': datetime.now(),
                 'updated_at': datetime.now()
@@ -398,38 +398,38 @@ class StaffManagementSystem:
             # Add to Personal_Details sheet
             new_row = pd.DataFrame([personal_data])
             updated_df = pd.concat([personal_df, new_row], ignore_index=True)
-            self._write_excel_safe(staff_master_path, updated_df, 'Personal_Details')
+            self._write_excel_safe(StaffEmployee_master_path, updated_df, 'Personal_Details')
             
             # Prepare job details
             job_data = {
                 'employee_id': employee_id,
-                'designation': staff_data.get('designation'),
-                'department': staff_data.get('department'),
-                'reporting_manager': staff_data.get('reporting_manager'),
-                'joining_date': staff_data.get('joining_date', date.today()),
-                'employment_type': staff_data.get('employment_type', 'Full-Time'),
-                'work_schedule': json.dumps(staff_data.get('work_schedule', {})),
-                'salary_grade': staff_data.get('salary_grade')
+                'designation': StaffEmployee_data.get('designation'),
+                'department': StaffEmployee_data.get('department'),
+                'reporting_manager': StaffEmployee_data.get('reporting_manager'),
+                'joining_date': StaffEmployee_data.get('joining_date', date.today()),
+                'employment_type': StaffEmployee_data.get('employment_type', 'Full-Time'),
+                'work_schedule': json.dumps(StaffEmployee_data.get('work_schedule', {})),
+                'salary_grade': StaffEmployee_data.get('salary_grade')
             }
             
             # Add to Job_Details sheet
-            job_df = self._read_excel_safe(staff_master_path, 'Job_Details')
+            job_df = self._read_excel_safe(StaffEmployee_master_path, 'Job_Details')
             new_job_row = pd.DataFrame([job_data])
             updated_job_df = pd.concat([job_df, new_job_row], ignore_index=True)
-            self._write_excel_safe(staff_master_path, updated_job_df, 'Job_Details')
+            self._write_excel_safe(StaffEmployee_master_path, updated_job_df, 'Job_Details')
             
             # Log audit
-            self._log_audit('ADD_STAFF', employee_id, staff_data)
+            self._log_audit('ADD_StaffEmployee', employee_id, StaffEmployee_data)
             
-            logger.info(f"Added new staff member: {employee_id} - {staff_data['full_name']}")
+            logger.info(f"Added new StaffEmployee member: {employee_id} - {StaffEmployee_data['full_name']}")
             return employee_id
             
         except Exception as e:
-            logger.error(f"Error adding staff member: {e}")
+            logger.error(f"Error adding StaffEmployee member: {e}")
             raise
     
-    def update_staff_details(self, employee_id: str, updates: Dict[str, Any]) -> bool:
-        """Update staff details
+    def update_StaffEmployee_details(self, employee_id: str, updates: Dict[str, Any]) -> bool:
+        """Update StaffEmployee details
         
         Args:
             employee_id: Employee ID
@@ -439,15 +439,15 @@ class StaffManagementSystem:
             bool: True if successful
         """
         try:
-            staff_master_path = self._get_excel_file_path('staff_master')
+            StaffEmployee_master_path = self._get_excel_file_path('staff_')
             
             # Update personal details if provided
             if any(k in updates for k in ['full_name', 'phone', 'email', 'address']):
-                personal_df = self._read_excel_safe(staff_master_path, 'Personal_Details')
+                personal_df = self._read_excel_safe(StaffEmployee_master_path, 'Personal_Details')
                 mask = personal_df['employee_id'] == employee_id
                 
                 if not mask.any():
-                    raise StaffNotFoundError(f"Staff {employee_id} not found")
+                    raise StaffNotFoundError(f"StaffEmployee {employee_id} not found")
                 
                 # Encrypt sensitive fields if being updated
                 if 'pan_number' in updates:
@@ -463,11 +463,11 @@ class StaffManagementSystem:
                         personal_df.loc[mask, key] = value
                 
                 personal_df.loc[mask, 'updated_at'] = datetime.now()
-                self._write_excel_safe(staff_master_path, personal_df, 'Personal_Details')
+                self._write_excel_safe(StaffEmployee_master_path, personal_df, 'Personal_Details')
             
             # Update job details if provided
             if any(k in updates for k in ['designation', 'department', 'reporting_manager']):
-                job_df = self._read_excel_safe(staff_master_path, 'Job_Details')
+                job_df = self._read_excel_safe(StaffEmployee_master_path, 'Job_Details')
                 mask = job_df['employee_id'] == employee_id
                 
                 for key, value in updates.items():
@@ -476,46 +476,46 @@ class StaffManagementSystem:
                             value = json.dumps(value)
                         job_df.loc[mask, key] = value
                 
-                self._write_excel_safe(staff_master_path, job_df, 'Job_Details')
+                self._write_excel_safe(StaffEmployee_master_path, job_df, 'Job_Details')
             
             # Clear cache
-            if employee_id in self._staff_cache:
-                del self._staff_cache[employee_id]
+            if employee_id in self._StaffEmployee_cache:
+                del self._StaffEmployee_cache[employee_id]
             
             # Log audit
-            self._log_audit('UPDATE_STAFF', employee_id, updates)
+            self._log_audit('UPDATE_StaffEmployee', employee_id, updates)
             
-            logger.info(f"Updated staff details for: {employee_id}")
+            logger.info(f"Updated StaffEmployee details for: {employee_id}")
             return True
             
         except Exception as e:
-            logger.error(f"Error updating staff details: {e}")
+            logger.error(f"Error updating StaffEmployee details: {e}")
             raise
     
-    def get_staff_details(self, employee_id: str) -> Dict[str, Any]:
-        """Get complete staff details
+    def get_StaffEmployee_details(self, employee_id: str) -> Dict[str, Any]:
+        """Get complete StaffEmployee details
         
         Args:
             employee_id: Employee ID
             
         Returns:
-            dict: Staff details
+            dict: StaffEmployee details
         """
         # Check cache
-        if employee_id in self._staff_cache:
+        if employee_id in self._StaffEmployee_cache:
             cache_time = self._cache_timestamp.get(employee_id, 0)
             if time.time() - cache_time < self._cache_ttl:
-                return self._staff_cache[employee_id]
+                return self._StaffEmployee_cache[employee_id]
         
         try:
-            staff_master_path = self._get_excel_file_path('staff_master')
+            StaffEmployee_master_path = self._get_excel_file_path('staff_')
             
             # Get personal details
-            personal_df = self._read_excel_safe(staff_master_path, 'Personal_Details')
+            personal_df = self._read_excel_safe(StaffEmployee_master_path, 'Personal_Details')
             personal_row = personal_df[personal_df['employee_id'] == employee_id]
             
             if personal_row.empty:
-                raise StaffNotFoundError(f"Staff {employee_id} not found")
+                raise StaffNotFoundError(f"StaffEmployee {employee_id} not found")
             
             personal_data = personal_row.iloc[0].to_dict()
             
@@ -525,7 +525,7 @@ class StaffManagementSystem:
             personal_data['bank_account_number'] = self.encryption_manager.decrypt(personal_data.get('bank_account_number', ''))
             
             # Get job details
-            job_df = self._read_excel_safe(staff_master_path, 'Job_Details')
+            job_df = self._read_excel_safe(StaffEmployee_master_path, 'Job_Details')
             job_row = job_df[job_df['employee_id'] == employee_id]
             
             if not job_row.empty:
@@ -538,28 +538,28 @@ class StaffManagementSystem:
                 personal_data.update(job_data)
             
             # Cache the result
-            self._staff_cache[employee_id] = personal_data
+            self._StaffEmployee_cache[employee_id] = personal_data
             self._cache_timestamp[employee_id] = time.time()
             
             return personal_data
             
         except Exception as e:
-            logger.error(f"Error getting staff details: {e}")
+            logger.error(f"Error getting StaffEmployee details: {e}")
             raise
     
-    def get_all_staff(self, filters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
-        """Get all staff with optional filters
+    def get_all_StaffEmployee(self, filters: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+        """Get all StaffEmployee with optional filters
         
         Args:
             filters: Optional filters (department, is_active, etc.)
             
         Returns:
-            DataFrame: Staff list
+            DataFrame: StaffEmployee list
         """
         try:
-            staff_master_path = self._get_excel_file_path('staff_master')
-            personal_df = self._read_excel_safe(staff_master_path, 'Personal_Details')
-            job_df = self._read_excel_safe(staff_master_path, 'Job_Details')
+            StaffEmployee_master_path = self._get_excel_file_path('staff_')
+            personal_df = self._read_excel_safe(StaffEmployee_master_path, 'Personal_Details')
+            job_df = self._read_excel_safe(StaffEmployee_master_path, 'Job_Details')
             
             # Merge personal and job details
             if not job_df.empty:
@@ -579,62 +579,62 @@ class StaffManagementSystem:
             return merged_df
             
         except Exception as e:
-            logger.error(f"Error getting all staff: {e}")
+            logger.error(f"Error getting all StaffEmployee: {e}")
             return pd.DataFrame()
     
-    def search_staff(self, search_term: str, criteria: str = "name") -> List[Dict[str, Any]]:
-        """Search staff by various criteria
+    def search_StaffEmployee(self, search_term: str, criteria: str = "name") -> List[Dict[str, Any]]:
+        """Search StaffEmployee by various criteria
         
         Args:
             search_term: Search term
             criteria: Search criteria (name, email, phone, employee_id)
             
         Returns:
-            list: Matching staff records
+            list: Matching StaffEmployee records
         """
         try:
-            all_staff = self.get_all_staff()
+            all_StaffEmployee = self.get_all_StaffEmployee()
             
-            if all_staff.empty:
+            if all_StaffEmployee.empty:
                 return []
             
             search_term = search_term.lower()
             
             if criteria == "name":
-                mask = all_staff['full_name'].str.lower().str.contains(search_term, na=False)
+                mask = all_StaffEmployee['full_name'].str.lower().str.contains(search_term, na=False)
             elif criteria == "email":
-                mask = all_staff['email'].str.lower().str.contains(search_term, na=False)
+                mask = all_StaffEmployee['email'].str.lower().str.contains(search_term, na=False)
             elif criteria == "phone":
-                mask = all_staff['phone'].str.contains(search_term, na=False)
+                mask = all_StaffEmployee['phone'].str.contains(search_term, na=False)
             elif criteria == "employee_id":
-                mask = all_staff['employee_id'].str.lower().str.contains(search_term, na=False)
+                mask = all_StaffEmployee['employee_id'].str.lower().str.contains(search_term, na=False)
             else:
                 # Search across all text fields
-                mask = (all_staff['full_name'].str.lower().str.contains(search_term, na=False) |
-                       all_staff['email'].str.lower().str.contains(search_term, na=False) |
-                       all_staff['employee_id'].str.lower().str.contains(search_term, na=False))
+                mask = (all_StaffEmployee['full_name'].str.lower().str.contains(search_term, na=False) |
+                       all_StaffEmployee['email'].str.lower().str.contains(search_term, na=False) |
+                       all_StaffEmployee['employee_id'].str.lower().str.contains(search_term, na=False))
             
-            results = all_staff[mask].to_dict('records')
+            results = all_StaffEmployee[mask].to_dict('records')
             return results
             
         except Exception as e:
-            logger.error(f"Error searching staff: {e}")
+            logger.error(f"Error searching StaffEmployee: {e}")
             return []
     
-    def get_staff_by_department(self, department: str) -> List[Dict[str, Any]]:
-        """Get staff by department
+    def get_StaffEmployee_by_department(self, department: str) -> List[Dict[str, Any]]:
+        """Get StaffEmployee by department
         
         Args:
             department: Department name
             
         Returns:
-            list: Staff in department
+            list: StaffEmployee in department
         """
-        df = self.get_all_staff(filters={'department': department, 'is_active': True})
+        df = self.get_all_StaffEmployee(filters={'department': department, 'is_active': True})
         return df.to_dict('records')
     
-    def deactivate_staff(self, employee_id: str, reason: str) -> bool:
-        """Deactivate staff member
+    def deactivate_StaffEmployee(self, employee_id: str, reason: str) -> bool:
+        """Deactivate StaffEmployee member
         
         Args:
             employee_id: Employee ID
@@ -644,30 +644,30 @@ class StaffManagementSystem:
             bool: True if successful
         """
         try:
-            staff_master_path = self._get_excel_file_path('staff_master')
-            personal_df = self._read_excel_safe(staff_master_path, 'Personal_Details')
+            StaffEmployee_master_path = self._get_excel_file_path('staff_')
+            personal_df = self._read_excel_safe(StaffEmployee_master_path, 'Personal_Details')
             
             mask = personal_df['employee_id'] == employee_id
             if not mask.any():
-                raise StaffNotFoundError(f"Staff {employee_id} not found")
+                raise StaffNotFoundError(f"StaffEmployee {employee_id} not found")
             
             personal_df.loc[mask, 'is_active'] = False
             personal_df.loc[mask, 'updated_at'] = datetime.now()
             
-            self._write_excel_safe(staff_master_path, personal_df, 'Personal_Details')
+            self._write_excel_safe(StaffEmployee_master_path, personal_df, 'Personal_Details')
             
             # Clear cache
-            if employee_id in self._staff_cache:
-                del self._staff_cache[employee_id]
+            if employee_id in self._StaffEmployee_cache:
+                del self._StaffEmployee_cache[employee_id]
             
             # Log audit
-            self._log_audit('DEACTIVATE_STAFF', employee_id, {'reason': reason})
+            self._log_audit('DEACTIVATE_StaffEmployee', employee_id, {'reason': reason})
             
-            logger.info(f"Deactivated staff: {employee_id}")
+            logger.info(f"Deactivated StaffEmployee: {employee_id}")
             return True
             
         except Exception as e:
-            logger.error(f"Error deactivating staff: {e}")
+            logger.error(f"Error deactivating StaffEmployee: {e}")
             raise
     
     def get_upcoming_birthdays(self, days: int = 7) -> List[Dict[str, Any]]:
@@ -677,20 +677,20 @@ class StaffManagementSystem:
             days: Number of days to look ahead
             
         Returns:
-            list: Staff with upcoming birthdays
+            list: StaffEmployee with upcoming birthdays
         """
         try:
-            all_staff = self.get_all_staff(filters={'is_active': True})
+            all_StaffEmployee = self.get_all_StaffEmployee(filters={'is_active': True})
             
-            if all_staff.empty:
+            if all_StaffEmployee.empty:
                 return []
             
             today = date.today()
             upcoming = []
             
-            for _, staff in all_staff.iterrows():
-                if pd.notna(staff.get('date_of_birth')):
-                    dob = pd.to_datetime(staff['date_of_birth']).date()
+            for _, StaffEmployee in all_StaffEmployee.iterrows():
+                if pd.notna(StaffEmployee.get('date_of_birth')):
+                    dob = pd.to_datetime(StaffEmployee['date_of_birth']).date()
                     # Get this year's birthday
                     this_year_birthday = dob.replace(year=today.year)
                     
@@ -702,8 +702,8 @@ class StaffManagementSystem:
                     
                     if 0 <= days_until <= days:
                         upcoming.append({
-                            'employee_id': staff['employee_id'],
-                            'full_name': staff['full_name'],
+                            'employee_id': StaffEmployee['employee_id'],
+                            'full_name': StaffEmployee['full_name'],
                             'date_of_birth': dob,
                             'birthday': this_year_birthday,
                             'days_until': days_until
@@ -722,20 +722,20 @@ class StaffManagementSystem:
             days: Number of days to look ahead
             
         Returns:
-            list: Staff with upcoming work anniversaries
+            list: StaffEmployee with upcoming work anniversaries
         """
         try:
-            all_staff = self.get_all_staff(filters={'is_active': True})
+            all_StaffEmployee = self.get_all_StaffEmployee(filters={'is_active': True})
             
-            if all_staff.empty:
+            if all_StaffEmployee.empty:
                 return []
             
             today = date.today()
             upcoming = []
             
-            for _, staff in all_staff.iterrows():
-                if pd.notna(staff.get('joining_date')):
-                    joining = pd.to_datetime(staff['joining_date']).date()
+            for _, StaffEmployee in all_StaffEmployee.iterrows():
+                if pd.notna(StaffEmployee.get('joining_date')):
+                    joining = pd.to_datetime(StaffEmployee['joining_date']).date()
                     # Get this year's anniversary
                     this_year_anniversary = joining.replace(year=today.year)
                     
@@ -748,8 +748,8 @@ class StaffManagementSystem:
                     
                     if 0 <= days_until <= days and years_of_service > 0:
                         upcoming.append({
-                            'employee_id': staff['employee_id'],
-                            'full_name': staff['full_name'],
+                            'employee_id': StaffEmployee['employee_id'],
+                            'full_name': StaffEmployee['full_name'],
                             'joining_date': joining,
                             'anniversary': this_year_anniversary,
                             'years_of_service': years_of_service,
@@ -894,9 +894,9 @@ class StaffManagementSystem:
         """Generate roster"""
         pass
     
-    def get_staff_schedule(self, employee_id: str, 
+    def get_StaffEmployee_schedule(self, employee_id: str, 
                           date_range: Tuple[date, date]) -> pd.DataFrame:
-        """Get staff schedule"""
+        """Get StaffEmployee schedule"""
         pass
     
     def check_schedule_conflicts(self, employee_id: str, 
@@ -915,16 +915,16 @@ class StaffManagementSystem:
         """Generate salary report"""
         pass
     
-    def generate_staff_directory(self, department_filter: Optional[str] = None) -> bytes:
-        """Generate staff directory PDF"""
+    def generate_StaffEmployee_directory(self, department_filter: Optional[str] = None) -> bytes:
+        """Generate StaffEmployee directory PDF"""
         pass
     
     def generate_compliance_report(self, year: int) -> bytes:
         """Generate compliance report"""
         pass
     
-    def get_staff_turnover_report(self, period: str) -> Dict[str, Any]:
-        """Get staff turnover report"""
+    def get_StaffEmployee_turnover_report(self, period: str) -> Dict[str, Any]:
+        """Get StaffEmployee turnover report"""
         pass
     
     def generate_cost_center_report(self, department: str, 
@@ -934,8 +934,8 @@ class StaffManagementSystem:
     
     # ==================== SELF-SERVICE FUNCTIONS ====================
     
-    def staff_login(self, employee_id: str, password: str) -> str:
-        """Staff login - returns JWT token"""
+    def StaffEmployee_login(self, employee_id: str, password: str) -> str:
+        """StaffEmployee login - returns JWT token"""
         pass
     
     def get_my_attendance(self, employee_id: str, month: int, year: int) -> pd.DataFrame:
@@ -967,10 +967,10 @@ class StaffManagementSystem:
         """Generate unique employee ID: {BRANCH_CODE}-EMP-{YEAR}-{SEQUENCE}"""
         current_year = datetime.now().year
         
-        # Get existing staff to determine sequence
-        staff_master_path = self._get_excel_file_path('staff_master')
+        # Get existing StaffEmployee to determine sequence
+        StaffEmployee_master_path = self._get_excel_file_path('staff_')
         try:
-            df = self._read_excel_safe(staff_master_path, 'Personal_Details')
+            df = self._read_excel_safe(StaffEmployee_master_path, 'Personal_Details')
             # Filter by current year
             year_employees = df[df['employee_id'].str.contains(f"-EMP-{current_year}-", na=False)]
             if len(year_employees) > 0:
@@ -988,19 +988,19 @@ class StaffManagementSystem:
         """Get Excel file path based on type"""
         branch_path = self.base_path / self.branch_id
         
-        if file_type == 'staff_master':
-            return branch_path / f"Staff_Master_{self.branch_id}.xlsx"
+        if file_type == 'staff_':
+            return branch_path / f"staff_Master_{self.branch_id}.xlsx"
         elif file_type == 'attendance':
             year = kwargs.get('year', datetime.now().year)
             month = kwargs.get('month', datetime.now().month)
-            return branch_path / f"Staff_Attendance_{self.branch_id}_{year}_{month:02d}.xlsx"
+            return branch_path / f"staff_Attendance_{self.branch_id}_{year}_{month:02d}.xlsx"
         elif file_type == 'salary':
             year = kwargs.get('year', datetime.now().year)
-            return branch_path / f"Staff_Salary_{self.branch_id}_{year}.xlsx"
+            return branch_path / f"staff_Salary_{self.branch_id}_{year}.xlsx"
         elif file_type == 'performance':
-            return branch_path / f"Staff_Performance_{self.branch_id}.xlsx"
+            return branch_path / f"staff_Performance_{self.branch_id}.xlsx"
         elif file_type == 'schedule':
-            return branch_path / f"Staff_Schedule_{self.branch_id}.xlsx"
+            return branch_path / f"staff_Schedule_{self.branch_id}.xlsx"
         else:
             raise ValueError(f"Unknown file type: {file_type}")
     
@@ -1012,7 +1012,7 @@ class StaffManagementSystem:
         wb = Workbook()
         wb.remove(wb.active)  # Remove default sheet
         
-        if file_type == 'staff_master':
+        if file_type == 'staff_':
             # Personal Details sheet
             ws1 = wb.create_sheet('Personal_Details')
             ws1.append(['employee_id', 'full_name', 'date_of_birth', 'gender', 'blood_group',
@@ -1211,8 +1211,8 @@ class StaffManagementSystem:
     
     def _get_lock_key(self, file_path: Path) -> str:
         """Get lock key for file"""
-        if 'Staff_Master' in str(file_path):
-            return 'staff_master'
+        if 'staff_' in str(file_path):
+            return 'staff_'
         elif 'Attendance' in str(file_path):
             return 'attendance'
         elif 'Salary' in str(file_path):
@@ -1244,11 +1244,11 @@ class StaffManagementSystem:
 # ==================== TESTING AND EXAMPLES ====================
 
 def example_usage():
-    """Example usage of the staff management system"""
+    """Example usage of the StaffEmployee management system"""
     pass
 
-def run_tests():
-    """Run comprehensive tests"""
+def run_menu_items():
+    """Run comprehensive menu_items"""
     pass
 
 if __name__ == "__main__":

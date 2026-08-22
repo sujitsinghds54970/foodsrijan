@@ -1,4 +1,4 @@
-export interface DoctorItem {
+export interface StaffItem {
   id: number
   full_name: string
   mobile: string
@@ -34,11 +34,11 @@ export interface PerformanceItem {
 export interface PerformanceResponse {
   month: number
   year: number
-  top_5_referring_doctors: PerformanceItem[]
+  top_5_referring_staff: PerformanceItem[]
   doctor_performance: PerformanceItem[]
   total_revenue_from_referrals: number
   total_commission_payable: number
-  pending_reports_to_send: number
+  pending_orders_to_send: number
 }
 
 export interface ShareResultItem {

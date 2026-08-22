@@ -3,8 +3,8 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
 
-class LabTest(Base):
-    __tablename__ = "lab_tests"
+class LabMenuItem(Base):
+    __tablename__ = "lab_menu_items"
 
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patient_entries.id"))
@@ -14,6 +14,6 @@ class LabTest(Base):
     status = Column(String, default="pending")  # pending, completed
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    patient = relationship("PatientEntry", backref="lab_tests")
-    technician = relationship("User", backref="lab_tests")
+    patient = relationship("CustomerEntry", backref="lab_menu_items")
+    technician = relationship("User", backref="lab_menu_items")
     result = Column(Text, nullable=True)

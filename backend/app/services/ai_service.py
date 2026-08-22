@@ -2,10 +2,10 @@
 AI Service for VaidyaVihar Diagnostic ERP
 
 Provides AI-powered features:
-- Test recommendations based on symptoms
+- MenuItem recommendations based on symptoms
 - Predictive analytics
 - Anomaly detection
-- Patient risk assessment
+- Customer risk assessment
 """
 
 from typing import List, Dict, Optional, Tuple
@@ -35,8 +35,8 @@ class Symptom:
 
 
 @dataclass
-class TestRecommendation:
-    """Test recommendation result"""
+class MenuItemRecommendation:
+    """MenuItem recommendation result"""
     test_code: str
     test_name: str
     category: str
@@ -48,7 +48,7 @@ class TestRecommendation:
 
 @dataclass
 class RiskAssessment:
-    """Patient risk assessment"""
+    """Customer risk assessment"""
     risk_score: int  # 0-100
     risk_level: str
     risk_factors: List[str]
@@ -58,7 +58,7 @@ class RiskAssessment:
 
 
 class SymptomAnalyzer:
-    """Analyzes symptoms and suggests appropriate tests"""
+    """Analyzes symptoms and suggests appropriate menu_items"""
 
     # Symptom to test mapping
     SYMPTOM_TEST_MAP = {
@@ -66,22 +66,22 @@ class SymptomAnalyzer:
         "fever": [
             ("CBC", "Complete Blood Count", "pathology", "moderate", "Detect infection", 300),
             ("CRP", "C-Reactive Protein", "pathology", "moderate", "Check inflammation", 400),
-            ("WIDAL", "Widal Test", "pathology", "moderate", "Rule out typhoid", 350),
+            ("WIDAL", "Widal MenuItem", "pathology", "moderate", "Rule out typhoid", 350),
         ],
         "fatigue": [
             ("CBC", "Complete Blood Count", "pathology", "moderate", "Check for anemia", 300),
-            ("LFT", "Liver Function Test", "pathology", "moderate", "Check liver health", 600),
-            ("KFT", "Kidney Function Test", "pathology", "moderate", "Check kidney health", 500),
+            ("LFT", "Liver Function MenuItem", "pathology", "moderate", "Check liver health", 600),
+            ("KFT", "Kidney Function MenuItem", "pathology", "moderate", "Check kidney health", 500),
             ("TSH", "Thyroid Stimulating Hormone", "pathology", "moderate", "Check thyroid", 450),
             ("Vitamin B12", "Vitamin B12 Level", "pathology", "low", "Check B12 deficiency", 800),
             ("Vitamin D", "Vitamin D Level", "pathology", "low", "Check vitamin D", 1200),
         ],
         "weight_loss": [
             ("CBC", "Complete Blood Count", "pathology", "high", "Check for infections/cancer", 300),
-            ("LFT", "Liver Function Test", "pathology", "high", "Check liver function", 600),
-            ("KFT", "Kidney Function Test", "pathology", "high", "Check kidney function", 500),
+            ("LFT", "Liver Function MenuItem", "pathology", "high", "Check liver function", 600),
+            ("KFT", "Kidney Function MenuItem", "pathology", "high", "Check kidney function", 500),
             ("FBS", "Fasting Blood Sugar", "pathology", "high", "Check diabetes", 100),
-            ("HbA1c", "HbA1c Test", "pathology", "moderate", "Check long-term sugar", 400),
+            ("HbA1c", "HbA1c MenuItem", "pathology", "moderate", "Check long-term sugar", 400),
             ("Thyroid Panel", "Thyroid Profile", "pathology", "moderate", "Check thyroid", 700),
         ],
         "chest_pain": [
@@ -95,20 +95,20 @@ class SymptomAnalyzer:
             ("ECG", "Electrocardiogram", "cardiology", "high", "Check heart function", 300),
             ("2D Echo", "2D Echocardiography", "cardiology", "high", "Check heart structure", 2500),
             ("CXR", "Chest X-Ray", "radiology", "high", "Check lungs", 400),
-            ("PFT", "Pulmonary Function Test", "pulmonology", "moderate", "Check lung function", 1200),
-            ("D-Dimer", "D-Dimer Test", "pathology", "high", "Rule out clot", 600),
+            ("PFT", "Pulmonary Function MenuItem", "pulmonology", "moderate", "Check lung function", 1200),
+            ("D-Dimer", "D-Dimer MenuItem", "pathology", "high", "Rule out clot", 600),
         ],
         "headache": [
             ("CBC", "Complete Blood Count", "pathology", "moderate", "Check for infection", 300),
             ("MRI Brain", "MRI Brain", "radiology", "moderate", "Check brain structure", 4500),
             ("CT Brain", "CT Scan Brain", "radiology", "moderate", "Check for tumors/bleed", 2500),
             ("ESR", "Erythrocyte Sedimentation Rate", "pathology", "low", "Check inflammation", 150),
-            ("Eye Test", "Eye Examination", "opthalmology", "low", "Check vision", 200),
+            ("Eye MenuItem", "Eye Examination", "opthalmology", "low", "Check vision", 200),
         ],
         "abdominal_pain": [
             ("USG Whole Abdomen", "Ultrasound Whole Abdomen", "radiology", "high", "Check abdominal organs", 800),
-            ("LFT", "Liver Function Test", "pathology", "high", "Check liver", 600),
-            ("KFT", "Kidney Function Test", "pathology", "high", "Check kidneys", 500),
+            ("LFT", "Liver Function MenuItem", "pathology", "high", "Check liver", 600),
+            ("KFT", "Kidney Function MenuItem", "pathology", "high", "Check kidneys", 500),
             ("Amylase", "Serum Amylase", "pathology", "moderate", "Check pancreas", 300),
             ("Lipase", "Serum Lipase", "pathology", "moderate", "Check pancreas", 350),
             ("CBC", "Complete Blood Count", "pathology", "moderate", "Check infection", 300),
@@ -123,18 +123,18 @@ class SymptomAnalyzer:
         ],
         "skin_rash": [
             ("CBC", "Complete Blood Count", "pathology", "moderate", "Check infection", 300),
-            ("Allergy Panel", "Allergy Test Panel", "pathology", "moderate", "Identify allergens", 2500),
+            ("Allergy Panel", "Allergy MenuItem Panel", "pathology", "moderate", "Identify allergens", 2500),
             ("Thyroid Panel", "Thyroid Profile", "pathology", "low", "Check thyroid", 700),
             ("Skin Scraping", "Skin Scraping Examination", "pathology", "low", "Check fungal infection", 200),
         ],
         "urinary_symptoms": [
             ("Urine Routine", "Urine Routine Examination", "pathology", "high", "Check infection", 150),
             ("Urine Culture", "Urine Culture & Sensitivity", "pathology", "high", "Identify bacteria", 400),
-            ("KFT", "Kidney Function Test", "pathology", "moderate", "Check kidney function", 500),
+            ("KFT", "Kidney Function MenuItem", "pathology", "moderate", "Check kidney function", 500),
             ("Ultrasound KUB", "Ultrasound KUB", "radiology", "moderate", "Check kidneys/bladder", 800),
         ],
         "digestive_issues": [
-            ("LFT", "Liver Function Test", "pathology", "moderate", "Check liver", 600),
+            ("LFT", "Liver Function MenuItem", "pathology", "moderate", "Check liver", 600),
             ("Lipid Profile", "Lipid Profile", "pathology", "low", "Check cholesterol", 600),
             ("FBS", "Fasting Blood Sugar", "pathology", "moderate", "Check diabetes", 100),
             ("Thyroid Panel", "Thyroid Profile", "pathology", "moderate", "Check thyroid", 700),
@@ -155,20 +155,20 @@ class SymptomAnalyzer:
         ],
         "leg_swelling": [
             ("2D Echo", "2D Echocardiography", "cardiology", "high", "Check heart function", 2500),
-            ("KFT", "Kidney Function Test", "pathology", "high", "Check kidney function", 500),
-            ("LFT", "Liver Function Test", "pathology", "moderate", "Check liver", 600),
-            ("D-Dimer", "D-Dimer Test", "pathology", "high", "Rule out clot", 600),
+            ("KFT", "Kidney Function MenuItem", "pathology", "high", "Check kidney function", 500),
+            ("LFT", "Liver Function MenuItem", "pathology", "moderate", "Check liver", 600),
+            ("D-Dimer", "D-Dimer MenuItem", "pathology", "high", "Rule out clot", 600),
             ("Venous Doppler", "Venous Doppler Lower Limb", "radiology", "moderate", "Check veins", 2000),
         ],
         "eye_problems": [
-            ("Eye Test", "Comprehensive Eye Examination", "opthalmology", "moderate", "Check vision", 300),
-            ("Refraction", "Refraction Test", "opthalmology", "low", "Check prescription", 150),
+            ("Eye MenuItem", "Comprehensive Eye Examination", "opthalmology", "moderate", "Check vision", 300),
+            ("Refraction", "Refraction MenuItem", "opthalmology", "low", "Check prescription", 150),
             ("Fundus", "Fundus Examination", "opthalmology", "moderate", "Check retina", 200),
             ("Tonometry", "Tonometry (Eye Pressure)", "opthalmology", "moderate", "Check glaucoma", 100),
         ],
         "ear_problems": [
             ("ENT Examination", "ENT Consultation", "ent", "moderate", "Examine ears", 300),
-            ("Audiometry", "Audiometry Test", "ent", "moderate", "Check hearing", 400),
+            ("Audiometry", "Audiometry MenuItem", "ent", "moderate", "Check hearing", 400),
             ("Tympanometry", "Tympanometry", "ent", "moderate", "Check eardrum", 300),
         ],
     }
@@ -176,18 +176,18 @@ class SymptomAnalyzer:
     # Gender-specific test recommendations
     GENDER_TESTS = {
         "female": [
-            ("Pap Smear", "Pap Smear Test", "gynecology", "moderate", "Cervical cancer screening", 500),
+            ("Pap Smear", "Pap Smear MenuItem", "gynecology", "moderate", "Cervical cancer screening", 500),
             ("Mammography", "Mammography", "radiology", "moderate", "Breast cancer screening", 1200),
             ("CA125", "CA-125 Tumor Marker", "pathology", "moderate", "Ovarian cancer marker", 800),
             ("AMH", "Anti-Mullerian Hormone", "pathology", "moderate", "Fertility assessment", 1500),
         ],
         "male": [
             ("PSA", "Prostate Specific Antigen", "pathology", "moderate", "Prostate cancer screening", 400),
-            ("Testosterone", "Serum Testosterone", "pathology", "low", "Hormone level check", 600),
+            ("MenuItemosterone", "Serum MenuItemosterone", "pathology", "low", "Hormone level check", 600),
         ]
     }
 
-    # Age-specific routine tests
+    # Age-specific routine menu_items
     AGE_TESTS = {
         (0, 18): [  # Children
             ("CBC", "Complete Blood Count", "pathology", "low", "General health check", 300),
@@ -201,17 +201,17 @@ class SymptomAnalyzer:
         (40, 60): [  # Middle age
             ("CBC", "Complete Blood Count", "pathology", "low", "General health", 300),
             ("Lipid Profile", "Lipid Profile", "pathology", "moderate", "Cholesterol", 600),
-            ("HbA1c", "HbA1c Test", "pathology", "moderate", "Diabetes check", 400),
-            ("KFT", "Kidney Function Test", "pathology", "low", "Kidney health", 500),
-            ("LFT", "Liver Function Test", "pathology", "low", "Liver health", 600),
+            ("HbA1c", "HbA1c MenuItem", "pathology", "moderate", "Diabetes check", 400),
+            ("KFT", "Kidney Function MenuItem", "pathology", "low", "Kidney health", 500),
+            ("LFT", "Liver Function MenuItem", "pathology", "low", "Liver health", 600),
             ("ECG", "Electrocardiogram", "cardiology", "low", "Heart check", 300),
         ],
         (60, 100): [  # Senior citizens
             ("CBC", "Complete Blood Count", "pathology", "moderate", "General health", 300),
             ("Lipid Profile", "Lipid Profile", "pathology", "moderate", "Cholesterol", 600),
-            ("HbA1c", "HbA1c Test", "pathology", "moderate", "Diabetes check", 400),
-            ("KFT", "Kidney Function Test", "pathology", "moderate", "Kidney health", 500),
-            ("LFT", "Liver Function Test", "pathology", "moderate", "Liver health", 600),
+            ("HbA1c", "HbA1c MenuItem", "pathology", "moderate", "Diabetes check", 400),
+            ("KFT", "Kidney Function MenuItem", "pathology", "moderate", "Kidney health", 500),
+            ("LFT", "Liver Function MenuItem", "pathology", "moderate", "Liver health", 600),
             ("ECG", "Electrocardiogram", "cardiology", "moderate", "Heart check", 300),
             ("2D Echo", "2D Echocardiography", "cardiology", "moderate", "Heart structure", 2500),
             ("TSH", "Thyroid Stimulating Hormone", "pathology", "low", "Thyroid check", 450),
@@ -227,21 +227,21 @@ class SymptomAnalyzer:
         age: int,
         gender: str,
         medical_history: Optional[List[str]] = None
-    ) -> List[TestRecommendation]:
+    ) -> List[MenuItemRecommendation]:
         """
         Analyze symptoms and return test recommendations
         
         Args:
             symptoms: List of symptom dictionaries
-            age: Patient age
-            gender: Patient gender
+            age: Customer age
+            gender: Customer gender
             medical_history: List of existing conditions
             
         Returns:
             List of test recommendations
         """
         recommendations = []
-        seen_tests = set()
+        seen_menu_items = set()
         severity_map = {"low": 1, "moderate": 2, "high": 3, "critical": 4}
         
         # Process each symptom
@@ -256,10 +256,10 @@ class SymptomAnalyzer:
             elif duration > 14:
                 severity = "critical"
             
-            # Find matching tests
-            for key, tests in cls.SYMPTOM_TEST_MAP.items():
+            # Find matching menu_items
+            for key, menu_items in cls.SYMPTOM_TEST_MAP.items():
                 if key in symptom_name:
-                    for test in tests:
+                    for test in menu_items:
                         test_code, test_name, category, priority, reason, cost = test
                         
                         # Adjust priority based on severity
@@ -267,9 +267,9 @@ class SymptomAnalyzer:
                             priority = severity
                         
                         # Add to recommendations if not already added
-                        if test_code not in seen_tests:
-                            seen_tests.add(test_code)
-                            recommendations.append(TestRecommendation(
+                        if test_code not in seen_menu_items:
+                            seen_menu_items.add(test_code)
+                            recommendations.append(MenuItemRecommendation(
                                 test_code=test_code,
                                 test_name=test_name,
                                 category=category,
@@ -279,13 +279,13 @@ class SymptomAnalyzer:
                                 preparation_instructions=cls._get_preparation_instructions(test_code)
                             ))
         
-        # Add gender-specific tests
+        # Add gender-specific menu_items
         if gender.lower() in cls.GENDER_TESTS:
             for test in cls.GENDER_TESTS[gender.lower()]:
                 test_code, test_name, category, priority, reason, cost = test
-                if test_code not in seen_tests:
-                    seen_tests.add(test_code)
-                    recommendations.append(TestRecommendation(
+                if test_code not in seen_menu_items:
+                    seen_menu_items.add(test_code)
+                    recommendations.append(MenuItemRecommendation(
                         test_code=test_code,
                         test_name=test_name,
                         category=category,
@@ -295,14 +295,14 @@ class SymptomAnalyzer:
                         preparation_instructions=cls._get_preparation_instructions(test_code)
                     ))
         
-        # Add age-appropriate routine tests
-        for age_range, tests in cls.AGE_TESTS.items():
+        # Add age-appropriate routine menu_items
+        for age_range, menu_items in cls.AGE_TESTS.items():
             if age_range[0] <= age <= age_range[1]:
-                for test in tests:
+                for test in menu_items:
                     test_code, test_name, category, priority, reason, cost = test
-                    if test_code not in seen_tests:
-                        seen_tests.add(test_code)
-                        recommendations.append(TestRecommendation(
+                    if test_code not in seen_menu_items:
+                        seen_menu_items.add(test_code)
+                        recommendations.append(MenuItemRecommendation(
                             test_code=test_code,
                             test_name=test_name,
                             category=category,
@@ -587,7 +587,7 @@ def get_test_recommendations(
     age: int,
     gender: str,
     medical_history: List[str] = None
-) -> List[TestRecommendation]:
+) -> List[MenuItemRecommendation]:
     """Get test recommendations based on symptoms"""
     return SymptomAnalyzer.analyze_symptoms(symptoms, age, gender, medical_history)
 

@@ -27,11 +27,11 @@ import {
 } from 'recharts';
 import axios from 'axios';
 
-interface DoctorDashboardProps {
+interface StaffDashboardProps {
   doctorId: number;
 }
 
-interface Report {
+interface Order {
   id: number;
   distribution_id: string;
   patient_name: string;
@@ -52,17 +52,17 @@ interface StatCard {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
-export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
+export default function StaffDashboard({ doctorId }: StaffDashboardProps) {
   const [activeTab, setActiveTab] = useState(0);
-  const [reports, setReports] = useState<Report[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [statistics, setStatistics] = useState({
-    totalReports: 0,
-    unreadReports: 0,
+    totalOrders: 0,
+    unreadOrders: 0,
     thisMonth: 0,
-    urgentReports: 0
+    urgentOrders: 0
   });
   const [loading, setLoading] = useState(true);
-  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
@@ -74,17 +74,17 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
     try {
       setLoading(true);
       const API_BASE = window.location.origin;
-      const [reportsRes, statsRes] = await Promise.all([
-        axios.get(`${API_BASE}/api/reports/pending-for-doctor/${doctorId}`),
-        axios.get(`${API_BASE}/api/doctors/${doctorId}/portal-dashboard`)
+      const [ordersRes, statsRes] = await Promise.all([
+        axios.get(`${API_BASE}/api/orders/pending-for-doctor/${doctorId}`),
+        axios.get(`${API_BASE}/api/staff/${doctorId}/portal-dashboard`)
       ]);
 
-      setReports(reportsRes.data.reports || []);
+      setOrders(ordersRes.data.orders || []);
       setStatistics({
-        totalReports: statsRes.data.statistics?.total_reports_received || 0,
-        unreadReports: statsRes.data.statistics?.unread_reports || 0,
-        thisMonth: statsRes.data.statistics?.reports_this_month || 0,
-        urgentReports: 0
+        totalOrders: statsRes.data.statistics?.total_orders_received || 0,
+        unreadOrders: statsRes.data.statistics?.unread_orders || 0,
+        thisMonth: statsRes.data.statistics?.orders_this_month || 0,
+        urgentOrders: 0
       });
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -94,13 +94,13 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
     }
   };
 
-  const handleViewReport = async (report: Report) => {
-    setSelectedReport(report);
+  const handleViewOrder = async (report: Order) => {
+    setSelectedOrder(report);
     setViewDialogOpen(true);
 
     try {
       const API_BASE = window.location.origin;
-      await axios.post(`${API_BASE}/api/reports/${report.id}/acknowledge`, {
+      await axios.post(`${API_BASE}/api/orders/${report.id}/acknowledge`, {
         action: 'view'
       });
       fetchDashboardData();
@@ -109,10 +109,10 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
     }
   };
 
-  const handleDownloadReport = async (reportId: number) => {
+  const handleDownloadOrder = async (reportId: number) => {
     try {
       const API_BASE = window.location.origin;
-      const response = await axios.get(`${API_BASE}/api/reports/distribution/${reportId}`, {
+      const response = await axios.get(`${API_BASE}/api/orders/distribution/${reportId}`, {
         responseType: 'blob'
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -123,7 +123,7 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
       link.click();
       link.remove();
 
-      await axios.post(`${API_BASE}/api/reports/${reportId}/acknowledge`, {
+      await axios.post(`${API_BASE}/api/orders/${reportId}/acknowledge`, {
         action: 'download'
       });
       fetchDashboardData();
@@ -135,15 +135,15 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
 
   const statCards: StatCard[] = [
     {
-      title: 'Total Reports',
-      value: statistics.totalReports,
+      title: 'Total Orders',
+      value: statistics.totalOrders,
       icon: <DescriptionIcon />,
       color: '#3b82f6',
       trend: 12
     },
     {
-      title: 'Unread Reports',
-      value: statistics.unreadReports,
+      title: 'Unread Orders',
+      value: statistics.unreadOrders,
       icon: <PendingIcon />,
       color: '#f59e0b'
     },
@@ -156,14 +156,14 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
     },
     {
       title: 'Urgent',
-      value: statistics.urgentReports,
+      value: statistics.urgentOrders,
       icon: <NotificationsIcon />,
       color: '#ef4444'
     }
   ];
 
   const reportTypeData = [
-    { name: 'Blood Test', value: 45 },
+    { name: 'Blood MenuItem', value: 45 },
     { name: 'X-Ray', value: 20 },
     { name: 'MRI', value: 15 },
     { name: 'CT Scan', value: 12 },
@@ -171,13 +171,13 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
   ];
 
   const weeklyActivity = [
-    { day: 'Mon', reports: 12 },
-    { day: 'Tue', reports: 19 },
-    { day: 'Wed', reports: 15 },
-    { day: 'Thu', reports: 22 },
-    { day: 'Fri', reports: 18 },
-    { day: 'Sat', reports: 8 },
-    { day: 'Sun', reports: 3 }
+    { day: 'Mon', orders: 12 },
+    { day: 'Tue', orders: 19 },
+    { day: 'Wed', orders: 15 },
+    { day: 'Thu', orders: 22 },
+    { day: 'Fri', orders: 18 },
+    { day: 'Sat', orders: 8 },
+    { day: 'Sun', orders: 3 }
   ];
 
   const getStatusColor = (status: string) => {
@@ -204,14 +204,14 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Box>
           <Typography variant="h4" fontWeight="bold" gutterBottom>
-            Doctor Portal Dashboard
+            Staff Portal Dashboard
           </Typography>
           <Typography variant="body1" color="text.secondary">
             Welcome back! Here's your diagnostic report overview.
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <Badge badgeContent={statistics.unreadReports} color="error">
+          <Badge badgeContent={statistics.unreadOrders} color="error">
             <IconButton color="primary">
               <NotificationsIcon />
             </IconButton>
@@ -260,7 +260,7 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
         <Grid item xs={12} md={8}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
-              Weekly Report Activity
+              Weekly Order Activity
             </Typography>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={weeklyActivity}>
@@ -268,7 +268,7 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
                 <XAxis dataKey="day" />
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="reports" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="orders" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </Paper>
@@ -276,7 +276,7 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
         <Grid item xs={12} md={4}>
           <Paper sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" gutterBottom>
-              Reports by Type
+              Orders by Type
             </Typography>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
@@ -301,12 +301,12 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
         </Grid>
       </Grid>
 
-      {/* Reports Section */}
+      {/* Orders Section */}
       <Paper sx={{ mb: 4 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)}>
-            <Tab label={`Pending Reports (${statistics.unreadReports})`} />
-            <Tab label="All Reports" />
+            <Tab label={`Pending Orders (${statistics.unreadOrders})`} />
+            <Tab label="All Orders" />
             <Tab label="Recent Activity" />
           </Tabs>
         </Box>
@@ -315,25 +315,25 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Report ID</TableCell>
-                <TableCell>Patient</TableCell>
-                <TableCell>Report Type</TableCell>
+                <TableCell>Order ID</TableCell>
+                <TableCell>Customer</TableCell>
+                <TableCell>Order Type</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Date</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {reports.length === 0 ? (
+              {orders.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                     <Typography color="text.secondary">
-                      No pending reports
+                      No pending orders
                     </Typography>
                   </TableCell>
                 </TableRow>
               ) : (
-                reports.slice(0, 10).map((report) => (
+                orders.slice(0, 10).map((report) => (
                   <TableRow key={report.id} hover>
                     <TableCell>
                       <Typography variant="body2" fontWeight="medium">
@@ -374,16 +374,16 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
                       <IconButton
                         size="small"
                         color="primary"
-                        onClick={() => handleViewReport(report)}
-                        title="View Report"
+                        onClick={() => handleViewOrder(report)}
+                        title="View Order"
                       >
                         <VisibilityIcon />
                       </IconButton>
                       <IconButton
                         size="small"
                         color="success"
-                        onClick={() => handleDownloadReport(report.id)}
-                        title="Download Report"
+                        onClick={() => handleDownloadOrder(report.id)}
+                        title="Download Order"
                       >
                         <DownloadIcon />
                       </IconButton>
@@ -405,10 +405,10 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
                 <Avatar sx={{ bgcolor: 'primary.main', mr: 2 }}>
                   <AssignmentIcon />
                 </Avatar>
-                <Typography variant="h6">Patient History</Typography>
+                <Typography variant="h6">Customer History</Typography>
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                View complete patient history and previous reports.
+                View complete patient history and previous orders.
               </Typography>
               <Button variant="outlined" fullWidth>
                 View History
@@ -441,57 +441,57 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
                 <Avatar sx={{ bgcolor: 'info.main', mr: 2 }}>
                   <DescriptionIcon />
                 </Avatar>
-                <Typography variant="h6">Test Catalog</Typography>
+                <Typography variant="h6">MenuItem Catalog</Typography>
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Browse available diagnostic tests and packages.
+                Browse available diagnostic menu_items and packages.
               </Typography>
               <Button variant="outlined" fullWidth>
-                Browse Tests
+                Browse MenuItems
               </Button>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* View Report Dialog */}
+      {/* View Order Dialog */}
       <Dialog open={viewDialogOpen} onClose={() => setViewDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
-          Report Details
-          {selectedReport && (
+          Order Details
+          {selectedOrder && (
             <Chip
-              label={selectedReport.delivery_status}
+              label={selectedOrder.delivery_status}
               size="small"
-              color={getStatusColor(selectedReport.delivery_status)}
+              color={getStatusColor(selectedOrder.delivery_status)}
               sx={{ ml: 2 }}
             />
           )}
         </DialogTitle>
         <DialogContent dividers>
-          {selectedReport && (
+          {selectedOrder && (
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Report ID
+                  Order ID
                 </Typography>
                 <Typography variant="body1" gutterBottom>
-                  {selectedReport.distribution_id}
+                  {selectedOrder.distribution_id}
                 </Typography>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Report Type
+                  Order Type
                 </Typography>
                 <Typography variant="body1" gutterBottom>
-                  {selectedReport.report_name}
+                  {selectedOrder.report_name}
                 </Typography>
               </Grid>
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" color="text.secondary">
-                  Patient
+                  Customer
                 </Typography>
                 <Typography variant="body1" gutterBottom>
-                  {selectedReport.patient_name}
+                  {selectedOrder.patient_name}
                 </Typography>
               </Grid>
               <Grid item xs={12} md={6}>
@@ -499,7 +499,7 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
                   Date
                 </Typography>
                 <Typography variant="body1" gutterBottom>
-                  {new Date(selectedReport.created_at).toLocaleString()}
+                  {new Date(selectedOrder.created_at).toLocaleString()}
                 </Typography>
               </Grid>
               <Grid item xs={12}>
@@ -507,15 +507,15 @@ export default function DoctorDashboard({ doctorId }: DoctorDashboardProps) {
                   <Button
                     variant="contained"
                     startIcon={<DownloadIcon />}
-                    onClick={() => handleDownloadReport(selectedReport.id)}
+                    onClick={() => handleDownloadOrder(selectedOrder.id)}
                   >
-                    Download Report
+                    Download Order
                   </Button>
                   <Button
                     variant="outlined"
                     startIcon={<VisibilityIcon />}
                     onClick={() => {
-                      window.open(`/reports/view/${selectedReport.id}`, '_blank');
+                      window.open(`/orders/view/${selectedOrder.id}`, '_blank');
                     }}
                   >
                     View Online

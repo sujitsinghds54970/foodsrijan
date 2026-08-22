@@ -43,8 +43,8 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=20), nullable=False, server_default="Pending"),
         sa.Column("paid_at", sa.DateTime(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(["doctor_id"], ["doctors.id"]),
-        sa.ForeignKeyConstraint(["patient_id"], ["patients.id"]),
+        sa.ForeignKeyConstraint(["doctor_id"], ["staff.id"]),
+        sa.ForeignKeyConstraint(["patient_id"], ["customers.id"]),
         sa.ForeignKeyConstraint(["order_id"], ["doctor_orders.id"]),
         sa.PrimaryKeyConstraint("id"),
     )

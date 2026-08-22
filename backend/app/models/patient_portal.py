@@ -1,10 +1,10 @@
 """
-Patient Portal Models for VaidyaVihar Diagnostic ERP
+Customer Portal Models for VaidyaVihar Diagnostic ERP
 
-Patient self-service module:
-- Patient self-registration
-- Patient dashboard
-- View own reports
+Customer self-service module:
+- Customer self-registration
+- Customer dashboard
+- View own orders
 - Appointment booking
 - Profile management
 """
@@ -15,14 +15,14 @@ from datetime import datetime
 from app.database import Base
 
 
-class PatientPortalUser(Base):
-    """Patient portal user for self-service"""
+class CustomerPortalUser(Base):
+    """Customer portal user for self-service"""
     __tablename__ = "patient_portal_users"
 
     id = Column(Integer, primary_key=True, index=True)
     
     # Link to main patient record
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True, unique=True)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=True, unique=True)
     
     # Portal credentials
     username = Column(String, nullable=False, unique=True, index=True)
@@ -53,7 +53,7 @@ class PatientPortalUser(Base):
     notification_preferences = Column(JSON, nullable=True)
     
     # Privacy
-    show_reports = Column(Boolean, default=True)
+    show_orders = Column(Boolean, default=True)
     show_appointments = Column(Boolean, default=True)
     
     # Timestamps
@@ -61,22 +61,22 @@ class PatientPortalUser(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    patient = relationship("Patient")
+    patient = relationship("Customer")
 
 
-class PatientAppointment(Base):
-    """Patient self-service appointments"""
+class CustomerAppointment(Base):
+    """Customer self-service appointments"""
     __tablename__ = "patient_appointments"
 
     id = Column(Integer, primary_key=True, index=True)
     appointment_number = Column(String, nullable=False, unique=True, index=True)
     
-    # Patient
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    # Customer
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     patient_portal_user_id = Column(Integer, ForeignKey("patient_portal_users.id"), nullable=True)
     
-    # Doctor
-    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    # Staff
+    doctor_id = Column(Integer, ForeignKey("staff.id"), nullable=True)
     department = Column(String, nullable=True)
     
     # Schedule
@@ -113,23 +113,23 @@ class PatientAppointment(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    patient = relationship("Patient")
-    doctor = relationship("Doctor")
+    patient = relationship("Customer")
+    doctor = relationship("Staff")
     branch = relationship("Branch")
-    portal_user = relationship("PatientPortalUser")
+    portal_user = relationship("CustomerPortalUser")
 
 
-class PatientReportAccess(Base):
-    """Track patient access to their reports"""
+class CustomerOrderAccess(Base):
+    """Track patient access to their orders"""
     __tablename__ = "patient_report_access"
 
     id = Column(Integer, primary_key=True, index=True)
     
-    # Patient
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    # Customer
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     portal_user_id = Column(Integer, ForeignKey("patient_portal_users.id"), nullable=True)
     
-    # Report
+    # Order
     report_id = Column(String, nullable=False)
     report_type = Column(String, nullable=True)
     
@@ -150,18 +150,18 @@ class PatientReportAccess(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
-    patient = relationship("Patient")
-    portal_user = relationship("PatientPortalUser")
+    patient = relationship("Customer")
+    portal_user = relationship("CustomerPortalUser")
 
 
-class PatientFeedback(Base):
-    """Patient feedback and ratings"""
+class CustomerFeedback(Base):
+    """Customer feedback and ratings"""
     __tablename__ = "patient_feedbacks"
 
     id = Column(Integer, primary_key=True, index=True)
     
-    # Patient
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True)
+    # Customer
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     portal_user_id = Column(Integer, ForeignKey("patient_portal_users.id"), nullable=True)
     
     # Feedback type
@@ -187,11 +187,11 @@ class PatientFeedback(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    patient = relationship("Patient")
-    portal_user = relationship("PatientPortalUser")
+    patient = relationship("Customer")
+    portal_user = relationship("CustomerPortalUser")
 
 
-class PatientFamilyMember(Base):
+class CustomerFamilyMember(Base):
     """Family members linked to patient portal"""
     __tablename__ = "patient_family_members"
 
@@ -215,7 +215,7 @@ class PatientFamilyMember(Base):
     allergies = Column(Text, nullable=True)
     
     # Access
-    can_view_reports = Column(Boolean, default=True)
+    can_view_orders = Column(Boolean, default=True)
     can_book_appointments = Column(Boolean, default=False)
     
     # Timestamps
@@ -223,17 +223,17 @@ class PatientFamilyMember(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    portal_user = relationship("PatientPortalUser")
+    portal_user = relationship("CustomerPortalUser")
 
 
-class PatientDocument(Base):
-    """Patient documents (prescriptions, previous reports, etc.)"""
+class CustomerDocument(Base):
+    """Customer documents (prescriptions, previous orders, etc.)"""
     __tablename__ = "patient_documents"
 
     id = Column(Integer, primary_key=True, index=True)
     
-    # Patient
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    # Customer
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     portal_user_id = Column(Integer, ForeignKey("patient_portal_users.id"), nullable=True)
     
     # Document
@@ -261,26 +261,26 @@ class PatientDocument(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    patient = relationship("Patient")
-    portal_user = relationship("PatientPortalUser")
+    patient = relationship("Customer")
+    portal_user = relationship("CustomerPortalUser")
     uploader = relationship("User", foreign_keys=[uploaded_by])
     verifier = relationship("User", foreign_keys=[verified_by])
 
 
-class PatientPrescription(Base):
-    """Patient prescriptions for portal access"""
+class CustomerPrescription(Base):
+    """Customer prescriptions for portal access"""
     __tablename__ = "patient_prescriptions"
 
     id = Column(Integer, primary_key=True, index=True)
     
-    # Patient
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    # Customer
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     
     # Appointment
     appointment_id = Column(Integer, ForeignKey("patient_appointments.id"), nullable=True)
     
-    # Doctor
-    doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    # Staff
+    doctor_id = Column(Integer, ForeignKey("staff.id"), nullable=True)
     doctor_name = Column(String, nullable=True)
     
     # Prescription
@@ -299,9 +299,9 @@ class PatientPrescription(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    patient = relationship("Patient")
-    appointment = relationship("PatientAppointment")
-    doctor = relationship("Doctor")
+    patient = relationship("Customer")
+    appointment = relationship("CustomerAppointment")
+    doctor = relationship("Staff")
     medications = relationship("PrescriptionMedication", cascade="all, delete-orphan")
 
 
@@ -327,5 +327,5 @@ class PrescriptionMedication(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
-    prescription = relationship("PatientPrescription")
+    prescription = relationship("CustomerPrescription")
 

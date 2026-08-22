@@ -6,14 +6,14 @@ from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.utils.auth_system import auth_guard, require_staff, get_current_user
-from app.models import User, Patient, DailyEntry, Branch
-from app.schemas.user import PatientCreate, PatientUpdate, PatientResponse, DailyEntryCreate, DailyEntryUpdate, DailyEntryResponse
+from app.models import User, Customer, DailyEntry, Branch
+from app.schemas.user import CustomerCreate, CustomerUpdate, CustomerResponse, DailyEntryCreate, DailyEntryUpdate, DailyEntryResponse
 
 router = APIRouter()
 
-@router.post("/patients/", response_model=PatientResponse)
+@router.post("/customers/", response_model=CustomerResponse)
 def create_patient(
-    patient_data: PatientCreate,
+    patient_data: CustomerCreate,
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
@@ -24,17 +24,17 @@ def create_patient(
         patient_data.branch_id = current_user.branch_id
     
     # Check for duplicate patient (same phone number in same branch)
-    existing_patient = db.query(Patient).filter(
+    existing_patient = db.query(Customer).filter(
         and_(
-            Patient.phone == patient_data.phone,
-            Patient.branch_id == patient_data.branch_id
+            Customer.phone == patient_data.phone,
+            Customer.branch_id == patient_data.branch_id
         )
     ).first()
     
     if existing_patient:
         raise HTTPException(
             status_code=400,
-            detail="Patient with this phone number already exists in this branch"
+            detail="Customer with this phone number already exists in this branch"
         )
     
     # Generate patient ID
@@ -44,9 +44,9 @@ def create_patient(
     
     # Generate patient ID (VV + Branch Code + Sequential Number)
     branch_code = branch.name[:2].upper()
-    last_patient = db.query(Patient).filter(
-        Patient.branch_id == patient_data.branch_id
-    ).order_by(desc(Patient.id)).first()
+    last_patient = db.query(Customer).filter(
+        Customer.branch_id == patient_data.branch_id
+    ).order_by(desc(Customer.id)).first()
     
     if last_patient:
         try:
@@ -60,7 +60,7 @@ def create_patient(
     patient_id = f"VV{branch_code}{new_number:04d}"
     
     # Create patient
-    db_patient = Patient(
+    db_patient = Customer(
         patient_id=patient_id,
         branch_id=patient_data.branch_id,
         first_name=patient_data.first_name,
@@ -97,8 +97,8 @@ def create_patient(
     
     return db_patient
 
-@router.get("/patients/", response_model=List[PatientResponse])
-def get_patients(
+@router.get("/customers/", response_model=List[CustomerResponse])
+def get_customers(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     search: Optional[str] = Query(None, description="Search by name or phone"),
@@ -106,35 +106,35 @@ def get_patients(
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
-    """Get list of patients with search and filtering"""
+    """Get list of customers with search and filtering"""
     
     # Filter by branch access
     if current_user.role == 'super_admin':
-        query = db.query(Patient)
+        query = db.query(Customer)
         if branch_id:
-            query = query.filter(Patient.branch_id == branch_id)
+            query = query.filter(Customer.branch_id == branch_id)
     else:
-        query = db.query(Patient).filter(Patient.branch_id == current_user.branch_id)
+        query = db.query(Customer).filter(Customer.branch_id == current_user.branch_id)
     
     # Search functionality
     if search:
         search_filter = or_(
-            Patient.first_name.ilike(f"%{search}%"),
-            Patient.last_name.ilike(f"%{search}%"),
-            Patient.phone.ilike(f"%{search}%"),
-            Patient.patient_id.ilike(f"%{search}%")
+            Customer.first_name.ilike(f"%{search}%"),
+            Customer.last_name.ilike(f"%{search}%"),
+            Customer.phone.ilike(f"%{search}%"),
+            Customer.patient_id.ilike(f"%{search}%")
         )
         query = query.filter(search_filter)
     
-    # Only active patients
-    query = query.filter(Patient.is_active == True)
+    # Only active customers
+    query = query.filter(Customer.is_active == True)
     
     # Order by registration date
-    patients = query.order_by(desc(Patient.registration_date)).offset(skip).limit(limit).all()
+    customers = query.order_by(desc(Customer.registration_date)).offset(skip).limit(limit).all()
     
-    return patients
+    return customers
 
-@router.get("/patients/{patient_id}", response_model=PatientResponse)
+@router.get("/customers/{patient_id}", response_model=CustomerResponse)
 def get_patient(
     patient_id: int,
     current_user: User = Depends(require_staff),
@@ -142,10 +142,10 @@ def get_patient(
 ):
     """Get patient by ID"""
     
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = db.query(Customer).filter(Customer.id == patient_id).first()
     
     if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
+        raise HTTPException(status_code=404, detail="Customer not found")
     
     # Check branch access
     if current_user.role != 'super_admin' and patient.branch_id != current_user.branch_id:
@@ -153,19 +153,19 @@ def get_patient(
     
     return patient
 
-@router.put("/patients/{patient_id}", response_model=PatientResponse)
+@router.put("/customers/{patient_id}", response_model=CustomerResponse)
 def update_patient(
     patient_id: int,
-    patient_data: PatientUpdate,
+    patient_data: CustomerUpdate,
     current_user: User = Depends(require_staff),
     db: Session = Depends(get_db)
 ):
     """Update patient information"""
     
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = db.query(Customer).filter(Customer.id == patient_id).first()
     
     if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
+        raise HTTPException(status_code=404, detail="Customer not found")
     
     # Check branch access
     if current_user.role != 'super_admin' and patient.branch_id != current_user.branch_id:
@@ -190,7 +190,7 @@ def update_patient(
     
     return patient
 
-@router.get("/patients/{patient_id}/history")
+@router.get("/customers/{patient_id}/history")
 def get_patient_history(
     patient_id: int,
     start_date: Optional[datetime] = Query(None),
@@ -200,10 +200,10 @@ def get_patient_history(
 ):
     """Get patient history (daily entries, appointments, invoices)"""
     
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = db.query(Customer).filter(Customer.id == patient_id).first()
     
     if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
+        raise HTTPException(status_code=404, detail="Customer not found")
     
     # Check branch access
     if current_user.role != 'super_admin' and patient.branch_id != current_user.branch_id:
@@ -266,7 +266,7 @@ def get_patient_history(
     
     return history
 
-@router.delete("/patients/{patient_id}")
+@router.delete("/customers/{patient_id}")
 def deactivate_patient(
     patient_id: int,
     current_user: User = Depends(require_staff),
@@ -274,10 +274,10 @@ def deactivate_patient(
 ):
     """Deactivate patient (soft delete)"""
     
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = db.query(Customer).filter(Customer.id == patient_id).first()
     
     if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
+        raise HTTPException(status_code=404, detail="Customer not found")
     
     # Check branch access
     if current_user.role != 'super_admin' and patient.branch_id != current_user.branch_id:
@@ -297,7 +297,7 @@ def deactivate_patient(
         description=f"Deactivated patient {patient.first_name} {patient.last_name}"
     )
     
-    return {"message": "Patient deactivated successfully"}
+    return {"message": "Customer deactivated successfully"}
 
 # Daily Entry Management
 @router.post("/daily-entries/", response_model=DailyEntryResponse)
@@ -320,15 +320,15 @@ def create_daily_entry(
     # If patient_id provided, validate patient exists and belongs to branch
     patient = None
     if entry_data.patient_id:
-        patient = db.query(Patient).filter(
+        patient = db.query(Customer).filter(
             and_(
-                Patient.id == entry_data.patient_id,
-                Patient.branch_id == entry_data.branch_id
+                Customer.id == entry_data.patient_id,
+                Customer.branch_id == entry_data.branch_id
             )
         ).first()
         
         if not patient:
-            raise HTTPException(status_code=404, detail="Patient not found in this branch")
+            raise HTTPException(status_code=404, detail="Customer not found in this branch")
     
     # Create daily entry
     db_entry = DailyEntry(

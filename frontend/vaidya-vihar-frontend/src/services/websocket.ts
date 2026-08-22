@@ -241,7 +241,7 @@ export function useNotificationBell() {
 
 // Hook for real-time updates on specific resources
 export function useRealtimeUpdates(
-  resourceType: 'patients' | 'appointments' | 'inventory' | 'reports',
+  resourceType: 'customers' | 'appointments' | 'inventory' | 'orders',
   resourceId?: string,
   onUpdate?: (data: unknown) => void
 ) {

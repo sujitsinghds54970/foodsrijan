@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
 
-class TestEntry(Base):
+class MenuItemEntry(Base):
     __tablename__ = "test_entries"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -11,4 +11,4 @@ class TestEntry(Base):
     price = Column(Float, nullable=False)
 
     patient_id = Column(Integer, ForeignKey("patient_entries.id"))
-    patient = relationship("PatientEntry", backref="test_entries")
+    patient = relationship("CustomerEntry", backref="test_entries")

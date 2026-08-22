@@ -2,7 +2,7 @@
 WebSocket Service for Real-time Notifications
 
 Provides real-time communication for:
-- Doctor report alerts
+- Staff report alerts
 - Appointment notifications
 - System announcements
 - Live updates across all connected clients
@@ -282,7 +282,7 @@ class NotificationFactory:
         return Notification(
             id=f"NR-{uuid.uuid4().hex[:8].upper()}",
             type=NotificationType.REPORT_READY.value,
-            title="Report Ready",
+            title="Order Ready",
             message=f"New {report_type} report ready for patient {patient_name}",
             priority=Priority.NORMAL.value,
             data={
@@ -291,7 +291,7 @@ class NotificationFactory:
                 "patient_name": patient_name,
                 "branch_id": branch_id
             },
-            action_url=f"/reports/{report_id}",
+            action_url=f"/orders/{report_id}",
             reference_id=report_id,
             reference_type="lab_result"
         )
@@ -307,7 +307,7 @@ class NotificationFactory:
         return Notification(
             id=f"NU-{uuid.uuid4().hex[:8].upper()}",
             type=NotificationType.REPORT_URGENT.value,
-            title="🔴 URGENT: Report Ready",
+            title="🔴 URGENT: Order Ready",
             message=f"URGENT {report_type} report for {patient_name} - {urgency_reason}",
             priority=Priority.URGENT.value,
             data={
@@ -316,7 +316,7 @@ class NotificationFactory:
                 "patient_name": patient_name,
                 "urgency_reason": urgency_reason
             },
-            action_url=f"/reports/{report_id}",
+            action_url=f"/orders/{report_id}",
             reference_id=report_id,
             reference_type="lab_result"
         )
@@ -428,7 +428,7 @@ class NotificationFactory:
         return Notification(
             id=f"ND-{uuid.uuid4().hex[:8].upper()}",
             type=NotificationType.DOCTOR_ASSIGNED.value,
-            title="New Patient Assignment",
+            title="New Customer Assignment",
             message=f"You have been assigned to patient {patient_name}",
             priority=Priority.NORMAL.value,
             data={
@@ -437,7 +437,7 @@ class NotificationFactory:
                 "appointment_id": appointment_id,
                 "branch_id": branch_id
             },
-            action_url=f"/patients/{appointment_id}",
+            action_url=f"/customers/{appointment_id}",
             reference_id=appointment_id,
             reference_type="appointment"
         )
@@ -445,14 +445,14 @@ class NotificationFactory:
 
 # Helper functions for common operations
 
-async def notify_doctors_new_report(
+async def notify_staff_new_report(
     report_id: str,
     report_type: str,
     patient_name: str,
     doctor_ids: List[int],
     is_urgent: bool = False
 ):
-    """Notify doctors about a new report"""
+    """Notify staff about a new report"""
     notification_class = NotificationFactory.create_urgent_report_notification if is_urgent else NotificationFactory.create_report_ready_notification
     
     notification = notification_class(

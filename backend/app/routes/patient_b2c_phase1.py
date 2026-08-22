@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.database import Base, engine, get_db
 from app.models import User
 from app.models.daily_entry_module import DailyEntryModule
-from app.models.patient import PatientProfile
+from app.models.customer import CustomerProfile
 from app.models.patient_b2c import (
     DigitalConsent,
     FollowUpReminder,
@@ -20,16 +20,16 @@ from app.models.patient_b2c import (
     HealthScore,
     HealthTrend,
     LoyaltyReward,
-    PatientB2CAppointment,
-    PatientB2CAuditLog,
+    CustomerB2CAppointment,
+    CustomerB2CAuditLog,
     Referral,
-    ReportSummary,
-    TestCatalog,
+    OrderSummary,
+    MenuItemCatalog,
 )
-from app.models.patient_phase4 import EmergencyAlert, PatientVaultDocument, SecondOpinionRequest, WearableSync
+from app.models.patient_phase4 import EmergencyAlert, CustomerVaultDocument, SecondOpinionRequest, WearableSync
 from app.utils.auth_system import ALGORITHM, SECRET_KEY
 
-router = APIRouter(tags=["Patient B2C Phase 1"])
+router = APIRouter(tags=["Customer B2C Phase 1"])
 patient_security = HTTPBearer()
 
 
@@ -69,18 +69,18 @@ def _normalize_mobile(raw_mobile: str) -> str:
 def _get_patient_profile_from_token(
     credentials: HTTPAuthorizationCredentials = Depends(patient_security),
     db: Session = Depends(get_db),
-) -> PatientProfile:
+) -> CustomerProfile:
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     if payload.get("role") != "patient":
-        raise HTTPException(status_code=403, detail="Patient role required")
+        raise HTTPException(status_code=403, detail="Customer role required")
 
     profile_id = payload.get("patient_profile_id")
     if profile_id:
-        profile = db.query(PatientProfile).filter(PatientProfile.id == profile_id).first()
+        profile = db.query(CustomerProfile).filter(CustomerProfile.id == profile_id).first()
         if profile and profile.is_active:
             return profile
 
@@ -92,20 +92,20 @@ def _get_patient_profile_from_token(
     if not user or user.role != "patient":
         raise HTTPException(status_code=401, detail="Invalid patient session")
 
-    profile = db.query(PatientProfile).filter(PatientProfile.mobile == _normalize_mobile(user.phone or "")).first()
+    profile = db.query(CustomerProfile).filter(CustomerProfile.mobile == _normalize_mobile(user.phone or "")).first()
     if not profile or not profile.is_active:
-        raise HTTPException(status_code=401, detail="Patient profile not found")
+        raise HTTPException(status_code=401, detail="Customer profile not found")
     return profile
 
 
 def _ensure_patient_b2c_schema() -> None:
     # Create new B2C tables and additive columns for profile without affecting existing modules.
     Base.metadata.create_all(bind=engine, tables=[
-        TestCatalog.__table__,
-        PatientB2CAppointment.__table__,
+        MenuItemCatalog.__table__,
+        CustomerB2CAppointment.__table__,
         DigitalConsent.__table__,
-        PatientB2CAuditLog.__table__,
-        ReportSummary.__table__,
+        CustomerB2CAuditLog.__table__,
+        OrderSummary.__table__,
         HealthTrend.__table__,
         HealthScore.__table__,
         FollowUpReminder.__table__,
@@ -115,7 +115,7 @@ def _ensure_patient_b2c_schema() -> None:
         WearableSync.__table__,
         SecondOpinionRequest.__table__,
         EmergencyAlert.__table__,
-        PatientVaultDocument.__table__,
+        CustomerVaultDocument.__table__,
     ])
 
     with engine.begin() as conn:
@@ -140,26 +140,26 @@ def _ensure_patient_b2c_schema() -> None:
 
 
 def _seed_test_catalog_if_empty(db: Session) -> None:
-    if db.query(TestCatalog.id).first() is not None:
+    if db.query(MenuItemCatalog.id).first() is not None:
         return
 
     seed_rows = [
-        TestCatalog(name="CBC", category="Hematology", price=399, preparation_instructions="No fasting required"),
-        TestCatalog(name="Lipid Profile", category="Cardiac", price=899, preparation_instructions="10-12 hour fasting preferred"),
-        TestCatalog(name="Thyroid Panel", category="Endocrine", price=699, preparation_instructions="Early morning sample preferred"),
-        TestCatalog(name="Liver Function Test", category="Biochemistry", price=799, preparation_instructions="Avoid alcohol for 24h"),
+        MenuItemCatalog(name="CBC", category="Hematology", price=399, preparation_instructions="No fasting required"),
+        MenuItemCatalog(name="Lipid Profile", category="Cardiac", price=899, preparation_instructions="10-12 hour fasting preferred"),
+        MenuItemCatalog(name="Thyroid Panel", category="Endocrine", price=699, preparation_instructions="Early morning sample preferred"),
+        MenuItemCatalog(name="Liver Function MenuItem", category="Biochemistry", price=799, preparation_instructions="Avoid alcohol for 24h"),
     ]
     db.add_all(seed_rows)
     db.commit()
 
 
-def _get_or_create_patient_profile(db: Session, user: User) -> PatientProfile:
+def _get_or_create_patient_profile(db: Session, user: User) -> CustomerProfile:
     normalized_mobile = _normalize_mobile(user.phone or "")
-    profile = db.query(PatientProfile).filter(PatientProfile.mobile == normalized_mobile).first()
+    profile = db.query(CustomerProfile).filter(CustomerProfile.mobile == normalized_mobile).first()
     if profile:
         return profile
 
-    profile = PatientProfile(
+    profile = CustomerProfile(
         patient_id=None,
         patient_code=f"PAT-{user.id}",
         full_name=f"{user.first_name} {user.last_name}".strip(),
@@ -184,7 +184,7 @@ def _log_patient_audit(
     entity_id: Optional[str] = None,
     event_meta: Optional[dict] = None,
 ) -> None:
-    row = PatientB2CAuditLog(
+    row = CustomerB2CAuditLog(
         patient_profile_id=patient_profile_id,
         action=action,
         entity_type=entity_type,
@@ -195,9 +195,9 @@ def _log_patient_audit(
     db.commit()
 
 
-def _resolve_patient_profile(profile: PatientProfile) -> PatientProfile:
+def _resolve_patient_profile(profile: CustomerProfile) -> CustomerProfile:
     if not profile.mobile:
-        raise HTTPException(status_code=400, detail="Patient mobile is not configured")
+        raise HTTPException(status_code=400, detail="Customer mobile is not configured")
     return profile
 
 
@@ -209,9 +209,9 @@ async def request_patient_otp(
     _ensure_patient_b2c_schema()
     normalized = _normalize_mobile(payload.mobile)
 
-    profile = db.query(PatientProfile).filter(PatientProfile.mobile == normalized).first()
+    profile = db.query(CustomerProfile).filter(CustomerProfile.mobile == normalized).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Patient profile not found for this mobile")
+        raise HTTPException(status_code=404, detail="Customer profile not found for this mobile")
 
     profile.otp_code = "123456"
     profile.otp_expires_at = datetime.utcnow() + timedelta(minutes=10)
@@ -241,9 +241,9 @@ async def verify_patient_otp(
     _ensure_patient_b2c_schema()
     normalized = _normalize_mobile(payload.mobile)
 
-    profile = db.query(PatientProfile).filter(PatientProfile.mobile == normalized).first()
+    profile = db.query(CustomerProfile).filter(CustomerProfile.mobile == normalized).first()
     if not profile:
-        raise HTTPException(status_code=404, detail="Patient profile not found for this mobile")
+        raise HTTPException(status_code=404, detail="Customer profile not found for this mobile")
 
     if not profile.otp_code or profile.otp_code != payload.otp:
         raise HTTPException(status_code=400, detail="Invalid OTP")
@@ -275,7 +275,7 @@ async def verify_patient_otp(
 @router.get("/api/patient/profile")
 async def get_patient_profile_phase1(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
@@ -308,15 +308,15 @@ async def get_patient_profile_phase1(
 @router.get("/api/patient/test-catalog")
 async def list_test_catalog_phase1(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     _ = _resolve_patient_profile(profile)
     _seed_test_catalog_if_empty(db)
 
-    tests = db.query(TestCatalog).order_by(TestCatalog.category.asc(), TestCatalog.name.asc()).all()
+    menu_items = db.query(MenuItemCatalog).order_by(MenuItemCatalog.category.asc(), MenuItemCatalog.name.asc()).all()
     return {
-        "tests": [
+        "menu_items": [
             {
                 "id": test.id,
                 "name": test.name,
@@ -324,7 +324,7 @@ async def list_test_catalog_phase1(
                 "price": test.price,
                 "preparation_instructions": test.preparation_instructions,
             }
-            for test in tests
+            for test in menu_items
         ]
     }
 
@@ -333,7 +333,7 @@ async def list_test_catalog_phase1(
 async def create_patient_appointment_phase1(
     payload: AppointmentCreatePayload,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
@@ -345,14 +345,14 @@ async def create_patient_appointment_phase1(
         raise HTTPException(status_code=400, detail="At least one test must be selected")
 
     valid_count = (
-        db.query(TestCatalog.id)
-        .filter(TestCatalog.id.in_(payload.test_ids))
+        db.query(MenuItemCatalog.id)
+        .filter(MenuItemCatalog.id.in_(payload.test_ids))
         .count()
     )
     if valid_count != len(set(payload.test_ids)):
         raise HTTPException(status_code=400, detail="One or more test IDs are invalid")
 
-    appointment = PatientB2CAppointment(
+    appointment = CustomerB2CAppointment(
         patient_profile_id=profile.id,
         test_ids=payload.test_ids,
         appointment_type=payload.appointment_type,
@@ -390,16 +390,16 @@ async def add_patient_appointment_consent_phase1(
     appointment_id: int,
     payload: ConsentPayload,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
 
     appointment = (
-        db.query(PatientB2CAppointment)
+        db.query(CustomerB2CAppointment)
         .filter(
-            PatientB2CAppointment.id == appointment_id,
-            PatientB2CAppointment.patient_profile_id == profile.id,
+            CustomerB2CAppointment.id == appointment_id,
+            CustomerB2CAppointment.patient_profile_id == profile.id,
         )
         .first()
     )
@@ -434,19 +434,19 @@ async def add_patient_appointment_consent_phase1(
 @router.get("/api/patient/appointments/upcoming")
 async def list_upcoming_patient_appointments_phase1(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
 
     rows = (
-        db.query(PatientB2CAppointment)
+        db.query(CustomerB2CAppointment)
         .filter(
-            PatientB2CAppointment.patient_profile_id == profile.id,
-            PatientB2CAppointment.scheduled_time >= datetime.utcnow(),
-            PatientB2CAppointment.status.in_(["Booked", "Confirmed"]),
+            CustomerB2CAppointment.patient_profile_id == profile.id,
+            CustomerB2CAppointment.scheduled_time >= datetime.utcnow(),
+            CustomerB2CAppointment.status.in_(["Booked", "Confirmed"]),
         )
-        .order_by(PatientB2CAppointment.scheduled_time.asc())
+        .order_by(CustomerB2CAppointment.scheduled_time.asc())
         .all()
     )
 
@@ -471,7 +471,7 @@ def _resolve_report_download_url(report_pdf_url: Optional[str]) -> Optional[str]
         return report_pdf_url
     if report_pdf_url.startswith("/uploads/"):
         filename = report_pdf_url.split("/")[-1]
-        return f"/api/files/daily_entry_reports/{filename}"
+        return f"/api/files/daily_entry_orders/{filename}"
     return f"/api/files/{report_pdf_url.lstrip('/')}"
 
 
@@ -511,7 +511,7 @@ def _is_critical_report(report: DailyEntryModule, abnormal_flags: Dict[str, str]
 
 def _auto_raise_emergency_alert(
     db: Session,
-    profile: PatientProfile,
+    profile: CustomerProfile,
     report: DailyEntryModule,
     abnormal_flags: Dict[str, str],
 ) -> Optional[EmergencyAlert]:
@@ -545,7 +545,7 @@ def _auto_raise_emergency_alert(
     return row
 
 
-def _seed_trend_points(db: Session, profile: PatientProfile, biomarker: str) -> List[HealthTrend]:
+def _seed_trend_points(db: Session, profile: CustomerProfile, biomarker: str) -> List[HealthTrend]:
     rows: List[HealthTrend] = []
     today = datetime.utcnow()
     for index in range(11, -1, -1):
@@ -580,10 +580,10 @@ def _wallet_points_from_rewards(rows: List[LoyaltyReward]) -> int:
     return max(total, 0)
 
 
-@router.get("/api/patient/reports")
-async def list_patient_reports_phase2(
+@router.get("/api/patient/orders")
+async def list_patient_orders_phase2(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
@@ -595,7 +595,7 @@ async def list_patient_reports_phase2(
         .all()
     )
     return {
-        "reports": [
+        "orders": [
             {
                 "id": row.id,
                 "patient_id": row.auto_patient_id,
@@ -610,11 +610,11 @@ async def list_patient_reports_phase2(
     }
 
 
-@router.get("/api/patient/reports/{report_id}/summary")
+@router.get("/api/patient/orders/{report_id}/summary")
 async def get_patient_report_summary_phase2(
     report_id: int,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
@@ -625,18 +625,18 @@ async def get_patient_report_summary_phase2(
         .first()
     )
     if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="Order not found")
 
     abnormal_flags = _infer_abnormal_flags(report.test_name)
     ai_summary = _build_ai_summary(report, abnormal_flags)
 
     summary = (
-        db.query(ReportSummary)
-        .filter(ReportSummary.patient_id == profile.id, ReportSummary.report_id == report.id)
+        db.query(OrderSummary)
+        .filter(OrderSummary.patient_id == profile.id, OrderSummary.report_id == report.id)
         .first()
     )
     if not summary:
-        summary = ReportSummary(
+        summary = OrderSummary(
             patient_id=profile.id,
             report_id=report.id,
             ai_summary=ai_summary,
@@ -680,7 +680,7 @@ async def get_patient_report_summary_phase2(
 async def get_patient_trends_phase2(
     biomarker: str,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
@@ -711,12 +711,12 @@ async def get_patient_trends_phase2(
 @router.get("/api/patient/health-score")
 async def get_patient_health_score_phase2(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
 
-    summaries = db.query(ReportSummary).filter(ReportSummary.patient_id == profile.id).all()
+    summaries = db.query(OrderSummary).filter(OrderSummary.patient_id == profile.id).all()
     penalty = sum(len((item.abnormal_flags or {}).keys()) * 4 for item in summaries)
     score = max(0, min(100, 92 - penalty))
 
@@ -745,7 +745,7 @@ async def get_patient_health_score_phase2(
 @router.get("/api/patient/reminders")
 async def get_patient_followup_reminders_phase2(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
@@ -794,7 +794,7 @@ async def get_patient_followup_reminders_phase2(
 async def patient_chatbot_phase2(
     payload: ChatbotPayload,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
@@ -802,7 +802,7 @@ async def patient_chatbot_phase2(
     query = payload.query.strip().lower()
     canned_responses = {
         "hba1c": "HbA1c reflects average blood sugar over 2-3 months. Consistent exercise and low-glycemic meals can help improve it.",
-        "fasting": "For fasting blood tests, avoid food for 8-12 hours unless your doctor gave different instructions.",
+        "fasting": "For fasting blood menu_items, avoid food for 8-12 hours unless your doctor gave different instructions.",
         "vitamin d": "Low Vitamin D is common. Morning sunlight exposure and supplementation as advised can help.",
         "lipid": "For lipid control, focus on fiber-rich meals, regular walking, and reducing trans fats.",
         "report": "You can open your report and tap Ask AI to view a plain-language summary and key flags.",
@@ -831,7 +831,7 @@ async def patient_chatbot_phase2(
 @router.get("/api/patient/wallet")
 async def get_patient_wallet_phase3(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
@@ -893,7 +893,7 @@ async def get_patient_wallet_phase3(
 @router.post("/api/patient/referral")
 async def create_patient_referral_phase3(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)
@@ -920,7 +920,7 @@ async def create_patient_referral_phase3(
 async def create_or_update_patient_goal_phase3(
     payload: HealthGoalPayload,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_patient_b2c_schema()
     profile = _resolve_patient_profile(profile)

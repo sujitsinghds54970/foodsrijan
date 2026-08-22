@@ -5,7 +5,7 @@ Expense tracking and accounting module:
 - Expense categories
 - Expense entries
 - Income tracking
-- Financial reports
+- Financial orders
 """
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Enum as SQLEnum
@@ -112,12 +112,12 @@ class IncomeEntry(Base):
     income_date = Column(DateTime, default=datetime.utcnow)
     
     # Category
-    category = Column(String, nullable=False)  # lab_tests, packages, consultations, other
+    category = Column(String, nullable=False)  # lab_menu_items, packages, consultations, other
     subcategory = Column(String, nullable=True)
     
     # Details
     description = Column(String, nullable=False)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
     
     # Amount
@@ -140,7 +140,7 @@ class IncomeEntry(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    patient = relationship("Patient")
+    patient = relationship("Customer")
     invoice = relationship("Invoice")
     branch = relationship("Branch")
 

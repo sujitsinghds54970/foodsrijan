@@ -4,7 +4,7 @@ Accounting Routes for VaidyaVihar Diagnostic ERP
 Expense tracking and accounting endpoints:
 - Expense management
 - Income tracking
-- Financial reports
+- Financial orders
 - Budget management
 """
 

@@ -2,10 +2,10 @@
 LIS (Laboratory Information System) Models for VaidyaVihar Diagnostic ERP
 
 Enhanced lab testing with:
-- Test ordering workflow
+- MenuItem ordering workflow
 - Sample collection tracking
 - Result entry and validation
-- Report generation
+- Order generation
 """
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Enum as SQLEnum, JSON
@@ -15,8 +15,8 @@ from app.database import Base
 import enum
 
 
-class TestStatus(str, enum.Enum):
-    """Test status enumeration"""
+class MenuItemStatus(str, enum.Enum):
+    """MenuItem status enumeration"""
     ORDERED = "ordered"
     SAMPLE_COLLECTED = "sample_collected"
     SAMPLE_RECEIVED = "sample_received"
@@ -52,8 +52,8 @@ class ResultFlag(str, enum.Enum):
     ABNORMAL = "abnormal"
 
 
-class TestCategory(str, enum.Enum):
-    """Test category"""
+class MenuItemCategory(str, enum.Enum):
+    """MenuItem category"""
     HEMATOLOGY = "hematology"
     BIOCHEMISTRY = "biochemistry"
     MICROBIOLOGY = "microbiology"
@@ -67,8 +67,8 @@ class TestCategory(str, enum.Enum):
     OTHER = "other"
 
 
-class LabTestMaster(Base):
-    """Master list of available lab tests"""
+class LabMenuItemMaster(Base):
+    """Master list of available lab menu_items"""
     __tablename__ = "lab_test_master"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -77,7 +77,7 @@ class LabTestMaster(Base):
     test_name_hindi = Column(String, nullable=True)
     
     # Category
-    category = Column(SQLEnum(TestCategory), nullable=False)
+    category = Column(SQLEnum(MenuItemCategory), nullable=False)
     subcategory = Column(String, nullable=True)
     
     # Sample requirements
@@ -109,7 +109,7 @@ class LabTestMaster(Base):
     # Status
     is_active = Column(Boolean, default=True)
     is_package = Column(Boolean, default=False)
-    package_tests = Column(JSON, nullable=True)  # List of test IDs if package
+    package_menu_items = Column(JSON, nullable=True)  # List of test IDs if package
     
     # Pre-test requirements
     fasting_required = Column(Boolean, default=False)
@@ -121,28 +121,28 @@ class LabTestMaster(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class TestOrder(Base):
-    """Test order for a patient"""
+class MenuItemOrder(Base):
+    """MenuItem order for a patient"""
     __tablename__ = "test_orders"
 
     id = Column(Integer, primary_key=True, index=True)
     order_number = Column(String, nullable=False, unique=True, index=True)
     
-    # Patient
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    # Customer
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     
     # Visit
     visit_id = Column(Integer, nullable=True)  # Link to appointment/visit
     
     # Ordering
-    referred_by = Column(String, nullable=True)  # Doctor name
-    referred_by_id = Column(Integer, ForeignKey("doctors.id"), nullable=True)
+    referred_by = Column(String, nullable=True)  # Staff name
+    referred_by_id = Column(Integer, ForeignKey("staff.id"), nullable=True)
     
     # Priority
     priority = Column(String, default="routine")  # routine, urgent, emergency
     
     # Status
-    status = Column(SQLEnum(TestStatus), default=TestStatus.ORDERED)
+    status = Column(SQLEnum(MenuItemStatus), default=MenuItemStatus.ORDERED)
     
     # Financial
     total_amount = Column(Float, default=0)
@@ -169,13 +169,13 @@ class TestOrder(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    patient = relationship("Patient")
-    referred_doctor = relationship("Doctor")
+    patient = relationship("Customer")
+    referred_doctor = relationship("Staff")
     branch = relationship("Branch")
-    tests = relationship("TestOrderItem", back_populates="order", cascade="all, delete-orphan")
+    menu_items = relationship("MenuItemOrderItem", back_populates="order", cascade="all, delete-orphan")
 
 
-class TestOrderItem(Base):
+class MenuItemOrderItem(Base):
     """Individual test items in an order"""
     __tablename__ = "test_order_items"
 
@@ -183,7 +183,7 @@ class TestOrderItem(Base):
     order_id = Column(Integer, ForeignKey("test_orders.id"), nullable=False)
     test_master_id = Column(Integer, ForeignKey("lab_test_master.id"), nullable=False)
     
-    # Test details
+    # MenuItem details
     test_name = Column(String, nullable=False)
     test_code = Column(String, nullable=False)
     
@@ -193,7 +193,7 @@ class TestOrderItem(Base):
     final_price = Column(Float, default=0)
     
     # Status
-    status = Column(SQLEnum(TestStatus), default=TestStatus.ORDERED)
+    status = Column(SQLEnum(MenuItemStatus), default=MenuItemStatus.ORDERED)
     
     # Sample
     sample_type = Column(SQLEnum(SampleType), nullable=True)
@@ -213,8 +213,8 @@ class TestOrderItem(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    order = relationship("TestOrder", back_populates="tests")
-    test_master = relationship("LabTestMaster")
+    order = relationship("MenuItemOrder", back_populates="menu_items")
+    test_master = relationship("LabMenuItemMaster")
     sample_collector = relationship("User", foreign_keys=[sample_collected_by])
     result_enterer = relationship("User", foreign_keys=[result_entered_by])
     result_verifier = relationship("User", foreign_keys=[result_verified_by])
@@ -265,15 +265,15 @@ class Sample(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    order = relationship("TestOrder")
-    order_item = relationship("TestOrderItem")
+    order = relationship("MenuItemOrder")
+    order_item = relationship("MenuItemOrderItem")
     collector = relationship("User", foreign_keys=[collected_by])
     receiver = relationship("User", foreign_keys=[received_by])
     processor = relationship("User", foreign_keys=[processed_by])
 
 
-class TestResult(Base):
-    """Test result entries"""
+class MenuItemResult(Base):
+    """MenuItem result entries"""
     __tablename__ = "test_results"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -316,18 +316,18 @@ class TestResult(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    order_item = relationship("TestOrderItem")
+    order_item = relationship("MenuItemOrderItem")
 
 
-class LISReportTemplate(Base):
-    """Report templates for different test types"""
+class LISOrderTemplate(Base):
+    """Order templates for different test types"""
     __tablename__ = "lis_report_templates"
 
     id = Column(Integer, primary_key=True, index=True)
     template_name = Column(String, nullable=False)
     
-    # Associated tests
-    test_category = Column(SQLEnum(TestCategory), nullable=False)
+    # Associated menu_items
+    test_category = Column(SQLEnum(MenuItemCategory), nullable=False)
     
     # Template content (JSON structure)
     template_content = Column(JSON, nullable=False)
@@ -345,9 +345,9 @@ class LISReportTemplate(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-class GeneratedReport(Base):
-    """Generated reports"""
-    __tablename__ = "generated_reports"
+class GeneratedOrder(Base):
+    """Generated orders"""
+    __tablename__ = "generated_orders"
 
     id = Column(Integer, primary_key=True, index=True)
     report_number = Column(String, nullable=False, unique=True, index=True)
@@ -355,7 +355,7 @@ class GeneratedReport(Base):
     # Order
     order_id = Column(Integer, ForeignKey("test_orders.id"), nullable=False)
     
-    # Report details
+    # Order details
     report_type = Column(String, nullable=False)
     template_id = Column(Integer, ForeignKey("lis_report_templates.id"), nullable=True)
     
@@ -380,8 +380,8 @@ class GeneratedReport(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    order = relationship("TestOrder")
-    template = relationship("LISReportTemplate")
+    order = relationship("MenuItemOrder")
+    template = relationship("LISOrderTemplate")
     authorizer = relationship("User")
 
 
@@ -396,7 +396,7 @@ class QualityControl(Base):
     control_lot_number = Column(String, nullable=True)
     control_expiry_date = Column(DateTime, nullable=True)
     
-    # Test
+    # MenuItem
     test_master_id = Column(Integer, ForeignKey("lab_test_master.id"), nullable=True)
     
     # Values
@@ -424,7 +424,7 @@ class QualityControl(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    test_master = relationship("LabTestMaster")
+    test_master = relationship("LabMenuItemMaster")
     performer = relationship("User", foreign_keys=[performed_by])
     reviewer = relationship("User", foreign_keys=[reviewed_by])
 

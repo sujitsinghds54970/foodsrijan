@@ -23,19 +23,19 @@ if config.config_file_name is not None:
 from app.database import Base
 # Import all models to ensure they're registered
 from app.models import (
-    Branch, User, Patient, DailyEntry, Staff, AttendanceRecord,
+    Branch, User, Customer, DailyEntry, Staff, AttendanceRecord,
     SalaryRecord, InventoryItem, StockMovement, Appointment, Invoice,
     InvoiceItem, LabResult, ActivityLog, SystemSettings
 )
 from app.models.lis import (
-    TestOrder, TestOrderItem, Sample, TestResult,
-    LabTestMaster, LISReportTemplate, GeneratedReport,
+    MenuItemOrder, MenuItemOrderItem, Sample, MenuItemResult,
+    LabMenuItemMaster, LISOrderTemplate, GeneratedOrder,
     QualityControl, InstrumentCalibration
 )
 from app.models.branch_lis import (
-    TestCatalog, TestPanel, OrderQueue, Sample as BranchLISSample,
+    MenuItemCatalog, MenuItemPanel, OrderQueue, Sample as BranchLISSample,
     Worklist, InstrumentCalibration as BranchLISInstrumentCalibration, QCResult,
-    ProficiencyTestRun, LISReportArchive, WestgardRule
+    ProficiencyMenuItemRun, LISOrderArchive, WestgardRule
 )
 from app.models.payment import InsuranceClaim, Payment, PaymentReminder, ReconciliationLog, Refund
 from app.models.accounting import ExpenseEntry, ExpenseCategory, Transaction, Account
@@ -54,9 +54,10 @@ from app.models.hr import (
     StaffDocument,
     DirectorNotification,
 )
-from app.models.patient_portal import PatientAppointment, PatientPrescription, PatientPortalUser
-from app.models.patient import PatientProfile, FamilyMember
-from app.models.doctor import Doctor, DoctorBranch, ReportDistribution, DoctorNotification, DoctorSchedule
+from app.models.patient_portal import CustomerAppointment, CustomerPrescription, CustomerPortalUser
+from app.models.customer import CustomerProfile, FamilyMember
+from app.models.staff import Staff, StaffBranch, OrderDistribution, StaffNotification, StaffSchedule
+from app.models.daily_entry_module import DailyEntryModule
 from app.models.finance import BranchAccount, FinanceExpense, FinanceInvoice, FinanceTransaction
 from app.models.analytics import DailyAnalyticsSnapshot
 from app.models.payroll import (
@@ -121,7 +122,6 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            version_table_schema='public'
         )
 
         with context.begin_transaction():

@@ -18,7 +18,7 @@ class WearableSync(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")
 
 
 class SecondOpinionRequest(Base):
@@ -34,7 +34,7 @@ class SecondOpinionRequest(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")
 
 
 class EmergencyAlert(Base):
@@ -49,10 +49,10 @@ class EmergencyAlert(Base):
     doctor_notified = Column(Integer, nullable=False, default=1)
     note = Column(Text, nullable=True)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")
 
 
-class PatientVaultDocument(Base):
+class CustomerVaultDocument(Base):
     __tablename__ = "patient_vault_documents"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -66,4 +66,4 @@ class PatientVaultDocument(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")

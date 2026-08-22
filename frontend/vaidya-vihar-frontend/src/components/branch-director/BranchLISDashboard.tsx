@@ -12,7 +12,7 @@ type LISHealth = {
   average_tat_minutes: number
   qc_failure_rate: number
   sample_rejection_rate: number
-  pending_tests: number
+  pending_menu_items: number
   branch_name?: string | null
   last_updated: string
 }
@@ -21,7 +21,7 @@ type LISStats = {
   todays_test_volume: number
   average_tat_minutes: number
   tat_breakdown: Record<string, number>
-  pending_tests_count: number
+  pending_menu_items_count: number
   pending_by_department: Record<string, number>
   sample_rejection_rate: number
   qc_status: string
@@ -40,7 +40,7 @@ type LISOrder = {
   status: string
   expected_tat_minutes: number
   due_at?: string | null
-  tests: Array<Record<string, unknown>>
+  menu_items: Array<Record<string, unknown>>
   created_at: string
 }
 
@@ -64,7 +64,7 @@ type LIPanel = {
   id: number
   panel_name: string
   description?: string | null
-  tests: Array<{ test_name?: string }>
+  menu_items: Array<{ test_name?: string }>
 }
 
 type CatalogItem = {
@@ -76,8 +76,8 @@ type CatalogItem = {
   turnaround_minutes: number
 }
 
-type PatientSuggestion = { id: string; name: string; patient_id?: string }
-type DoctorSuggestion = { id: string; name: string }
+type CustomerSuggestion = { id: string; name: string; patient_id?: string }
+type StaffSuggestion = { id: string; name: string }
 
 type QCDashboard = {
   summary: { pass: number; warning: number; out_of_control: number }
@@ -124,7 +124,7 @@ type AIInsights = {
   anomaly_detection: Array<{ type: string; message: string }>
 }
 
-type ReportArchive = Array<{ id: number; report_number: string; version: number; template_name: string; status: string; signed_by?: string | null; created_at?: string | null }>
+type OrderArchive = Array<{ id: number; report_number: string; version: number; template_name: string; status: string; signed_by?: string | null; created_at?: string | null }>
 
 const normalizeApiBase = (rawBase: string): string => {
   const trimmed = (rawBase || '').trim()
@@ -157,7 +157,7 @@ function colorForHealth(score: number) {
 }
 
 function statusTone(status: string) {
-  if (status === 'Reported') return 'bg-emerald-100 text-emerald-700'
+  if (status === 'Ordered') return 'bg-emerald-100 text-emerald-700'
   if (status === 'Rejected') return 'bg-rose-100 text-rose-700'
   if (status === 'Delayed') return 'bg-orange-100 text-orange-700'
   if (status === 'QC Passed') return 'bg-blue-100 text-blue-700'
@@ -192,12 +192,12 @@ export default function BranchLISDashboard() {
   const [tatAnalytics, setTatAnalytics] = useState<TATAnalytics | null>(null)
   const [financialAnalytics, setFinancialAnalytics] = useState<FinancialAnalytics | null>(null)
   const [aiInsights, setAiInsights] = useState<AIInsights | null>(null)
-  const [reportArchive, setReportArchive] = useState<ReportArchive>([])
+  const [reportArchive, setOrderArchive] = useState<OrderArchive>([])
 
-  const [patientQuery, setPatientQuery] = useState('')
-  const [doctorQuery, setDoctorQuery] = useState('')
-  const [patientHits, setPatientHits] = useState<PatientSuggestion[]>([])
-  const [doctorHits, setDoctorHits] = useState<DoctorSuggestion[]>([])
+  const [patientQuery, setCustomerQuery] = useState('')
+  const [doctorQuery, setStaffQuery] = useState('')
+  const [patientHits, setCustomerHits] = useState<CustomerSuggestion[]>([])
+  const [doctorHits, setStaffHits] = useState<StaffSuggestion[]>([])
 
   const [orderForm, setOrderForm] = useState({
     patient_id: '',
@@ -246,7 +246,7 @@ export default function BranchLISDashboard() {
         axios.get<TATAnalytics>(`${API_BASE}/api/lis/analytics/tat`, requestConfig),
         axios.get<FinancialAnalytics>(`${API_BASE}/api/lis/analytics/financial`, requestConfig),
         axios.get<AIInsights>(`${API_BASE}/api/lis/analytics/ai-insights`, requestConfig),
-        axios.get<ReportArchive>(`${API_BASE}/api/lis/reports/archive`, requestConfig),
+        axios.get<OrderArchive>(`${API_BASE}/api/lis/orders/archive`, requestConfig),
       ])
 
       let failedWidgets = 0
@@ -280,7 +280,7 @@ export default function BranchLISDashboard() {
       else markFailure()
       if (aiRes.status === 'fulfilled') setAiInsights(aiRes.value.data)
       else markFailure()
-      if (archiveRes.status === 'fulfilled') setReportArchive(archiveRes.value.data)
+      if (archiveRes.status === 'fulfilled') setOrderArchive(archiveRes.value.data)
       else markFailure()
 
       const rejected = [
@@ -324,18 +324,18 @@ export default function BranchLISDashboard() {
 
   useEffect(() => {
     if (!token || patientQuery.trim().length < 2) {
-      setPatientHits([])
+      setCustomerHits([])
       return
     }
     const id = setTimeout(async () => {
       try {
-        const { data } = await axios.get<PatientSuggestion[]>(`${API_BASE}/api/patients/search`, {
+        const { data } = await axios.get<CustomerSuggestion[]>(`${API_BASE}/api/customers/search`, {
           ...requestConfig,
           params: { q: patientQuery.trim() },
         })
-        setPatientHits(data)
+        setCustomerHits(data)
       } catch {
-        setPatientHits([])
+        setCustomerHits([])
       }
     }, 200)
     return () => clearTimeout(id)
@@ -343,18 +343,18 @@ export default function BranchLISDashboard() {
 
   useEffect(() => {
     if (!token || doctorQuery.trim().length < 2) {
-      setDoctorHits([])
+      setStaffHits([])
       return
     }
     const id = setTimeout(async () => {
       try {
-        const { data } = await axios.get<DoctorSuggestion[]>(`${API_BASE}/api/doctors/search`, {
+        const { data } = await axios.get<StaffSuggestion[]>(`${API_BASE}/api/staff/search`, {
           ...requestConfig,
           params: { q: doctorQuery.trim() },
         })
-        setDoctorHits(data)
+        setStaffHits(data)
       } catch {
-        setDoctorHits([])
+        setStaffHits([])
       }
     }, 200)
     return () => clearTimeout(id)
@@ -363,19 +363,19 @@ export default function BranchLISDashboard() {
   const submitOrder = useCallback(async () => {
     if (!token) return
     const selectedPanelId = Number(orderForm.panel_id || 0)
-    const selectedTest = catalog.find((item) => String(item.id) === orderForm.selected_test_id)
-    const numericPatientId = Number(orderForm.patient_id)
-    const resolvedPatientId = Number.isFinite(numericPatientId) && numericPatientId > 0 ? numericPatientId : null
+    const selectedMenuItem = catalog.find((item) => String(item.id) === orderForm.selected_test_id)
+    const numericCustomerId = Number(orderForm.patient_id)
+    const resolvedCustomerId = Number.isFinite(numericCustomerId) && numericCustomerId > 0 ? numericCustomerId : null
     if (!orderForm.patient_name.trim()) {
-      toast.error('Patient name is required')
+      toast.error('Customer name is required')
       return
     }
-    if (!selectedPanelId && !selectedTest) {
+    if (!selectedPanelId && !selectedMenuItem) {
       toast.error('Choose a panel or a test')
       return
     }
     const payload: Record<string, unknown> = {
-      patient_id: resolvedPatientId,
+      patient_id: resolvedCustomerId,
       patient_name: orderForm.patient_name.trim(),
       patient_code: orderForm.patient_code.trim() || null,
       doctor_name: orderForm.doctor_name.trim() || null,
@@ -384,14 +384,14 @@ export default function BranchLISDashboard() {
     }
     if (selectedPanelId) {
       payload.panel_id = selectedPanelId
-    } else if (selectedTest) {
-      payload.tests = [
+    } else if (selectedMenuItem) {
+      payload.menu_items = [
         {
-          test_code: selectedTest.test_code,
-          test_name: selectedTest.test_name,
-          department: selectedTest.department,
-          sample_type: selectedTest.sample_type,
-          turnaround_minutes: selectedTest.turnaround_minutes,
+          test_code: selectedMenuItem.test_code,
+          test_name: selectedMenuItem.test_name,
+          department: selectedMenuItem.department,
+          sample_type: selectedMenuItem.sample_type,
+          turnaround_minutes: selectedMenuItem.turnaround_minutes,
         },
       ]
     }
@@ -438,16 +438,16 @@ export default function BranchLISDashboard() {
     [loadDashboard, requestConfig, token]
   )
 
-  const generateReport = useCallback(
+  const generateOrder = useCallback(
     async (orderId: number) => {
       if (!token) return
       try {
         await axios.post(
-          `${API_BASE}/api/lis/reports/generate`,
+          `${API_BASE}/api/lis/orders/generate`,
           { order_id: orderId, channels: ['sms', 'email', 'whatsapp', 'patient_portal'], signed_by: 'Branch Pathologist' },
           requestConfig
         )
-        toast.success('Report generated and dispatched')
+        toast.success('Order generated and dispatched')
         await loadDashboard()
       } catch {
         toast.error('Failed to generate report')
@@ -483,7 +483,7 @@ export default function BranchLISDashboard() {
     data: orders,
     columns: [
       orderColumnHelper.accessor('order_number', { header: 'Order #' }),
-      orderColumnHelper.accessor('patient_name', { header: 'Patient' }),
+      orderColumnHelper.accessor('patient_name', { header: 'Customer' }),
       orderColumnHelper.accessor('priority', {
         header: 'Priority',
         cell: ({ getValue }) => (
@@ -511,10 +511,10 @@ export default function BranchLISDashboard() {
             </button>
             <button
               type="button"
-              onClick={() => generateReport(row.original.id)}
+              onClick={() => generateOrder(row.original.id)}
               className="rounded-md border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
             >
-              Generate Report
+              Generate Order
             </button>
           </div>
         ),
@@ -532,13 +532,13 @@ export default function BranchLISDashboard() {
     () =>
       samples.filter((sample) => {
         if (!sample.expected_completion_at) return false
-        if (sample.status === 'Reported' || sample.status === 'Rejected') return false
+        if (sample.status === 'Ordered' || sample.status === 'Rejected') return false
         return new Date(sample.expected_completion_at).getTime() < Date.now()
       }),
     [samples]
   )
 
-  const kanbanColumns = ['Registered', 'In Processing', 'QC Passed', 'Reported', 'Delayed', 'Rejected']
+  const kanbanColumns = ['Registered', 'In Processing', 'QC Passed', 'Ordered', 'Delayed', 'Rejected']
 
   if (loading && !health) {
     return <div className="rounded-2xl bg-white/80 p-10 text-center text-slate-600 shadow-sm">Loading LIS command center...</div>
@@ -568,7 +568,7 @@ export default function BranchLISDashboard() {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Today's Test Volume</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Today's MenuItem Volume</p>
             <p className="mt-2 text-3xl font-semibold text-slate-900">{stats?.todays_test_volume ?? 0}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -580,8 +580,8 @@ export default function BranchLISDashboard() {
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Pending Tests</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">{stats?.pending_tests_count ?? 0}</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Pending MenuItems</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-900">{stats?.pending_menu_items_count ?? 0}</p>
             <p className="mt-1 text-xs text-slate-500">QC: {stats?.qc_status || 'Unknown'}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -597,10 +597,10 @@ export default function BranchLISDashboard() {
           <h3 className="text-base font-semibold text-slate-900">Order Entry & Registration</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Patient Lookup</label>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Customer Lookup</label>
               <input
                 value={patientQuery}
-                onChange={(event) => setPatientQuery(event.target.value)}
+                onChange={(event) => setCustomerQuery(event.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 placeholder="Type name or patient ID"
               />
@@ -617,8 +617,8 @@ export default function BranchLISDashboard() {
                           patient_code: hit.patient_id || hit.id,
                           patient_name: hit.name || prev.patient_name,
                         }))
-                        setPatientQuery(hit.name)
-                        setPatientHits([])
+                        setCustomerQuery(hit.name)
+                        setCustomerHits([])
                       }}
                       className="block w-full border-b border-slate-100 px-2 py-1 text-left hover:bg-slate-50"
                     >
@@ -630,10 +630,10 @@ export default function BranchLISDashboard() {
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-600">Doctor</label>
+              <label className="mb-1 block text-xs font-medium text-slate-600">Staff</label>
               <input
                 value={doctorQuery}
-                onChange={(event) => setDoctorQuery(event.target.value)}
+                onChange={(event) => setStaffQuery(event.target.value)}
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
                 placeholder="Type doctor name"
               />
@@ -645,8 +645,8 @@ export default function BranchLISDashboard() {
                       type="button"
                       onClick={() => {
                         setOrderForm((prev) => ({ ...prev, doctor_name: hit.name }))
-                        setDoctorQuery(hit.name)
-                        setDoctorHits([])
+                        setStaffQuery(hit.name)
+                        setStaffHits([])
                       }}
                       className="block w-full border-b border-slate-100 px-2 py-1 text-left hover:bg-slate-50"
                     >
@@ -661,13 +661,13 @@ export default function BranchLISDashboard() {
               value={orderForm.patient_name}
               onChange={(event) => setOrderForm((prev) => ({ ...prev, patient_name: event.target.value }))}
               className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              placeholder="Patient full name"
+              placeholder="Customer full name"
             />
             <input
               value={orderForm.patient_code}
               onChange={(event) => setOrderForm((prev) => ({ ...prev, patient_code: event.target.value }))}
               className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              placeholder="Patient code (optional)"
+              placeholder="Customer code (optional)"
             />
 
             <select
@@ -923,7 +923,7 @@ export default function BranchLISDashboard() {
             {(performanceAnalytics?.departments || []).slice(0, 6).map((dept) => (
               <div key={dept.department} className="rounded-lg border border-slate-200 p-2 text-xs">
                 <p className="font-semibold text-slate-800">{dept.department}</p>
-                <p className="text-slate-600">Volume: {dept.volume} · Reported: {dept.reported}</p>
+                <p className="text-slate-600">Volume: {dept.volume} · Ordered: {dept.reported}</p>
                 <p className="text-slate-600">TAT: {Math.round(dept.avg_tat_minutes)} min · QC: {dept.qc_status}</p>
               </div>
             ))}
@@ -936,7 +936,7 @@ export default function BranchLISDashboard() {
             <p>Revenue: ₹{Math.round(financialAnalytics?.revenue || 0)}</p>
             <p>Reagent Cost: ₹{Math.round(financialAnalytics?.reagent_cost || 0)}</p>
             <p>Profitability: ₹{Math.round(financialAnalytics?.profitability || 0)} ({financialAnalytics?.margin_percent || 0}%)</p>
-            <p>Cost/Test: ₹{financialAnalytics?.cost_per_test || 0}</p>
+            <p>Cost/MenuItem: ₹{financialAnalytics?.cost_per_test || 0}</p>
           </div>
           <div className="mt-4 space-y-2">
             {(aiInsights?.anomaly_detection || []).slice(0, 4).map((anomaly) => (
@@ -950,12 +950,12 @@ export default function BranchLISDashboard() {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-base font-semibold text-slate-900">Report Archive & Version Control</h3>
+        <h3 className="text-base font-semibold text-slate-900">Order Archive & Version Control</h3>
         <div className="mt-3 overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="px-3 py-2 text-left font-semibold text-slate-600">Report #</th>
+                <th className="px-3 py-2 text-left font-semibold text-slate-600">Order #</th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">Version</th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">Template</th>
                 <th className="px-3 py-2 text-left font-semibold text-slate-600">Status</th>

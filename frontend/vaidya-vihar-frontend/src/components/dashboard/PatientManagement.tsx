@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-interface Patient {
+interface Customer {
   id: number
   patient_id: string
   first_name: string
@@ -14,15 +14,15 @@ interface Patient {
   is_active: boolean
 }
 
-export default function PatientManagement() {
-  const [patients, setPatients] = useState<Patient[]>([])
+export default function CustomerManagement() {
+  const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
     // Mock data - in real app, fetch from API
-    const mockPatients: Patient[] = [
+    const mockCustomers: Customer[] = [
       {
         id: 1,
         patient_id: 'PV001',
@@ -50,11 +50,11 @@ export default function PatientManagement() {
         is_active: true
       }
     ]
-    setPatients(mockPatients)
+    setCustomers(mockCustomers)
     setLoading(false)
   }, [])
 
-  const filteredPatients = patients.filter(patient =>
+  const filteredCustomers = customers.filter(patient =>
     patient.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     patient.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     patient.patient_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -72,12 +72,12 @@ export default function PatientManagement() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Patient Management</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Customer Management</h1>
         <button
           onClick={() => setShowAddModal(true)}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
         >
-          Add New Patient
+          Add New Customer
         </button>
       </div>
 
@@ -87,7 +87,7 @@ export default function PatientManagement() {
           <div className="flex-1">
             <input
               type="text"
-              placeholder="Search patients by name, ID, or phone..."
+              placeholder="Search customers by name, ID, or phone..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -99,11 +99,11 @@ export default function PatientManagement() {
         </div>
       </div>
 
-      {/* Patients Table */}
+      {/* Customers Table */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">
-            Patients ({filteredPatients.length})
+            Customers ({filteredCustomers.length})
           </h2>
         </div>
         <div className="overflow-x-auto">
@@ -111,7 +111,7 @@ export default function PatientManagement() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Patient ID
+                  Customer ID
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Name
@@ -134,7 +134,7 @@ export default function PatientManagement() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredPatients.map((patient) => (
+              {filteredCustomers.map((patient) => (
                 <tr key={patient.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {patient.patient_id}

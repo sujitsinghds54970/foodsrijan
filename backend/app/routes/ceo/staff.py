@@ -7,23 +7,23 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Branch, DailyEntry
-from app.models.referring_doctor import ReferralLog, ReferringDoctor
+from app.models.referring_doctor import ReferralLog, ReferringStaff
 from app.utils.auth_system import auth_guard
 
 router = APIRouter(
-    prefix="/ceo/doctors",
-    tags=["CEO Doctor Network"],
+    prefix="/ceo/staff",
+    tags=["CEO Staff Network"],
     dependencies=[Depends(auth_guard.require_role(["super_admin"]))],
 )
 
 
 def _table_reference_snapshot(db: Session) -> dict[str, Any]:
-    doctor_profiles_count = int(db.query(func.count(ReferringDoctor.id)).scalar() or 0)
+    doctor_profiles_count = int(db.query(func.count(ReferringStaff.id)).scalar() or 0)
     referral_logs_count = int(db.query(func.count(ReferralLog.id)).scalar() or 0)
     daily_entries_count = int(db.query(func.count(DailyEntry.id)).scalar() or 0)
     commission_configured_count = int(
-        db.query(func.count(ReferringDoctor.id))
-        .filter(ReferringDoctor.commission_percentage > 0)
+        db.query(func.count(ReferringStaff.id))
+        .filter(ReferringStaff.commission_percentage > 0)
         .scalar()
         or 0
     )
@@ -59,7 +59,7 @@ def get_doctor_network_health(db: Session = Depends(get_db)):
     return {
         "is_mock": True,
         "score": 82,
-        "total_doctors": 120,
+        "total_staff": 120,
         "growth_mom_percent": 6.4,
         "revenue_contribution_percent": 45,
         "engagement_score": 78,
@@ -74,10 +74,10 @@ def get_doctor_network_health(db: Session = Depends(get_db)):
         ],
         "table_reference": _table_reference_snapshot(db),
         "future_data_mapping": {
-            "doctor_profiles": "ReferringDoctor roster with active status and specialty metadata.",
+            "doctor_profiles": "ReferringStaff roster with active status and specialty metadata.",
             "revenue_contribution": "Referral-attributed topline from DailyEntry and ReferralLog joins.",
-            "engagement_attrition_risk": "Doctor interaction cadence and referral consistency trend models.",
-            "regional_density": "Branch/city grouped distribution of active referring doctors.",
+            "engagement_attrition_risk": "Staff interaction cadence and referral consistency trend models.",
+            "regional_density": "Branch/city grouped distribution of active referring staff.",
         },
     }
 
@@ -211,7 +211,7 @@ def get_doctor_performance_analytics(db: Session = Depends(get_db)):
         "test_mix": [
             {"test_type": "MRI", "value": 31},
             {"test_type": "CT Scan", "value": 24},
-            {"test_type": "Blood Tests", "value": 21},
+            {"test_type": "Blood MenuItems", "value": 21},
             {"test_type": "Ultrasound", "value": 15},
             {"test_type": "X-Ray", "value": 9},
         ],
@@ -255,10 +255,10 @@ def get_doctor_performance_analytics(db: Session = Depends(get_db)):
         ],
         "table_reference": _table_reference_snapshot(db),
         "future_data_mapping": {
-            "leaderboard": "Doctor and branch/specialty performance from ReferralLog and DailyEntry revenue joins.",
+            "leaderboard": "Staff and branch/specialty performance from ReferralLog and DailyEntry revenue joins.",
             "referral_trend": "Time-series referral volumes from ReferralLog by doctor and network aggregate.",
             "leakage_alerts": "Decline detection from rolling referral trend anomalies.",
-            "conversion_rate": "Referred patients reaching completed diagnostics milestones.",
+            "conversion_rate": "Referred customers reaching completed diagnostics milestones.",
             "test_mix": "Referred test category distribution from DailyEntry test_names aggregation.",
             "doctor_summary": "Per-doctor referrals, revenue, commission and CRM interaction timeline.",
         },
@@ -288,7 +288,7 @@ def get_doctor_financial_commission(db: Session = Depends(get_db)):
         "future_data_mapping": {
             "commission_dashboard": "Calculated from doctor commission schedules and referral-linked revenue events.",
             "referral_cost_ratio": "Total referral payout burden over referral-attributed revenue.",
-            "doctor_profitability": "Doctor-level contribution after referral and service delivery costs.",
+            "doctor_profitability": "Staff-level contribution after referral and service delivery costs.",
         },
     }
 
@@ -356,7 +356,7 @@ def get_doctor_engagement_relationship(db: Session = Depends(get_db)):
             {"date": "2026-07-23", "event_type": "CME", "doctor_name": "Dr. S. Menon", "notes": "CME event invite"},
             {"date": "2026-07-24", "event_type": "Visit", "doctor_name": "Dr. N. Iyer", "notes": "Lab quality walkthrough"},
         ],
-        "flight_risk_doctors": [
+        "flight_risk_staff": [
             {"doctor_id": 107, "doctor_name": "Dr. M. Patel", "risk_level": "high", "reason": "Referrals down 14% with reduced interaction frequency."},
             {"doctor_id": 108, "doctor_name": "Dr. T. Roy", "risk_level": "medium", "reason": "Commission dissatisfaction noted in recent feedback."},
         ],
@@ -446,7 +446,7 @@ def get_doctor_operational_excellence(db: Session = Depends(get_db)):
             ],
         },
         "doctor_issue_tracker": [
-            {"issue_id": "DOC-101", "doctor_name": "Dr. R. Sharma", "issue_type": "Lost Report", "status": "Open", "updated_at": "2026-07-24"},
+            {"issue_id": "DOC-101", "doctor_name": "Dr. R. Sharma", "issue_type": "Lost Order", "status": "Open", "updated_at": "2026-07-24"},
             {"issue_id": "DOC-102", "doctor_name": "Dr. P. Verma", "issue_type": "Billing Error", "status": "In Progress", "updated_at": "2026-07-23"},
             {"issue_id": "DOC-103", "doctor_name": "Dr. A. Khan", "issue_type": "Delayed TAT", "status": "Resolved", "updated_at": "2026-07-22"},
             {"issue_id": "DOC-104", "doctor_name": "Dr. N. Iyer", "issue_type": "Missing Addendum", "status": "In Progress", "updated_at": "2026-07-21"},
@@ -455,8 +455,8 @@ def get_doctor_operational_excellence(db: Session = Depends(get_db)):
         "table_reference": _table_reference_snapshot(db),
         "future_data_mapping": {
             "service_levels": "Derived from report lifecycle timestamps and QA validations in operations logs.",
-            "issue_tracker": "Doctor-reported incidents from CRM/helpdesk records.",
-            "journey_completion": "Referral-to-report completion funnel for referred patients.",
+            "issue_tracker": "Staff-reported incidents from CRM/helpdesk records.",
+            "journey_completion": "Referral-to-report completion funnel for referred customers.",
         },
     }
 
@@ -466,7 +466,7 @@ def get_doctor_wow_features(db: Session = Depends(get_db)):
     return {
         "is_mock": True,
         "doctor_360_briefing": {
-            "title": "Doctor 360 AI Briefing",
+            "title": "Staff 360 AI Briefing",
             "message": "Good morning. Top performer: Dr. Sharma. Referral volume is up 12% this month, while Delhi Neurology referrals need closer follow-up.",
         },
         "smart_referral_alerts": [

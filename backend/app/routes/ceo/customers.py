@@ -7,12 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Appointment, DailyEntry, LabResult
-from app.models.patient import PatientProfile
+from app.models.customer import CustomerProfile
 from app.utils.auth_system import auth_guard
 
 router = APIRouter(
-    prefix="/ceo/patients",
-    tags=["CEO Patient Insights"],
+    prefix="/ceo/customers",
+    tags=["CEO Customer Insights"],
     dependencies=[Depends(auth_guard.require_role(["super_admin"]))],
 )
 
@@ -20,7 +20,7 @@ router = APIRouter(
 def _table_reference_snapshot(db: Session) -> dict[str, Any]:
     return {
         "daily_entries_count": int(db.query(func.count(DailyEntry.id)).scalar() or 0),
-        "patient_profiles_count": int(db.query(func.count(PatientProfile.id)).scalar() or 0),
+        "patient_profiles_count": int(db.query(func.count(CustomerProfile.id)).scalar() or 0),
         "appointments_count": int(db.query(func.count(Appointment.id)).scalar() or 0),
         "lis_results_count": int(db.query(func.count(LabResult.id)).scalar() or 0),
         "generated_at": datetime.utcnow().isoformat(),
@@ -31,7 +31,7 @@ def _table_reference_snapshot(db: Session) -> dict[str, Any]:
 def get_patient_overview(db: Session = Depends(get_db)):
     return {
         "is_mock": True,
-        "total_patients": 5430,
+        "total_customers": 5430,
         "growth": {
             "mom_percent": 12.5,
             "yoy_percent": 26.8,
@@ -43,19 +43,19 @@ def get_patient_overview(db: Session = Depends(get_db)):
         "patient_acquisition_cost": 125,
         "patient_lifetime_value": 45000,
         "referral_source_analysis": [
-            {"source": "Doctor Referral", "patients": 1780},
-            {"source": "Online Search", "patients": 1290},
-            {"source": "Walk-In", "patients": 980},
-            {"source": "Corporate Tie-Up", "patients": 760},
-            {"source": "Social Campaign", "patients": 620},
+            {"source": "Staff Referral", "customers": 1780},
+            {"source": "Online Search", "customers": 1290},
+            {"source": "Walk-In", "customers": 980},
+            {"source": "Corporate Tie-Up", "customers": 760},
+            {"source": "Social Campaign", "customers": 620},
         ],
         "monthly_growth_trend": [
-            {"month": "Feb", "patients": 4410},
-            {"month": "Mar", "patients": 4560},
-            {"month": "Apr", "patients": 4725},
-            {"month": "May", "patients": 4950},
-            {"month": "Jun", "patients": 5180},
-            {"month": "Jul", "patients": 5430},
+            {"month": "Feb", "customers": 4410},
+            {"month": "Mar", "customers": 4560},
+            {"month": "Apr", "customers": 4725},
+            {"month": "May", "customers": 4950},
+            {"month": "Jun", "customers": 5180},
+            {"month": "Jul", "customers": 5430},
         ],
         "table_reference": _table_reference_snapshot(db),
         "future_data_mapping": {
@@ -75,9 +75,9 @@ def get_patient_journey_experience(db: Session = Depends(get_db)):
             {"stage": "Awareness", "value": 10000},
             {"stage": "Booking", "value": 6200},
             {"stage": "Visit", "value": 5480},
-            {"stage": "Test", "value": 5030},
+            {"stage": "MenuItem", "value": 5030},
             {"stage": "Completion", "value": 4720},
-            {"stage": "Report Delivery", "value": 4500},
+            {"stage": "Order Delivery", "value": 4500},
             {"stage": "Follow-up/Repeat", "value": 3210},
         ],
         "average_time_to_test_hours": 18.4,
@@ -91,7 +91,7 @@ def get_patient_journey_experience(db: Session = Depends(get_db)):
             "time_to_test": "Booking-to-test delta from appointment and sample collection timestamps.",
             "no_show_rate": "Scheduled appointments without completed visit.",
             "tat": "Sample collection to report delivery SLA.",
-            "report_viewing": "Patient portal report open/download telemetry.",
+            "report_viewing": "Customer portal report open/download telemetry.",
             "nps": "Aggregated patient feedback survey responses.",
         },
     }
@@ -144,14 +144,14 @@ def get_patient_segmentation_health(db: Session = Depends(get_db)):
             ],
         },
         "segment_by_condition": [
-            {"condition": "Diabetes", "patients": 1460},
-            {"condition": "Cardiac", "patients": 1120},
-            {"condition": "Thyroid", "patients": 980},
+            {"condition": "Diabetes", "customers": 1460},
+            {"condition": "Cardiac", "customers": 1120},
+            {"condition": "Thyroid", "customers": 980},
         ],
         "segment_by_value": [
-            {"segment": "High", "patients": 920},
-            {"segment": "Medium", "patients": 2670},
-            {"segment": "Low", "patients": 1840},
+            {"segment": "High", "customers": 920},
+            {"segment": "Medium", "customers": 2670},
+            {"segment": "Low", "customers": 1840},
         ],
         "geographic_density": [
             {"zone": "Mumbai", "density_score": 88},
@@ -168,10 +168,10 @@ def get_patient_segmentation_health(db: Session = Depends(get_db)):
         ],
         "table_reference": _table_reference_snapshot(db),
         "future_data_mapping": {
-            "demographics": "Patient profile attributes and address intelligence from patient_profiles.",
+            "demographics": "Customer profile attributes and address intelligence from patient_profiles.",
             "condition_segments": "Condition/treatment clustering from test history and clinical flags.",
-            "value_segments": "Patient lifetime spend and engagement based segmentation.",
-            "geo_density": "Patient inflow concentration by branch-city catchment zones.",
+            "value_segments": "Customer lifetime spend and engagement based segmentation.",
+            "geo_density": "Customer inflow concentration by branch-city catchment zones.",
             "population_insights": "AI narrative from trend shifts and risk pockets in patient cohorts.",
         },
     }
@@ -185,7 +185,7 @@ def get_patient_financial_analytics(db: Session = Depends(get_db)):
             {"segment": "Diabetes", "revenue": 4210000},
             {"segment": "Cardiac", "revenue": 3870000},
             {"segment": "Thyroid", "revenue": 2660000},
-            {"segment": "Doctor Referral", "revenue": 5120000},
+            {"segment": "Staff Referral", "revenue": 5120000},
             {"segment": "Corporate", "revenue": 2980000},
         ],
         "revenue_per_patient": 2840,
@@ -210,7 +210,7 @@ def get_patient_financial_analytics(db: Session = Depends(get_db)):
 def get_patient_predictive_insights(db: Session = Depends(get_db)):
     return {
         "is_mock": True,
-        "churn_risk_patients": [
+        "churn_risk_customers": [
             {"patient_id": "PT-1042", "name": "Amit Verma", "risk_score": 88, "reason": "No visit in 180 days, declining engagement."},
             {"patient_id": "PT-1298", "name": "Ritu Sharma", "risk_score": 82, "reason": "Missed follow-up and low report-view activity."},
             {"patient_id": "PT-1371", "name": "Nasir Khan", "risk_score": 79, "reason": "Two cancelled bookings in last quarter."},
@@ -223,7 +223,7 @@ def get_patient_predictive_insights(db: Session = Depends(get_db)):
         ],
         "automated_patient_briefing": (
             "Weekly patient brief: returning visits improved by 4%, but thyroid follow-up compliance dropped in two semi-urban cohorts. "
-            "Churn risk remains elevated for missed follow-up patients aged 46+."
+            "Churn risk remains elevated for missed follow-up customers aged 46+."
         ),
         "table_reference": _table_reference_snapshot(db),
         "future_data_mapping": {
@@ -246,7 +246,7 @@ def get_patient_predictive_what_if_simulator(
     projected_revenue_impact_percent = round(2.1 + (normalized_discount * 0.41), 2)
     return {
         "is_mock": True,
-        "scenario": f"Run a {normalized_discount:.1f}% discount campaign for {condition} patients in {city}.",
+        "scenario": f"Run a {normalized_discount:.1f}% discount campaign for {condition} customers in {city}.",
         "inputs": {
             "condition": condition,
             "city": city,
@@ -275,13 +275,13 @@ def get_patient_wow_features(db: Session = Depends(get_db)):
                 "patient_id": "PT-1042",
                 "name": "Amit Verma",
                 "interactions": ["Booked via app", "Reminder call completed", "Follow-up pending"],
-                "tests": ["HbA1c", "Lipid Profile", "TSH"],
-                "reports": ["Viewed 3 reports", "Downloaded 2 reports"],
+                "menu_items": ["HbA1c", "Lipid Profile", "TSH"],
+                "orders": ["Viewed 3 orders", "Downloaded 2 orders"],
                 "feedback": "Prefers morning slots and WhatsApp reminders.",
                 "journey_timeline": [
                     {"date": "2026-04-12", "event": "First Booking"},
                     {"date": "2026-04-13", "event": "Sample Collection"},
-                    {"date": "2026-04-14", "event": "Report Delivered"},
+                    {"date": "2026-04-14", "event": "Order Delivered"},
                     {"date": "2026-06-02", "event": "Repeat Visit"},
                 ],
             },
@@ -289,13 +289,13 @@ def get_patient_wow_features(db: Session = Depends(get_db)):
                 "patient_id": "PT-1298",
                 "name": "Ritu Sharma",
                 "interactions": ["Corporate camp registration", "Portal activation complete"],
-                "tests": ["Vitamin D", "CBC", "Thyroid Panel"],
-                "reports": ["Viewed 2 reports", "No downloads"],
+                "menu_items": ["Vitamin D", "CBC", "Thyroid Panel"],
+                "orders": ["Viewed 2 orders", "No downloads"],
                 "feedback": "Requested faster report notifications.",
                 "journey_timeline": [
                     {"date": "2026-03-21", "event": "Camp Screening"},
                     {"date": "2026-03-22", "event": "Diagnostic Booking"},
-                    {"date": "2026-03-23", "event": "Report Delivered"},
+                    {"date": "2026-03-23", "event": "Order Delivered"},
                     {"date": "2026-05-30", "event": "Follow-up Reminder Sent"},
                 ],
             },
@@ -306,13 +306,13 @@ def get_patient_wow_features(db: Session = Depends(get_db)):
             {"source": "Call Center", "message": "Concern about appointment rescheduling delay.", "sentiment": "negative", "time": "8h ago"},
         ],
         "growth_opportunity_assistant": [
-            "Dr. Sharma has 45 diabetic patients without HbA1c test in 6 months. Trigger reminder campaign.",
+            "Dr. Sharma has 45 diabetic customers without HbA1c test in 6 months. Trigger reminder campaign.",
             "Repeat female wellness panels are up 11% in Mumbai; create loyalty bundle offer.",
             "Cardiac follow-up drop in Patna can be recovered with weekend screening slots.",
         ],
         "table_reference": _table_reference_snapshot(db),
         "future_data_mapping": {
-            "patient_360": "Unified patient view from appointments, reports, communications, and feedback.",
+            "patient_360": "Unified patient view from appointments, orders, communications, and feedback.",
             "voice_feed": "Streaming feedback from in-app, social, reviews, and support channels.",
             "growth_assistant": "AI opportunity detection from cohort gaps and campaign response history.",
         },

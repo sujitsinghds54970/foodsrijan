@@ -156,22 +156,22 @@ SETTINGS_STORE: dict[str, Any] = {
     },
     "feature_flags": {
         "feature_flag_dashboard": [
-            {"feature_key": "doctor_portal", "label": "Doctor Portal", "category": "Modules", "enabled": True},
-            {"feature_key": "patient_portal", "label": "Patient Portal", "category": "Modules", "enabled": True},
+            {"feature_key": "doctor_portal", "label": "Staff Portal", "category": "Modules", "enabled": True},
+            {"feature_key": "patient_portal", "label": "Customer Portal", "category": "Modules", "enabled": True},
             {"feature_key": "inventory_management", "label": "Inventory Management", "category": "Modules", "enabled": True},
             {"feature_key": "smart_billing_rules", "label": "Smart Billing Rules", "category": "Billing", "enabled": False},
-            {"feature_key": "auto_report_dispatch", "label": "Auto Report Dispatch", "category": "Reports", "enabled": True},
+            {"feature_key": "auto_report_dispatch", "label": "Auto Order Dispatch", "category": "Orders", "enabled": True},
             {"feature_key": "whatsapp_integration", "label": "WhatsApp Integration", "category": "Integrations", "enabled": False},
         ],
         "module_activation": [
-            {"module": "Doctor Portal", "enabled": True},
-            {"module": "Patient Portal", "enabled": True},
+            {"module": "Staff Portal", "enabled": True},
+            {"module": "Customer Portal", "enabled": True},
             {"module": "Inventory Management", "enabled": True},
             {"module": "Analytics Studio", "enabled": False},
         ],
         "flag_categories": [
             {"category": "Billing", "description": "Billing and payment workflows"},
-            {"category": "Reports", "description": "Result and report automation"},
+            {"category": "Orders", "description": "Result and report automation"},
             {"category": "Integrations", "description": "Third-party and channel integrations"},
             {"category": "Modules", "description": "Major platform modules"},
         ],
@@ -203,7 +203,7 @@ SETTINGS_STORE: dict[str, Any] = {
             "whatsapp": {"provider": "Meta Cloud API", "business_number": "+91-9000000000", "enabled": False},
         },
         "api_key_management": [
-            {"key_name": "DoctorPortalSync", "masked_key": "dp_****_01", "status": "active", "created_at": "2026-06-20", "last_used_at": "2026-07-25"},
+            {"key_name": "StaffPortalSync", "masked_key": "dp_****_01", "status": "active", "created_at": "2026-06-20", "last_used_at": "2026-07-25"},
             {"key_name": "InsuranceBridge", "masked_key": "ins_****_44", "status": "revoked", "created_at": "2026-04-18", "last_used_at": "2026-05-30"},
             {"key_name": "PartnerLabImport", "masked_key": "pl_****_73", "status": "active", "created_at": "2026-07-01", "last_used_at": "2026-07-24"},
         ],
@@ -227,8 +227,8 @@ SETTINGS_STORE: dict[str, Any] = {
         "central_test_catalog": [
             {"test_code": "CBC", "test_name": "Complete Blood Count", "category": "Hematology", "active": True},
             {"test_code": "HBA1C", "test_name": "HbA1c", "category": "Biochemistry", "active": True},
-            {"test_code": "LFT", "test_name": "Liver Function Test", "category": "Biochemistry", "active": True},
-            {"test_code": "KFT", "test_name": "Kidney Function Test", "category": "Biochemistry", "active": True},
+            {"test_code": "LFT", "test_name": "Liver Function MenuItem", "category": "Biochemistry", "active": True},
+            {"test_code": "KFT", "test_name": "Kidney Function MenuItem", "category": "Biochemistry", "active": True},
         ],
         "branch_switching": {
             "current_view_branch": "All Branches",
@@ -340,7 +340,7 @@ SETTINGS_STORE: dict[str, Any] = {
         },
         "scheduled_jobs_automations": [
             {"job_name": "Nightly Backup", "job_type": "backup", "status": "success", "last_run_time": "2026-07-26T01:30:00Z", "next_run_time": "2026-07-27T01:30:00Z"},
-            {"job_name": "Daily Report Dispatch", "job_type": "reporting", "status": "running", "last_run_time": "2026-07-26T06:00:00Z", "next_run_time": "2026-07-27T06:00:00Z"},
+            {"job_name": "Daily Order Dispatch", "job_type": "reporting", "status": "running", "last_run_time": "2026-07-26T06:00:00Z", "next_run_time": "2026-07-27T06:00:00Z"},
             {"job_name": "Master Data Sync", "job_type": "sync", "status": "failed", "last_run_time": "2026-07-26T02:45:00Z", "next_run_time": "2026-07-26T04:45:00Z"},
         ],
         "maintenance_mode": {
@@ -356,22 +356,22 @@ SETTINGS_STORE: dict[str, Any] = {
     },
     "import_export_migration": {
         "bulk_data_import": {
-            "supported_entities": ["employees", "doctors", "patients", "tests"],
+            "supported_entities": ["employees", "staff", "customers", "menu_items"],
             "supported_formats": ["csv", "xlsx"],
             "last_import_jobs": [
                 {"job_id": "IMP-1021", "entity": "employees", "format": "xlsx", "status": "success", "processed_records": 124, "failed_records": 0, "completed_at": "2026-07-25T17:45:00Z"},
-                {"job_id": "IMP-1022", "entity": "patients", "format": "csv", "status": "partial_success", "processed_records": 840, "failed_records": 12, "completed_at": "2026-07-25T18:20:00Z"},
+                {"job_id": "IMP-1022", "entity": "customers", "format": "csv", "status": "partial_success", "processed_records": 840, "failed_records": 12, "completed_at": "2026-07-25T18:20:00Z"},
             ],
             "template_downloads": [
                 {"entity": "employees", "template_path": "/templates/import/employees.xlsx"},
-                {"entity": "patients", "template_path": "/templates/import/patients.csv"},
+                {"entity": "customers", "template_path": "/templates/import/customers.csv"},
             ],
         },
         "bulk_data_export": {
-            "available_exports": ["employees", "doctors", "patients", "tests", "audit_logs"],
+            "available_exports": ["employees", "staff", "customers", "menu_items", "audit_logs"],
             "default_format": "xlsx",
             "last_export_jobs": [
-                {"job_id": "EXP-3301", "dataset": "patients", "format": "xlsx", "status": "success", "rows_exported": 5230, "completed_at": "2026-07-25T19:12:00Z"},
+                {"job_id": "EXP-3301", "dataset": "customers", "format": "xlsx", "status": "success", "rows_exported": 5230, "completed_at": "2026-07-25T19:12:00Z"},
                 {"job_id": "EXP-3302", "dataset": "audit_logs", "format": "csv", "status": "success", "rows_exported": 12000, "completed_at": "2026-07-25T20:03:00Z"},
             ],
         },
@@ -381,8 +381,8 @@ SETTINGS_STORE: dict[str, Any] = {
                 {"connector_name": "Old ERP Archive", "source_type": "mysql", "status": "mapping_required"},
             ],
             "migration_runs": [
-                {"run_id": "MIG-8001", "source_system": "Legacy LIS v2", "target_module": "patients", "status": "completed", "migrated_records": 15234, "run_at": "2026-07-24T22:10:00Z"},
-                {"run_id": "MIG-8002", "source_system": "Old ERP Archive", "target_module": "doctors", "status": "queued", "migrated_records": 0, "run_at": "2026-07-26T05:00:00Z"},
+                {"run_id": "MIG-8001", "source_system": "Legacy LIS v2", "target_module": "customers", "status": "completed", "migrated_records": 15234, "run_at": "2026-07-24T22:10:00Z"},
+                {"run_id": "MIG-8002", "source_system": "Old ERP Archive", "target_module": "staff", "status": "queued", "migrated_records": 0, "run_at": "2026-07-26T05:00:00Z"},
             ],
             "validation_checks_enabled": True,
             "rollback_supported": True,

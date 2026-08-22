@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.database import Base, engine, get_db
 from app.models import User
 from app.models.daily_entry_module import DailyEntryModule
-from app.models.referring_doctor import DoctorShareLink, ReferralLog, ReferringDoctor
+from app.models.referring_doctor import StaffShareLink, ReferralLog, ReferringStaff
 from app.utils.auth_system import get_current_user
 
 
@@ -34,9 +34,9 @@ def _ensure_tables() -> None:
     Base.metadata.create_all(
         bind=engine,
         tables=[
-            ReferringDoctor.__table__,
+            ReferringStaff.__table__,
             ReferralLog.__table__,
-            DoctorShareLink.__table__,
+            StaffShareLink.__table__,
         ],
     )
 
@@ -49,7 +49,7 @@ def _require_branch_director(current_user: User) -> None:
         )
 
 
-class DoctorCreatePayload(BaseModel):
+class StaffCreatePayload(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=200)
     mobile: str = Field(..., min_length=10, max_length=20)
     email: Optional[EmailStr] = None
@@ -74,7 +74,7 @@ class DoctorCreatePayload(BaseModel):
     portal_password: Optional[str] = Field(None, min_length=6, max_length=64)
 
 
-class DoctorUpdatePayload(BaseModel):
+class StaffUpdatePayload(BaseModel):
     full_name: Optional[str] = Field(None, min_length=2, max_length=200)
     mobile: Optional[str] = Field(None, min_length=10, max_length=20)
     email: Optional[EmailStr] = None
@@ -119,7 +119,7 @@ def _hash_password(raw_password: str) -> str:
 
 def _doctor_message(name: str) -> str:
     return (
-        f"Dear Dr. {name}, Please find attached patient reports and referral updates "
+        f"Dear Dr. {name}, Please find attached patient orders and referral updates "
         "from VaidyaVihar Diagnostic."
     )
 
@@ -150,8 +150,8 @@ def _doctor_revenue_from_entries(db: Session, branch_id: int, doctor_name: str, 
     return Decimal(value or 0)
 
 
-@router.get("/api/doctors")
-def list_doctors(
+@router.get("/api/staff")
+def list_staff(
     specialization: Optional[str] = Query(None),
     city: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
@@ -159,22 +159,22 @@ def list_doctors(
 ):
     _require_branch_director(current_user)
 
-    query = db.query(ReferringDoctor).filter(
-        ReferringDoctor.branch_id == current_user.branch_id,
-        ReferringDoctor.is_active == True,
+    query = db.query(ReferringStaff).filter(
+        ReferringStaff.branch_id == current_user.branch_id,
+        ReferringStaff.is_active == True,
     )
     if specialization:
-        query = query.filter(ReferringDoctor.specialization.ilike(f"%{specialization}%"))
+        query = query.filter(ReferringStaff.specialization.ilike(f"%{specialization}%"))
     if city:
-        query = query.filter(ReferringDoctor.city.ilike(f"%{city}%"))
+        query = query.filter(ReferringStaff.city.ilike(f"%{city}%"))
 
-    doctors = query.order_by(ReferringDoctor.full_name.asc()).all()
+    staff = query.order_by(ReferringStaff.full_name.asc()).all()
 
     now = datetime.utcnow()
     start, end = _monthly_window(now.year, now.month)
 
     result = []
-    for doctor in doctors:
+    for doctor in staff:
         referral_count = (
             db.query(func.count(ReferralLog.id))
             .filter(
@@ -218,29 +218,29 @@ def list_doctors(
     return result
 
 
-@router.post("/api/doctors", status_code=201)
+@router.post("/api/staff", status_code=201)
 def create_doctor(
-    payload: DoctorCreatePayload,
+    payload: StaffCreatePayload,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _require_branch_director(current_user)
 
     duplicate = (
-        db.query(ReferringDoctor)
+        db.query(ReferringStaff)
         .filter(
-            ReferringDoctor.branch_id == current_user.branch_id,
-            or_(ReferringDoctor.mobile == payload.mobile, ReferringDoctor.email == payload.email),
-            ReferringDoctor.is_active == True,
+            ReferringStaff.branch_id == current_user.branch_id,
+            or_(ReferringStaff.mobile == payload.mobile, ReferringStaff.email == payload.email),
+            ReferringStaff.is_active == True,
         )
         .first()
     )
     if duplicate:
-        raise HTTPException(status_code=400, detail="Doctor with same mobile/email already exists")
+        raise HTTPException(status_code=400, detail="Staff with same mobile/email already exists")
 
     portal_password_hash = _hash_password(payload.portal_password) if payload.portal_password else None
 
-    row = ReferringDoctor(
+    row = ReferringStaff(
         branch_id=current_user.branch_id,
         full_name=payload.full_name,
         mobile=payload.mobile,
@@ -265,28 +265,28 @@ def create_doctor(
     db.commit()
     db.refresh(row)
 
-    return {"id": row.id, "message": "Doctor created successfully"}
+    return {"id": row.id, "message": "Staff created successfully"}
 
 
-@router.put("/api/doctors/{doctor_id}")
+@router.put("/api/staff/{doctor_id}")
 def update_doctor(
     doctor_id: int,
-    payload: DoctorUpdatePayload,
+    payload: StaffUpdatePayload,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _require_branch_director(current_user)
 
     row = (
-        db.query(ReferringDoctor)
+        db.query(ReferringStaff)
         .filter(
-            ReferringDoctor.id == doctor_id,
-            ReferringDoctor.branch_id == current_user.branch_id,
+            ReferringStaff.id == doctor_id,
+            ReferringStaff.branch_id == current_user.branch_id,
         )
         .first()
     )
     if not row:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
 
     data = payload.dict(exclude_unset=True)
     if "portal_password" in data:
@@ -298,10 +298,10 @@ def update_doctor(
 
     db.commit()
     db.refresh(row)
-    return {"id": row.id, "message": "Doctor updated successfully"}
+    return {"id": row.id, "message": "Staff updated successfully"}
 
 
-@router.delete("/api/doctors/{doctor_id}")
+@router.delete("/api/staff/{doctor_id}")
 def delete_doctor(
     doctor_id: int,
     current_user: User = Depends(get_current_user),
@@ -310,23 +310,23 @@ def delete_doctor(
     _require_branch_director(current_user)
 
     row = (
-        db.query(ReferringDoctor)
+        db.query(ReferringStaff)
         .filter(
-            ReferringDoctor.id == doctor_id,
-            ReferringDoctor.branch_id == current_user.branch_id,
+            ReferringStaff.id == doctor_id,
+            ReferringStaff.branch_id == current_user.branch_id,
         )
         .first()
     )
     if not row:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
 
     row.is_active = False
     db.commit()
-    return {"message": "Doctor deleted successfully"}
+    return {"message": "Staff deleted successfully"}
 
 
-@router.get("/api/doctors/performance")
-def doctors_performance(
+@router.get("/api/staff/performance")
+def staff_performance(
     month: Optional[int] = Query(None, ge=1, le=12),
     year: Optional[int] = Query(None, ge=2000, le=2100),
     current_user: User = Depends(get_current_user),
@@ -339,11 +339,11 @@ def doctors_performance(
     target_year = year or now.year
     start, end = _monthly_window(target_year, target_month)
 
-    doctors = (
-        db.query(ReferringDoctor)
+    staff = (
+        db.query(ReferringStaff)
         .filter(
-            ReferringDoctor.branch_id == current_user.branch_id,
-            ReferringDoctor.is_active == True,
+            ReferringStaff.branch_id == current_user.branch_id,
+            ReferringStaff.is_active == True,
         )
         .all()
     )
@@ -352,7 +352,7 @@ def doctors_performance(
     total_revenue = Decimal(0)
     total_commission = Decimal(0)
 
-    for doctor in doctors:
+    for doctor in staff:
         referrals = (
             db.query(func.count(ReferralLog.id))
             .filter(
@@ -384,7 +384,7 @@ def doctors_performance(
 
     doctor_rows.sort(key=lambda row: row["revenue"], reverse=True)
 
-    pending_reports = (
+    pending_orders = (
         db.query(func.count(ReferralLog.id))
         .filter(
             ReferralLog.branch_id == current_user.branch_id,
@@ -399,15 +399,15 @@ def doctors_performance(
     return {
         "month": target_month,
         "year": target_year,
-        "top_5_referring_doctors": doctor_rows[:5],
+        "top_5_referring_staff": doctor_rows[:5],
         "doctor_performance": doctor_rows,
         "total_revenue_from_referrals": float(total_revenue),
         "total_commission_payable": float(total_commission),
-        "pending_reports_to_send": int(pending_reports),
+        "pending_orders_to_send": int(pending_orders),
     }
 
 
-@router.post("/api/doctors/broadcast")
+@router.post("/api/staff/broadcast")
 def broadcast_message(
     payload: BroadcastPayload,
     current_user: User = Depends(get_current_user),
@@ -415,22 +415,22 @@ def broadcast_message(
 ):
     _require_branch_director(current_user)
 
-    query = db.query(ReferringDoctor).filter(
-        ReferringDoctor.branch_id == current_user.branch_id,
-        ReferringDoctor.is_active == True,
+    query = db.query(ReferringStaff).filter(
+        ReferringStaff.branch_id == current_user.branch_id,
+        ReferringStaff.is_active == True,
     )
 
     if payload.doctor_ids:
-        query = query.filter(ReferringDoctor.id.in_(payload.doctor_ids))
+        query = query.filter(ReferringStaff.id.in_(payload.doctor_ids))
     if payload.specialization:
-        query = query.filter(ReferringDoctor.specialization.ilike(f"%{payload.specialization}%"))
+        query = query.filter(ReferringStaff.specialization.ilike(f"%{payload.specialization}%"))
     if payload.city:
-        query = query.filter(ReferringDoctor.city.ilike(f"%{payload.city}%"))
+        query = query.filter(ReferringStaff.city.ilike(f"%{payload.city}%"))
 
-    doctors = query.all()
+    staff = query.all()
 
     sent = []
-    for doctor in doctors:
+    for doctor in staff:
         doctor_message = f"Dear Dr. {doctor.full_name},\n\n{payload.message}\n\n- VaidyaVihar Diagnostic"
 
         email_link = ""
@@ -460,8 +460,8 @@ def broadcast_message(
     }
 
 
-@router.post("/api/doctors/send-pdfs")
-async def send_pdfs_to_doctors(
+@router.post("/api/staff/send-pdfs")
+async def send_pdfs_to_staff(
     doctor_ids: str = Form(...),
     files: List[UploadFile] = File(...),
     current_user: User = Depends(get_current_user),
@@ -477,18 +477,18 @@ async def send_pdfs_to_doctors(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid doctor_ids: {exc}")
 
-    doctors = (
-        db.query(ReferringDoctor)
+    staff = (
+        db.query(ReferringStaff)
         .filter(
-            ReferringDoctor.branch_id == current_user.branch_id,
-            ReferringDoctor.id.in_(parsed_ids),
-            ReferringDoctor.is_active == True,
+            ReferringStaff.branch_id == current_user.branch_id,
+            ReferringStaff.id.in_(parsed_ids),
+            ReferringStaff.is_active == True,
         )
         .all()
     )
 
-    if not doctors:
-        raise HTTPException(status_code=404, detail="No doctors found for selected IDs")
+    if not staff:
+        raise HTTPException(status_code=404, detail="No staff found for selected IDs")
 
     expiry = datetime.utcnow() + timedelta(hours=24)
 
@@ -509,11 +509,11 @@ async def send_pdfs_to_doctors(
         )
 
     results = []
-    for doctor in doctors:
+    for doctor in staff:
         links = []
         for sf in stored_files:
             token = uuid.uuid4().hex
-            row = DoctorShareLink(
+            row = StaffShareLink(
                 branch_id=current_user.branch_id,
                 doctor_id=doctor.id,
                 token=token,
@@ -524,7 +524,7 @@ async def send_pdfs_to_doctors(
                 created_by=current_user.id,
             )
             db.add(row)
-            links.append(f"{os.getenv('PUBLIC_BASE_URL', 'http://localhost:8000')}/api/doctors/file/{token}")
+            links.append(f"{os.getenv('PUBLIC_BASE_URL', 'http://localhost:8000')}/api/staff/file/{token}")
 
         msg = _doctor_message(doctor.full_name)
         links_block = "\n".join(links)
@@ -533,7 +533,7 @@ async def send_pdfs_to_doctors(
         email_link = ""
         whatsapp_link = ""
         if doctor.email:
-            email_link = f"mailto:{doctor.email}?subject={quote('Patient Reports and Referral Updates')}&body={quote(full_message)}"
+            email_link = f"mailto:{doctor.email}?subject={quote('Customer Orders and Referral Updates')}&body={quote(full_message)}"
         if doctor.mobile:
             whatsapp_link = f"https://wa.me/{doctor.mobile}?text={quote(full_message)}"
 
@@ -553,22 +553,22 @@ async def send_pdfs_to_doctors(
     db.commit()
 
     return {
-        "message": "Temporary file links generated for selected doctors",
+        "message": "Temporary file links generated for selected staff",
         "valid_for_hours": 24,
         "items": results,
     }
 
 
-@router.get("/api/doctors/file/{token}")
+@router.get("/api/staff/file/{token}")
 def get_temporary_file(
     token: str,
     db: Session = Depends(get_db),
 ):
     row = (
-        db.query(DoctorShareLink)
+        db.query(StaffShareLink)
         .filter(
-            DoctorShareLink.token == token,
-            DoctorShareLink.is_active == True,
+            StaffShareLink.token == token,
+            StaffShareLink.is_active == True,
         )
         .first()
     )
@@ -584,7 +584,7 @@ def get_temporary_file(
     return FileResponse(path=str(file_path), filename=row.filename, media_type=row.mime_type)
 
 
-@router.post("/api/doctors/referrals")
+@router.post("/api/staff/referrals")
 def add_referral_log(
     doctor_id: int = Form(...),
     patient_name: str = Form(...),
@@ -598,15 +598,15 @@ def add_referral_log(
     _require_branch_director(current_user)
 
     doctor = (
-        db.query(ReferringDoctor)
+        db.query(ReferringStaff)
         .filter(
-            ReferringDoctor.id == doctor_id,
-            ReferringDoctor.branch_id == current_user.branch_id,
+            ReferringStaff.id == doctor_id,
+            ReferringStaff.branch_id == current_user.branch_id,
         )
         .first()
     )
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
 
     due_dt = None
     if report_due_date:
@@ -632,11 +632,11 @@ def add_referral_log(
     return {"message": "Referral log created", "id": row.id}
 
 
-@router.post("/api/doctors/portal/login")
+@router.post("/api/staff/portal/login")
 def doctor_portal_login(payload: PortalLoginPayload, db: Session = Depends(get_db)):
     doctor = (
-        db.query(ReferringDoctor)
-        .filter(ReferringDoctor.portal_username == payload.username, ReferringDoctor.is_active == True)
+        db.query(ReferringStaff)
+        .filter(ReferringStaff.portal_username == payload.username, ReferringStaff.is_active == True)
         .first()
     )
     if not doctor or not doctor.portal_password_hash:
@@ -659,20 +659,20 @@ def doctor_portal_login(payload: PortalLoginPayload, db: Session = Depends(get_d
     }
 
 
-def _get_portal_doctor(token: str, db: Session) -> ReferringDoctor:
+def _get_portal_doctor(token: str, db: Session) -> ReferringStaff:
     record = DOCTOR_PORTAL_TOKENS.get(token)
     if not record:
         raise HTTPException(status_code=401, detail="Invalid token")
     if record["expires_at"] < datetime.utcnow():
         raise HTTPException(status_code=401, detail="Token expired")
 
-    doctor = db.query(ReferringDoctor).filter(ReferringDoctor.id == int(record["doctor_id"])).first()
+    doctor = db.query(ReferringStaff).filter(ReferringStaff.id == int(record["doctor_id"])).first()
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        raise HTTPException(status_code=404, detail="Staff not found")
     return doctor
 
 
-@router.get("/api/doctors/portal/me")
+@router.get("/api/staff/portal/me")
 def doctor_portal_me(token: str = Query(...), db: Session = Depends(get_db)):
     doctor = _get_portal_doctor(token, db)
     return {
@@ -684,7 +684,7 @@ def doctor_portal_me(token: str = Query(...), db: Session = Depends(get_db)):
     }
 
 
-@router.get("/api/doctors/portal/referrals")
+@router.get("/api/staff/portal/referrals")
 def doctor_portal_referrals(token: str = Query(...), db: Session = Depends(get_db)):
     doctor = _get_portal_doctor(token, db)
 

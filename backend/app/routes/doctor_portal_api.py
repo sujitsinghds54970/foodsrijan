@@ -20,23 +20,23 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, get_db
 from app.models import (
     CMECourse,
-    DoctorAuditLog,
-    DoctorMessage,
-    DoctorReferralLog,
-    Doctor,
+    StaffAuditLog,
+    StaffMessage,
+    StaffReferralLog,
+    Staff,
     LabResult,
     LoyaltyReward,
     Order,
-    Patient,
-    PatientSearchLog,
+    Customer,
+    CustomerSearchLog,
     Staff,
-    TestPanel,
+    MenuItemPanel,
     User,
 )
 from app.models.daily_entry_module import DailyEntryModule
-from app.models.doctor import DoctorBranch
-from app.models.lis import LabTestMaster
-from app.models.patient import PatientProfile
+from app.models.staff import StaffBranch
+from app.models.lis import LabMenuItemMaster
+from app.models.customer import CustomerProfile
 from app.services.email_service import get_email_service
 from app.services.sms_service import get_sms_service
 from app.services.websocket_service import Notification, NotificationType, Priority, connection_manager
@@ -46,7 +46,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-class DoctorProfileUpdate(BaseModel):
+class StaffProfileUpdate(BaseModel):
     upi_id: Optional[str] = None
     bank_account: Optional[str] = None
     ifsc: Optional[str] = None
@@ -54,7 +54,7 @@ class DoctorProfileUpdate(BaseModel):
     loyalty_tier: Optional[str] = Field(default=None, pattern="^(Silver|Gold|Platinum)$")
 
 
-class PatientTagUpdate(BaseModel):
+class CustomerTagUpdate(BaseModel):
     tag: str = Field(min_length=1, max_length=60)
     action: str = Field(default="add", pattern="^(add|remove)$")
 
@@ -81,7 +81,7 @@ class SymptomCheckerRequest(BaseModel):
     symptoms: List[str] = Field(min_length=1)
 
 
-class ReportInterpretationRequest(BaseModel):
+class OrderInterpretationRequest(BaseModel):
     report_id: int
 
 
@@ -102,23 +102,23 @@ class WhiteLabelSettingsUpdate(BaseModel):
 SYMPTOM_AI_MAP = {
     "fever": {
         "conditions": ["Viral Fever", "Typhoid", "Dengue"],
-        "tests": ["CBC", "CRP", "Dengue NS1", "Widal"],
+        "menu_items": ["CBC", "CRP", "Dengue NS1", "Widal"],
     },
     "cough": {
         "conditions": ["Respiratory Infection", "Bronchitis", "Allergic Airway Disease"],
-        "tests": ["CBC", "Chest X-Ray", "CRP"],
+        "menu_items": ["CBC", "Chest X-Ray", "CRP"],
     },
     "chest pain": {
         "conditions": ["Cardiac Ischemia", "Costochondritis", "GERD"],
-        "tests": ["ECG", "Troponin-I", "Lipid Profile"],
+        "menu_items": ["ECG", "Troponin-I", "Lipid Profile"],
     },
     "fatigue": {
         "conditions": ["Anemia", "Hypothyroidism", "Vitamin Deficiency"],
-        "tests": ["CBC", "TSH", "Vitamin B12", "Vitamin D"],
+        "menu_items": ["CBC", "TSH", "Vitamin B12", "Vitamin D"],
     },
     "polyuria": {
         "conditions": ["Type 2 Diabetes", "Urinary Tract Irritation"],
-        "tests": ["Fasting Glucose", "HbA1c", "Urine Routine"],
+        "menu_items": ["Fasting Glucose", "HbA1c", "Urine Routine"],
     },
 }
 
@@ -134,24 +134,24 @@ def _doctor(current_user: User = Depends(require_role(["doctor"]))) -> User:
     return current_user
 
 
-def _get_doctor(current_user: User, db: Session) -> Doctor:
-    doctor = db.query(Doctor).filter(Doctor.user_id == current_user.id).first()
+def _get_doctor(current_user: User, db: Session) -> Staff:
+    doctor = db.query(Staff).filter(Staff.user_id == current_user.id).first()
     if not doctor:
-        doctor = db.query(Doctor).filter(Doctor.email == current_user.email).first()
+        doctor = db.query(Staff).filter(Staff.email == current_user.email).first()
 
-    # Self-heal legacy users that have doctor role but no doctors-table profile yet.
+    # Self-heal legacy users that have doctor role but no staff-table profile yet.
     if not doctor:
         seed_email = (current_user.email or "").strip() or f"{current_user.username}@vaidyavihar.local"
         base_doctor_id = f"DOC-U{current_user.id:04d}"
         generated_doctor_id = base_doctor_id
         suffix = 1
-        while db.query(Doctor).filter(Doctor.doctor_id == generated_doctor_id).first():
+        while db.query(Staff).filter(Staff.doctor_id == generated_doctor_id).first():
             suffix += 1
             generated_doctor_id = f"{base_doctor_id}-{suffix}"
 
-        doctor = Doctor(
+        doctor = Staff(
             doctor_id=generated_doctor_id,
-            first_name=(current_user.first_name or "Doctor").strip() or "Doctor",
+            first_name=(current_user.first_name or "Staff").strip() or "Staff",
             last_name=(current_user.last_name or "User").strip() or "User",
             email=seed_email,
             phone=(current_user.phone or "0000000000").strip() or "0000000000",
@@ -166,13 +166,13 @@ def _get_doctor(current_user: User, db: Session) -> Doctor:
         db.flush()
 
         if current_user.branch_id:
-            branch_link = db.query(DoctorBranch).filter(
-                DoctorBranch.doctor_id == doctor.id,
-                DoctorBranch.branch_id == current_user.branch_id,
+            branch_link = db.query(StaffBranch).filter(
+                StaffBranch.doctor_id == doctor.id,
+                StaffBranch.branch_id == current_user.branch_id,
             ).first()
             if not branch_link:
                 db.add(
-                    DoctorBranch(
+                    StaffBranch(
                         doctor_id=doctor.id,
                         branch_id=current_user.branch_id,
                         assigned_by=current_user.id,
@@ -190,20 +190,20 @@ def _get_doctor(current_user: User, db: Session) -> Doctor:
         db.refresh(doctor)
 
     if not doctor.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Doctor profile is not configured")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff profile is not configured")
 
     if current_user.branch_id:
-        branch_link = db.query(DoctorBranch).filter(
-            DoctorBranch.doctor_id == doctor.id,
-            DoctorBranch.branch_id == current_user.branch_id,
+        branch_link = db.query(StaffBranch).filter(
+            StaffBranch.doctor_id == doctor.id,
+            StaffBranch.branch_id == current_user.branch_id,
         ).first()
         if not branch_link:
             db.add(
-                DoctorBranch(
+                StaffBranch(
                     doctor_id=doctor.id,
                     branch_id=current_user.branch_id,
                     assigned_by=current_user.id,
-                    is_primary=not db.query(DoctorBranch).filter(DoctorBranch.doctor_id == doctor.id, DoctorBranch.is_active.is_(True)).first(),
+                    is_primary=not db.query(StaffBranch).filter(StaffBranch.doctor_id == doctor.id, StaffBranch.is_active.is_(True)).first(),
                     is_active=True,
                 )
             )
@@ -212,18 +212,18 @@ def _get_doctor(current_user: User, db: Session) -> Doctor:
     return doctor
 
 
-def _branch_ids(doctor: Doctor) -> List[int]:
+def _branch_ids(doctor: Staff) -> List[int]:
     return [branch.branch_id for branch in doctor.branches if branch.is_active]
 
 
-def _patient_or_404(patient_id: int, doctor: Doctor, db: Session) -> Patient:
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+def _patient_or_404(patient_id: int, doctor: Staff, db: Session) -> Customer:
+    patient = db.query(Customer).filter(Customer.id == patient_id).first()
     if not patient or patient.branch_id not in _branch_ids(doctor):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
     return patient
 
 
-def _patient_payload(patient: Patient) -> dict:
+def _patient_payload(patient: Customer) -> dict:
     return {
         "id": patient.id,
         "patient_id": patient.patient_id,
@@ -239,7 +239,7 @@ def _patient_payload(patient: Patient) -> dict:
     }
 
 
-def _lab_team_users(doctor: Doctor, db: Session) -> List[User]:
+def _lab_team_users(doctor: Staff, db: Session) -> List[User]:
     branch_ids = _branch_ids(doctor)
     staff_user_ids = [row[0] for row in db.query(Staff.user_id).filter(Staff.branch_id.in_(branch_ids)).all()]
     users = db.query(User).filter(User.id.in_(staff_user_ids), User.is_active.is_(True)).all()
@@ -256,7 +256,7 @@ def _normalize_tier(tier: Optional[str]) -> str:
 def _log_doctor_audit(
     db: Session,
     *,
-    doctor: Doctor,
+    doctor: Staff,
     user: User,
     action: str,
     entity_type: str,
@@ -264,7 +264,7 @@ def _log_doctor_audit(
     event_meta: Optional[Dict] = None,
 ) -> None:
     db.add(
-        DoctorAuditLog(
+        StaffAuditLog(
             doctor_id=doctor.id,
             user_id=user.id,
             action=action,
@@ -278,19 +278,19 @@ def _log_doctor_audit(
 def _send_patient_order_notifications_task(*, patient_id: int, order_id: int, doctor_name: str) -> None:
     db = SessionLocal()
     try:
-        patient = db.query(Patient).filter(Patient.id == patient_id).first()
+        patient = db.query(Customer).filter(Customer.id == patient_id).first()
         if not patient:
             return
 
-        profile = db.query(PatientProfile).filter(PatientProfile.patient_id == patient_id, PatientProfile.is_active.is_(True)).first()
+        profile = db.query(CustomerProfile).filter(CustomerProfile.patient_id == patient_id, CustomerProfile.is_active.is_(True)).first()
         if not profile:
-            profile = db.query(PatientProfile).filter(PatientProfile.mobile == patient.phone, PatientProfile.is_active.is_(True)).first()
+            profile = db.query(CustomerProfile).filter(CustomerProfile.mobile == patient.phone, CustomerProfile.is_active.is_(True)).first()
         if not profile:
             return
 
         message = (
             f"Hi {profile.full_name}, Dr. {doctor_name} has placed your diagnostic order "
-            f"(Order #{order_id}). You will be notified when reports are ready."
+            f"(Order #{order_id}). You will be notified when orders are ready."
         )
 
         if profile.mobile:
@@ -303,7 +303,7 @@ def _send_patient_order_notifications_task(*, patient_id: int, order_id: int, do
             try:
                 get_email_service().send_email(
                     profile.email,
-                    "Doctor Order Created - VaidyaVihar Diagnostic",
+                    "Staff Order Created - VaidyaVihar Diagnostic",
                     f"<p>{message}</p>",
                 )
             except Exception:
@@ -319,7 +319,7 @@ def _send_patient_order_notifications_task(*, patient_id: int, order_id: int, do
                 notification = Notification(
                     id=f"PAT-ORD-{order_id}-{int(datetime.utcnow().timestamp())}",
                     type=NotificationType.SYSTEM_ANNOUNCEMENT.value,
-                    title="New Doctor Order",
+                    title="New Staff Order",
                     message=message,
                     priority=Priority.NORMAL.value,
                     data={"order_id": order_id, "patient_profile_id": profile.id},
@@ -335,7 +335,7 @@ def _send_patient_order_notifications_task(*, patient_id: int, order_id: int, do
         db.close()
 
 
-def _ensure_loyalty_reward(doctor: Doctor, db: Session) -> LoyaltyReward:
+def _ensure_loyalty_reward(doctor: Staff, db: Session) -> LoyaltyReward:
     reward = db.query(LoyaltyReward).filter(LoyaltyReward.doctor_id == doctor.id).first()
     if reward:
         if not reward.benefits:
@@ -355,7 +355,7 @@ def _ensure_loyalty_reward(doctor: Doctor, db: Session) -> LoyaltyReward:
     return reward
 
 
-def _get_white_label_settings(doctor: Doctor) -> dict:
+def _get_white_label_settings(doctor: Staff) -> dict:
     preferences = doctor.report_preferences if isinstance(doctor.report_preferences, dict) else {}
     settings = preferences.get("white_label") if isinstance(preferences, dict) else None
     if not isinstance(settings, dict):
@@ -367,7 +367,7 @@ def _get_white_label_settings(doctor: Doctor) -> dict:
     }
 
 
-def _set_white_label_settings(doctor: Doctor, payload: WhiteLabelSettingsUpdate) -> dict:
+def _set_white_label_settings(doctor: Staff, payload: WhiteLabelSettingsUpdate) -> dict:
     current_preferences = doctor.report_preferences if isinstance(doctor.report_preferences, dict) else {}
     settings = current_preferences.get("white_label") if isinstance(current_preferences.get("white_label"), dict) else {}
     updates = payload.model_dump(exclude_unset=True)
@@ -409,7 +409,7 @@ def doctor_route(func):
             raise
         except Exception as exc:
             traceback.print_exc()
-            raise HTTPException(status_code=500, detail=f"Doctor portal API failed: {exc}") from exc
+            raise HTTPException(status_code=500, detail=f"Staff portal API failed: {exc}") from exc
 
     try:
         for route in reversed(router.routes):
@@ -461,7 +461,7 @@ def get_doctor_profile(
 @doctor_route
 @router.put("/profile")
 def update_doctor_profile(
-    payload: DoctorProfileUpdate,
+    payload: StaffProfileUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(_doctor),
 ):
@@ -498,8 +498,8 @@ def update_white_label_settings(
 
 
 @doctor_route
-@router.get("/patients")
-def search_doctor_patients(
+@router.get("/customers")
+def search_doctor_customers(
     search: str = Query(default="", max_length=255),
     tag: Optional[str] = Query(default=None, max_length=60),
     date: Optional[str] = Query(default=None, description="Registration date in YYYY-MM-DD format"),
@@ -507,48 +507,48 @@ def search_doctor_patients(
     current_user: User = Depends(_doctor),
 ):
     doctor = _get_doctor(current_user, db)
-    query = db.query(Patient).filter(Patient.branch_id.in_(_branch_ids(doctor)))
+    query = db.query(Customer).filter(Customer.branch_id.in_(_branch_ids(doctor)))
     normalized_search = search.strip()
     if normalized_search:
         like = f"%{normalized_search}%"
         result_patient_ids = db.query(LabResult.patient_id).filter(cast(LabResult.result_value, String).ilike(like))
         query = query.filter(or_(
-            Patient.patient_id.ilike(like),
-            Patient.first_name.ilike(like),
-            Patient.last_name.ilike(like),
-            Patient.phone.ilike(like),
-            Patient.email.ilike(like),
-            Patient.id.in_(result_patient_ids),
+            Customer.patient_id.ilike(like),
+            Customer.first_name.ilike(like),
+            Customer.last_name.ilike(like),
+            Customer.phone.ilike(like),
+            Customer.email.ilike(like),
+            Customer.id.in_(result_patient_ids),
         ))
     if date:
         try:
             registration_date = datetime.strptime(date, "%Y-%m-%d").date()
         except ValueError as error:
             raise HTTPException(status_code=400, detail="date must use YYYY-MM-DD format") from error
-        query = query.filter(Patient.registration_date >= datetime.combine(registration_date, datetime.min.time()), Patient.registration_date < datetime.combine(registration_date, datetime.max.time()))
-    patients = query.order_by(Patient.registration_date.desc()).limit(50).all()
+        query = query.filter(Customer.registration_date >= datetime.combine(registration_date, datetime.min.time()), Customer.registration_date < datetime.combine(registration_date, datetime.max.time()))
+    customers = query.order_by(Customer.registration_date.desc()).limit(50).all()
     if tag:
-        patients = [patient for patient in patients if tag in (patient.tags or [])]
+        customers = [patient for patient in customers if tag in (patient.tags or [])]
 
-    db.add(PatientSearchLog(doctor_id=doctor.id, query=normalized_search or tag or date or "*", result_count=len(patients)))
+    db.add(CustomerSearchLog(doctor_id=doctor.id, query=normalized_search or tag or date or "*", result_count=len(customers)))
     _log_doctor_audit(
         db,
         doctor=doctor,
         user=current_user,
         action="PATIENT_SEARCH",
-        entity_type="Patient",
+        entity_type="Customer",
         entity_id=None,
-        event_meta={"query": normalized_search, "tag": tag, "date": date, "result_count": len(patients)},
+        event_meta={"query": normalized_search, "tag": tag, "date": date, "result_count": len(customers)},
     )
     db.commit()
-    return {"patients": [_patient_payload(patient) for patient in patients], "count": len(patients)}
+    return {"customers": [_patient_payload(patient) for patient in customers], "count": len(customers)}
 
 
 @doctor_route
-@router.post("/patients/{patient_id}/tags")
+@router.post("/customers/{patient_id}/tags")
 def update_patient_tags(
     patient_id: int,
-    payload: PatientTagUpdate,
+    payload: CustomerTagUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(_doctor),
 ):
@@ -565,7 +565,7 @@ def update_patient_tags(
 
 
 @doctor_route
-@router.get("/patients/{patient_id}/timeline")
+@router.get("/customers/{patient_id}/timeline")
 def patient_timeline(
     patient_id: int,
     db: Session = Depends(get_db),
@@ -577,7 +577,7 @@ def patient_timeline(
         {
             "type": "registration",
             "date": patient.registration_date.isoformat() if patient.registration_date else None,
-            "title": "Patient registered",
+            "title": "Customer registered",
             "details": patient.patient_id,
         }
     ]
@@ -594,9 +594,9 @@ def patient_timeline(
         doctor=doctor,
         user=current_user,
         action="REPORT_VIEW",
-        entity_type="Patient",
+        entity_type="Customer",
         entity_id=str(patient.id),
-        event_meta={"events_with_reports": len([event for event in events if event.get("report_url")])},
+        event_meta={"events_with_orders": len([event for event in events if event.get("report_url")])},
     )
     db.commit()
     return {"patient": _patient_payload(patient), "events": events}
@@ -609,8 +609,8 @@ def doctor_test_catalog(
     current_user: User = Depends(_doctor),
 ):
     _get_doctor(current_user, db)
-    tests = db.query(LabTestMaster).filter(LabTestMaster.is_active.is_(True)).order_by(LabTestMaster.test_name).all()
-    return {"tests": [{
+    menu_items = db.query(LabMenuItemMaster).filter(LabMenuItemMaster.is_active.is_(True)).order_by(LabMenuItemMaster.test_name).all()
+    return {"menu_items": [{
         "id": test.id,
         "test_code": test.test_code,
         "test_name": test.test_name,
@@ -618,7 +618,7 @@ def doctor_test_catalog(
         "base_price": test.base_price,
         "discounted_price": test.discounted_price,
         "turnaround_time_hours": test.turnaround_time_hours,
-    } for test in tests]}
+    } for test in menu_items]}
 
 
 @doctor_route
@@ -629,10 +629,10 @@ def create_panel(
     current_user: User = Depends(_doctor),
 ):
     doctor = _get_doctor(current_user, db)
-    valid_ids = {row[0] for row in db.query(LabTestMaster.id).filter(LabTestMaster.id.in_(payload.test_ids)).all()}
+    valid_ids = {row[0] for row in db.query(LabMenuItemMaster.id).filter(LabMenuItemMaster.id.in_(payload.test_ids)).all()}
     if set(payload.test_ids) != valid_ids:
-        raise HTTPException(status_code=400, detail="One or more tests are not in the catalog")
-    panel = TestPanel(doctor_id=doctor.id, panel_name=payload.panel_name.strip(), test_ids=payload.test_ids, is_custom=True)
+        raise HTTPException(status_code=400, detail="One or more menu_items are not in the catalog")
+    panel = MenuItemPanel(doctor_id=doctor.id, panel_name=payload.panel_name.strip(), test_ids=payload.test_ids, is_custom=True)
     db.add(panel)
     db.commit()
     db.refresh(panel)
@@ -646,7 +646,7 @@ def list_panels(
     current_user: User = Depends(_doctor),
 ):
     doctor = _get_doctor(current_user, db)
-    panels = db.query(TestPanel).filter(TestPanel.doctor_id == doctor.id).order_by(TestPanel.panel_name).all()
+    panels = db.query(MenuItemPanel).filter(MenuItemPanel.doctor_id == doctor.id).order_by(MenuItemPanel.panel_name).all()
     return {"panels": [{"id": panel.id, "panel_name": panel.panel_name, "test_ids": panel.test_ids or [], "is_custom": panel.is_custom} for panel in panels]}
 
 
@@ -660,16 +660,16 @@ def create_doctor_order(
 ):
     doctor = _get_doctor(current_user, db)
     patient = _patient_or_404(payload.patient_id, doctor, db)
-    panel_rows = db.query(TestPanel).filter(TestPanel.id.in_(payload.panel_ids), TestPanel.doctor_id == doctor.id).all() if payload.panel_ids else []
+    panel_rows = db.query(MenuItemPanel).filter(MenuItemPanel.id.in_(payload.panel_ids), MenuItemPanel.doctor_id == doctor.id).all() if payload.panel_ids else []
     combined_test_ids = set(payload.test_ids)
     for panel in panel_rows:
         combined_test_ids.update(panel.test_ids or [])
-    valid_ids = {row[0] for row in db.query(LabTestMaster.id).filter(LabTestMaster.id.in_(combined_test_ids)).all()}
+    valid_ids = {row[0] for row in db.query(LabMenuItemMaster.id).filter(LabMenuItemMaster.id.in_(combined_test_ids)).all()}
     if not combined_test_ids or valid_ids != combined_test_ids:
-        raise HTTPException(status_code=400, detail="Select valid catalog tests or panels")
+        raise HTTPException(status_code=400, detail="Select valid catalog menu_items or panels")
     branch_id = payload.branch_id or patient.branch_id
     if branch_id not in _branch_ids(doctor):
-        raise HTTPException(status_code=403, detail="Doctor is not assigned to this branch")
+        raise HTTPException(status_code=403, detail="Staff is not assigned to this branch")
     order = Order(
         doctor_id=doctor.id,
         patient_id=patient.id,
@@ -680,11 +680,11 @@ def create_doctor_order(
         clinical_notes=payload.clinical_notes,
     )
     db.add(order)
-    price_rows = db.query(LabTestMaster.id, LabTestMaster.discounted_price, LabTestMaster.base_price).filter(LabTestMaster.id.in_(combined_test_ids)).all()
+    price_rows = db.query(LabMenuItemMaster.id, LabMenuItemMaster.discounted_price, LabMenuItemMaster.base_price).filter(LabMenuItemMaster.id.in_(combined_test_ids)).all()
     order_total = sum((row[1] if row[1] and row[1] > 0 else row[2] or 0) for row in price_rows)
     commission_amount = round((order_total * (doctor.commission_percentage or 0)) / 100, 2)
     db.flush()
-    db.add(DoctorReferralLog(
+    db.add(StaffReferralLog(
         doctor_id=doctor.id,
         patient_id=patient.id,
         order_id=order.id,
@@ -795,12 +795,12 @@ def get_messages(
     doctor = _get_doctor(current_user, db)
     lab_team = _lab_team_users(doctor, db)
     lab_user_ids = {user.id for user in lab_team}
-    messages = db.query(DoctorMessage).filter(
+    messages = db.query(StaffMessage).filter(
         or_(
-            DoctorMessage.sender_id == current_user.id,
-            DoctorMessage.receiver_id == current_user.id,
+            StaffMessage.sender_id == current_user.id,
+            StaffMessage.receiver_id == current_user.id,
         )
-    ).order_by(DoctorMessage.created_at.asc()).all()
+    ).order_by(StaffMessage.created_at.asc()).all()
     filtered = [
         message for message in messages
         if (message.sender_id in lab_user_ids or message.receiver_id in lab_user_ids)
@@ -840,7 +840,7 @@ def send_message(
     lab_user_ids = {user.id for user in lab_team}
     if payload.receiver_id not in lab_user_ids:
         raise HTTPException(status_code=403, detail="Receiver is not in your lab team scope")
-    message = DoctorMessage(
+    message = StaffMessage(
         sender_id=current_user.id,
         receiver_id=payload.receiver_id,
         message=payload.message.strip(),
@@ -866,7 +866,7 @@ def critical_alerts(
     current_user: User = Depends(_doctor),
 ):
     doctor = _get_doctor(current_user, db)
-    patient_ids = [row[0] for row in db.query(Patient.id).filter(Patient.branch_id.in_(_branch_ids(doctor))).all()]
+    patient_ids = [row[0] for row in db.query(Customer.id).filter(Customer.branch_id.in_(_branch_ids(doctor))).all()]
     rows = db.query(LabResult).filter(LabResult.patient_id.in_(patient_ids)).all()
     alerts = []
     for row in rows:
@@ -874,7 +874,7 @@ def critical_alerts(
         if value is None:
             continue
         if value >= threshold_high or value <= threshold_low:
-            patient = db.query(Patient).filter(Patient.id == row.patient_id).first()
+            patient = db.query(Customer).filter(Customer.id == row.patient_id).first()
             alerts.append({
                 "result_id": row.id,
                 "patient_id": row.patient_id,
@@ -904,14 +904,14 @@ def doctor_analytics(
         monthly_counter[month_key] += 1
         if not order.test_ids:
             continue
-        names = db.query(LabTestMaster.test_name).filter(LabTestMaster.id.in_(order.test_ids)).all()
+        names = db.query(LabMenuItemMaster.test_name).filter(LabMenuItemMaster.id.in_(order.test_ids)).all()
         for row in names:
             test_counter[row[0]] += 1
 
     demographics = {"male": 0, "female": 0, "other": 0, "age_groups": {"0-18": 0, "19-40": 0, "41-60": 0, "61+": 0}}
-    patients = db.query(Patient).filter(Patient.id.in_(patient_ids)).all() if patient_ids else []
+    customers = db.query(Customer).filter(Customer.id.in_(patient_ids)).all() if patient_ids else []
     today = datetime.utcnow().date()
-    for patient in patients:
+    for patient in customers:
         gender = (patient.gender or "other").lower()
         if gender in demographics:
             demographics[gender] += 1
@@ -931,8 +931,8 @@ def doctor_analytics(
 
     six_months = [(datetime.utcnow() - timedelta(days=30 * idx)).strftime("%Y-%m") for idx in range(5, -1, -1)]
     trends = [{"month": key, "orders": monthly_counter.get(key, 0)} for key in six_months]
-    common_tests = [{"test_name": name, "count": count} for name, count in test_counter.most_common(10)]
-    return {"common_tests": common_tests, "demographics": demographics, "trends": trends}
+    common_menu_items = [{"test_name": name, "count": count} for name, count in test_counter.most_common(10)]
+    return {"common_menu_items": common_menu_items, "demographics": demographics, "trends": trends}
 
 
 @doctor_route
@@ -942,14 +942,14 @@ def referral_tracker(
     current_user: User = Depends(_doctor),
 ):
     doctor = _get_doctor(current_user, db)
-    logs = db.query(DoctorReferralLog).filter(DoctorReferralLog.doctor_id == doctor.id).all()
+    logs = db.query(StaffReferralLog).filter(StaffReferralLog.doctor_id == doctor.id).all()
     total_referrals = len(logs)
-    active_patients = len({log.patient_id for log in logs})
+    active_customers = len({log.patient_id for log in logs})
     commission_earned = round(sum(log.commission_amount or 0 for log in logs if log.status == "Paid"), 2)
     commission_pending = round(sum(log.commission_amount or 0 for log in logs if log.status != "Paid"), 2)
     return {
         "total_referrals": total_referrals,
-        "active_patients": active_patients,
+        "active_customers": active_customers,
         "commission_earned": commission_earned,
         "commission_pending": commission_pending,
     }
@@ -962,10 +962,10 @@ def commission_statement(
     current_user: User = Depends(_doctor),
 ):
     doctor = _get_doctor(current_user, db)
-    logs = db.query(DoctorReferralLog).filter(DoctorReferralLog.doctor_id == doctor.id).order_by(DoctorReferralLog.created_at.desc()).all()
+    logs = db.query(StaffReferralLog).filter(StaffReferralLog.doctor_id == doctor.id).order_by(StaffReferralLog.created_at.desc()).all()
     rows = []
     for log in logs:
-        patient = db.query(Patient).filter(Patient.id == log.patient_id).first()
+        patient = db.query(Customer).filter(Customer.id == log.patient_id).first()
         rows.append({
             "id": log.id,
             "order_id": log.order_id,
@@ -993,7 +993,7 @@ def doctor_wallet(
     current_user: User = Depends(_doctor),
 ):
     doctor = _get_doctor(current_user, db)
-    logs = db.query(DoctorReferralLog).filter(DoctorReferralLog.doctor_id == doctor.id).all()
+    logs = db.query(StaffReferralLog).filter(StaffReferralLog.doctor_id == doctor.id).all()
     total_referrals = len(logs)
     commission_paid = round(sum(log.commission_amount or 0 for log in logs if log.status == "Paid"), 2)
     commission_pending = round(sum(log.commission_amount or 0 for log in logs if log.status != "Paid"), 2)
@@ -1033,7 +1033,7 @@ def cme_courses(
         seed_rows = [
             CMECourse(
                 title="CME: Diabetes in Primary Care",
-                description="Evidence-based screening and management update for outpatient doctors.",
+                description="Evidence-based screening and management update for outpatient staff.",
                 duration="60 min",
                 link="https://example.org/cme/diabetes-primary-care",
                 is_active=True,
@@ -1076,23 +1076,23 @@ def ai_symptom_checker(
 ):
     _get_doctor(current_user, db)
     matched_conditions = []
-    recommended_tests = []
+    recommended_menu_items = []
     normalized = [item.strip().lower() for item in payload.symptoms if item.strip()]
     for symptom in normalized:
         for key, mapping in SYMPTOM_AI_MAP.items():
             if key in symptom:
                 matched_conditions.extend(mapping["conditions"])
-                recommended_tests.extend(mapping["tests"])
+                recommended_menu_items.extend(mapping["menu_items"])
     if not matched_conditions:
         matched_conditions = ["Non-specific presentation", "Needs focused clinical correlation"]
-        recommended_tests = ["CBC", "CRP", "LFT", "RFT"]
+        recommended_menu_items = ["CBC", "CRP", "LFT", "RFT"]
     # Preserve order while removing duplicates.
     uniq_conditions = list(dict.fromkeys(matched_conditions))
-    uniq_tests = list(dict.fromkeys(recommended_tests))
+    uniq_menu_items = list(dict.fromkeys(recommended_menu_items))
     return {
         "symptoms": payload.symptoms,
         "possible_conditions": uniq_conditions,
-        "recommended_tests": uniq_tests,
+        "recommended_menu_items": uniq_menu_items,
         "disclaimer": "AI mock output for triage support only. Confirm with clinical judgement.",
     }
 
@@ -1100,14 +1100,14 @@ def ai_symptom_checker(
 @doctor_route
 @router.post("/ai/report-interpretation")
 def ai_report_interpretation(
-    payload: ReportInterpretationRequest,
+    payload: OrderInterpretationRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(_doctor),
 ):
     _get_doctor(current_user, db)
     result = db.query(LabResult).filter(LabResult.id == payload.report_id).first()
     if not result:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="Order not found")
     interpretation = f"{result.test_name} is reported as {result.result_value} {result.unit or ''}.".strip()
     if result.reference_range:
         interpretation += f" Reference range is {result.reference_range}."
@@ -1126,12 +1126,12 @@ def ai_predictive_alert(
     current_user: User = Depends(_doctor),
 ):
     doctor = _get_doctor(current_user, db)
-    scoped_patients = db.query(Patient).filter(Patient.branch_id.in_(_branch_ids(doctor))).all()
+    scoped_customers = db.query(Customer).filter(Customer.branch_id.in_(_branch_ids(doctor))).all()
     if payload.patient_ids:
-        scoped_patients = [patient for patient in scoped_patients if patient.id in set(payload.patient_ids)]
+        scoped_customers = [patient for patient in scoped_customers if patient.id in set(payload.patient_ids)]
 
     alerts = []
-    for patient in scoped_patients:
+    for patient in scoped_customers:
         results = db.query(LabResult).filter(LabResult.patient_id == patient.id).all()
         has_glucose_risk = any((row.test_name or "").lower().find("glucose") >= 0 and (row.result_value or 0) >= 126 for row in results)
         has_hba1c_risk = any((row.test_name or "").lower().find("hba1c") >= 0 and (row.result_value or 0) >= 6.5 for row in results)
@@ -1167,12 +1167,12 @@ def ai_growth_insights(
 ):
     doctor = _get_doctor(current_user, db)
     _ = payload.include_window_days
-    logs = db.query(DoctorReferralLog).filter(DoctorReferralLog.doctor_id == doctor.id).all()
+    logs = db.query(StaffReferralLog).filter(StaffReferralLog.doctor_id == doctor.id).all()
     patient_ids = sorted({log.patient_id for log in logs})
-    patients = db.query(Patient).filter(Patient.id.in_(patient_ids)).all() if patient_ids else []
+    customers = db.query(Customer).filter(Customer.id.in_(patient_ids)).all() if patient_ids else []
     diabetic_ids = []
     no_hba1c_ids = []
-    for patient in patients:
+    for patient in customers:
         tags = [tag.lower() for tag in (patient.tags or [])]
         results = db.query(LabResult).filter(LabResult.patient_id == patient.id).all()
         has_hba1c = any("hba1c" in (row.test_name or "").lower() for row in results)
@@ -1187,18 +1187,18 @@ def ai_growth_insights(
 
     reminders = []
     if no_hba1c_ids:
-        reminders.append(f"You have {len(no_hba1c_ids)} diabetic patients without an HbA1c record in available data.")
+        reminders.append(f"You have {len(no_hba1c_ids)} diabetic customers without an HbA1c record in available data.")
     if len(patient_ids) >= 20:
         reminders.append("Your referral base is strong. Consider creating preventive health panels for chronic-care follow-up.")
     if not reminders:
-        reminders.append("Continue monthly follow-up outreach for chronic patients to improve retention and outcomes.")
+        reminders.append("Continue monthly follow-up outreach for chronic customers to improve retention and outcomes.")
 
     return {
         "doctor_id": doctor.id,
         "insights": reminders,
         "summary": {
-            "total_referred_patients": len(patient_ids),
-            "diabetic_patients": len(diabetic_ids),
+            "total_referred_customers": len(patient_ids),
+            "diabetic_customers": len(diabetic_ids),
             "diabetic_without_hba1c": len(no_hba1c_ids),
         },
         "disclaimer": "Growth insights are mock AI recommendations for engagement planning.",

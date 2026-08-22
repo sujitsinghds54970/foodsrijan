@@ -270,9 +270,9 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
   const [loading, setLoading] = useState(false)
   const [sorting, setSorting] = useState<SortingState>([])
 
-  const [patientNameFilter, setPatientNameFilter] = useState('')
-  const [referredDoctorFilter, setReferredDoctorFilter] = useState('')
-  const [testNameFilter, setTestNameFilter] = useState('')
+  const [patientNameFilter, setCustomerNameFilter] = useState('')
+  const [referredStaffFilter, setReferredStaffFilter] = useState('')
+  const [testNameFilter, setMenuItemNameFilter] = useState('')
   const [startDate, setStartDate] = useState<Date | null>(null)
   const [endDate, setEndDate] = useState<Date | null>(null)
 
@@ -319,7 +319,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
 
   const filtersRef = useRef({
     patientNameFilter: '',
-    referredDoctorFilter: '',
+    referredStaffFilter: '',
     testNameFilter: '',
     startDate: null as Date | null,
     endDate: null as Date | null,
@@ -475,12 +475,12 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
   useEffect(() => {
     filtersRef.current = {
       patientNameFilter,
-      referredDoctorFilter,
+      referredStaffFilter,
       testNameFilter,
       startDate,
       endDate,
     }
-  }, [patientNameFilter, referredDoctorFilter, testNameFilter, startDate, endDate])
+  }, [patientNameFilter, referredStaffFilter, testNameFilter, startDate, endDate])
 
   const fetchEntries = useCallback(async (options?: { background?: boolean; preserveScroll?: boolean }) => {
     if (!token) return
@@ -498,7 +498,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
       const params = new URLSearchParams()
       const activeFilters = filtersRef.current
       if (activeFilters.patientNameFilter) params.append('patient_name', activeFilters.patientNameFilter)
-      if (activeFilters.referredDoctorFilter) params.append('referred_doctor', activeFilters.referredDoctorFilter)
+      if (activeFilters.referredStaffFilter) params.append('referred_doctor', activeFilters.referredStaffFilter)
       if (activeFilters.testNameFilter) params.append('test_name', activeFilters.testNameFilter)
       if (activeFilters.startDate) params.append('start_date', activeFilters.startDate.toISOString().split('T')[0])
       if (activeFilters.endDate) params.append('end_date', activeFilters.endDate.toISOString().split('T')[0])
@@ -594,7 +594,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [patientNameFilter, referredDoctorFilter, testNameFilter, startDate, endDate])
+  }, [patientNameFilter, referredStaffFilter, testNameFilter, startDate, endDate])
 
   useEffect(() => {
     upiAvailabilityRef.current = upiAvailabilityByBranch
@@ -642,35 +642,35 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
   }, [token, entries, API_BASE, requestConfig])
 
   // Autocomplete fetch functions
-  const fetchDoctorOptions = useCallback(async (searchTerm: string) => {
+  const fetchStaffOptions = useCallback(async (searchTerm: string) => {
     if (!token) return []
     try {
-      const res = await axios.get(`${API_BASE}/api/doctors/search?q=${encodeURIComponent(searchTerm)}`, requestConfig)
+      const res = await axios.get(`${API_BASE}/api/staff/search?q=${encodeURIComponent(searchTerm)}`, requestConfig)
       return res.data || []
     } catch (error) {
-      console.error('Error fetching doctors:', error)
+      console.error('Error fetching staff:', error)
       return []
     }
   }, [token, API_BASE, requestConfig])
 
-  const fetchTestOptions = useCallback(async (searchTerm: string) => {
+  const fetchMenuItemOptions = useCallback(async (searchTerm: string) => {
     if (!token) return []
     try {
-      const res = await axios.get(`${API_BASE}/api/tests/search?q=${encodeURIComponent(searchTerm)}`, requestConfig)
+      const res = await axios.get(`${API_BASE}/api/menu_items/search?q=${encodeURIComponent(searchTerm)}`, requestConfig)
       return res.data || []
     } catch (error) {
-      console.error('Error fetching tests:', error)
+      console.error('Error fetching menu_items:', error)
       return []
     }
   }, [token, API_BASE, requestConfig])
 
-  const fetchPatientOptions = useCallback(async (searchTerm: string) => {
+  const fetchCustomerOptions = useCallback(async (searchTerm: string) => {
     if (!token) return []
     try {
-      const res = await axios.get(`${API_BASE}/api/patients/search?q=${encodeURIComponent(searchTerm)}`, requestConfig)
+      const res = await axios.get(`${API_BASE}/api/customers/search?q=${encodeURIComponent(searchTerm)}`, requestConfig)
       return res.data || []
     } catch (error) {
-      console.error('Error fetching patients:', error)
+      console.error('Error fetching customers:', error)
       return []
     }
   }, [token, API_BASE, requestConfig])
@@ -767,11 +767,11 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
       const { data: createdEntry } = await axios.post<DailyEntry>(
         `${API_BASE}/api/daily-entries`,
         {
-          patient_name: 'New Patient',
+          patient_name: 'New Customer',
           age: null,
           mobile: '0000000000',
           address: 'Address',
-          test_name: 'Test Name',
+          test_name: 'MenuItem Name',
           fee_amount: 100,
           tax_percent: 0,
           payment_method: 'Hold',
@@ -870,7 +870,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
           },
         }
       )
-      toast.success('Report uploaded successfully')
+      toast.success('Order uploaded successfully')
       fetchEntries()
       setUploadingEntryId(null)
     } catch (err: any) {
@@ -905,7 +905,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
     }
     const filename = entry.report_pdf_url.replace('/uploads/', '')
     const pdfUrl = `${API_BASE}/api/files/${filename}`
-    const message = `Dear patient, your diagnostic report is ready. Please download it here: ${pdfUrl}`
+    const message = `Your customer order document is ready. Please download it here: ${pdfUrl}`
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank')
   }
 
@@ -916,8 +916,8 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
     }
     const filename = entry.report_pdf_url.replace('/uploads/', '')
     const pdfUrl = `${API_BASE}/api/files/${filename}`
-    const subject = 'Your Diagnostic Report'
-    const body = `Dear patient, your diagnostic report is ready. Please download it here: ${pdfUrl}`
+    const subject = 'Your FoodSrijan Order'
+    const body = `Your customer order document is ready. Please download it here: ${pdfUrl}`
     window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
   }
 
@@ -942,9 +942,9 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
   }
 
   const clearFilters = () => {
-    setPatientNameFilter('')
-    setReferredDoctorFilter('')
-    setTestNameFilter('')
+    setCustomerNameFilter('')
+    setReferredStaffFilter('')
+    setMenuItemNameFilter('')
     setStartDate(null)
     setEndDate(null)
   }
@@ -1075,7 +1075,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
     lines.push('')
 
     if (period === 'monthly') {
-      lines.push(['Sr. No.', 'Patient Name', 'Address', 'Referred Doctor', 'Fee (INR)', 'Date'].join(','))
+      lines.push(['Sr. No.', 'Customer Name', 'Address', 'Referred Staff', 'Fee (INR)', 'Date'].join(','))
       periodEntries.forEach((entry, index) => {
         lines.push([
           index + 1,
@@ -1089,12 +1089,12 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
     } else {
       lines.push([
         'Sr. No.',
-        'Patient ID',
-        'Patient Name',
+        'Customer ID',
+        'Customer Name',
         'Mobile',
         'Address',
-        'Referred Doctor',
-        'Test Name',
+        'Referred Staff',
+        'MenuItem Name',
         'Fee (INR)',
         'Tax %',
         'Total (INR)',
@@ -1152,7 +1152,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
     pdf.rect(0, 0, 210, 45, 'F')
     pdf.setTextColor(255, 255, 255)
     pdf.setFontSize(22)
-    pdf.text('Business Analysis Report', 14, 20)
+    pdf.text('Business Analysis Order', 14, 20)
     pdf.setFontSize(12)
     pdf.text(branchName, 14, 30)
 
@@ -1195,7 +1195,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
     pdf.setFontSize(12)
     pdf.text('Daily Entries Table', 14, 14)
 
-    const headers = ['#', 'Patient', 'Test', 'Fee', 'Tax%', 'Total', 'Payment', 'Date']
+    const headers = ['#', 'Customer', 'MenuItem', 'Fee', 'Tax%', 'Total', 'Payment', 'Date']
     const colX = [14, 24, 62, 100, 120, 136, 154, 176]
     const lineHeight = 7
     let y = 22
@@ -1275,20 +1275,20 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
       cell: info => <span className="font-bold text-slate-600">{(currentPage - 1) * pageSize + info.row.index + 1}</span>,
     }),
     columnHelper.accessor('auto_patient_id', {
-      header: 'Patient ID',
+      header: 'Customer ID',
       size: 135,
       minSize: 135,
       cell: info => <span className="font-mono text-xs">{String(info.getValue() || '')}</span>,
     }),
     columnHelper.accessor('patient_name', {
-      header: 'Patient Name',
+      header: 'Customer Name',
       size: 130,
       minSize: 130,
       cell: info => (
         <AutocompleteCell
           value={String(info.getValue() || '')}
           onChange={value => updateEntryField(info.row.original.id, 'patient_name', value)}
-          fetchOptions={fetchPatientOptions}
+          fetchOptions={fetchCustomerOptions}
           placeholder="Search patient..."
         />
       ),
@@ -1332,7 +1332,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
                       }}
                       className="w-full px-3 py-2 text-left text-xs hover:bg-slate-100"
                     >
-                      View Report
+                      View Order
                     </button>
                   </li>
                   <li>
@@ -1433,27 +1433,27 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
       ),
     }),
     columnHelper.accessor('referred_doctor', {
-      header: 'Doctor',
+      header: 'Staff',
       size: 100,
       minSize: 100,
       cell: info => (
         <AutocompleteCell
           value={String(info.getValue() || '')}
           onChange={value => updateEntryField(info.row.original.id, 'referred_doctor', value)}
-          fetchOptions={fetchDoctorOptions}
+          fetchOptions={fetchStaffOptions}
           placeholder="Search doctor..."
         />
       ),
     }),
     columnHelper.accessor('test_name', {
-      header: 'Test Name',
+      header: 'MenuItem Name',
       size: 100,
       minSize: 100,
       cell: info => (
         <AutocompleteCell
           value={String(info.getValue() || '')}
           onChange={value => updateEntryField(info.row.original.id, 'test_name', value)}
-          fetchOptions={fetchTestOptions}
+          fetchOptions={fetchMenuItemOptions}
           placeholder="Search test..."
         />
       ),
@@ -1552,9 +1552,9 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
     hasValidUPI,
     openBillModal,
     openActionsMenuId,
-    fetchDoctorOptions,
-    fetchPatientOptions,
-    fetchTestOptions,
+    fetchStaffOptions,
+    fetchCustomerOptions,
+    fetchMenuItemOptions,
   ])
 
   const totalPages = Math.max(1, Math.ceil(entries.length / pageSize))
@@ -1652,7 +1652,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
             <p className="text-3xl font-black text-blue-700">INR {parseNumber(stats.net_profit).toLocaleString()}</p>
           </div>
           <div className="premium-card p-6 bg-gradient-to-br from-violet-50 to-fuchsia-50">
-            <p className="text-xs uppercase tracking-wider text-violet-600 font-bold mb-2">Patient Count</p>
+            <p className="text-xs uppercase tracking-wider text-violet-600 font-bold mb-2">Customer Count</p>
             <p className="text-3xl font-black text-violet-700">{stats.patient_count}</p>
           </div>
         </div>
@@ -1663,23 +1663,23 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <input
             type="text"
-            placeholder="Patient Name"
+            placeholder="Customer Name"
             value={patientNameFilter}
-            onChange={e => setPatientNameFilter(e.target.value)}
+            onChange={e => setCustomerNameFilter(e.target.value)}
             className="px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 focus:outline-none"
           />
           <input
             type="text"
-            placeholder="Referred Doctor"
-            value={referredDoctorFilter}
-            onChange={e => setReferredDoctorFilter(e.target.value)}
+            placeholder="Referred Staff"
+            value={referredStaffFilter}
+            onChange={e => setReferredStaffFilter(e.target.value)}
             className="px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 focus:outline-none"
           />
           <input
             type="text"
-            placeholder="Test Name"
+            placeholder="MenuItem Name"
             value={testNameFilter}
-            onChange={e => setTestNameFilter(e.target.value)}
+            onChange={e => setMenuItemNameFilter(e.target.value)}
             className="px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 focus:outline-none"
           />
           <DatePicker
@@ -1908,9 +1908,9 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
           <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
             <h3 className="text-2xl font-black text-red-600 mb-4">Confirm Deletion</h3>
             <div className="bg-slate-100 p-4 rounded-xl mb-6">
-              <p className="text-sm"><strong>Patient:</strong> {deleteConfirmEntry.patient_name}</p>
+              <p className="text-sm"><strong>Customer:</strong> {deleteConfirmEntry.patient_name}</p>
               <p className="text-sm"><strong>ID:</strong> {deleteConfirmEntry.auto_patient_id}</p>
-              <p className="text-sm"><strong>Test:</strong> {deleteConfirmEntry.test_name}</p>
+              <p className="text-sm"><strong>MenuItem:</strong> {deleteConfirmEntry.test_name}</p>
             </div>
             <div className="flex gap-3">
               <button
@@ -1943,9 +1943,9 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
               />
             </div>
             <div className="bg-indigo-50 p-4 rounded-xl mb-4 text-sm">
-              <p><strong>Patient:</strong> {upiQREntry.patient_name}</p>
+              <p><strong>Customer:</strong> {upiQREntry.patient_name}</p>
               <p><strong>Amount:</strong> INR {calculateTotal(upiQREntry).toFixed(2)}</p>
-              <p><strong>Test:</strong> {upiQREntry.test_name}</p>
+              <p><strong>MenuItem:</strong> {upiQREntry.test_name}</p>
               <p><strong>Branch:</strong> {branchBankDetails.branch_name || '-'}</p>
               <p><strong>UPI ID:</strong> {branchBankDetails.upi_id}</p>
             </div>
@@ -1967,7 +1967,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl p-6 max-w-4xl w-full h-[90vh] shadow-2xl flex flex-col">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-2xl font-black text-slate-900">View Report</h3>
+              <h3 className="text-2xl font-black text-slate-900">View Order</h3>
               <button onClick={() => setPdfViewerEntry(null)} className="px-4 py-2 rounded-xl bg-slate-200">Close</button>
             </div>
             <div className="flex-1 mb-4 border rounded-xl overflow-hidden">
@@ -2001,10 +2001,10 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
       {pdfShareEntry && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
-            <h3 className="text-2xl font-black text-cyan-600 mb-4">Share Report</h3>
+            <h3 className="text-2xl font-black text-cyan-600 mb-4">Share Order</h3>
             <div className="bg-cyan-50 p-4 rounded-xl mb-6 text-sm">
-              <p><strong>Patient:</strong> {pdfShareEntry.patient_name}</p>
-              <p><strong>Test:</strong> {pdfShareEntry.test_name}</p>
+              <p><strong>Customer:</strong> {pdfShareEntry.patient_name}</p>
+              <p><strong>MenuItem:</strong> {pdfShareEntry.test_name}</p>
               <p><strong>Mobile:</strong> {pdfShareEntry.mobile}</p>
             </div>
             <div className="space-y-3">
@@ -2152,7 +2152,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
                 <div className="border-b border-slate-200 pb-4">
                   <div className="flex justify-between items-start w-full mb-6">
                     <div className="text-left min-w-0">
-                      <p className="text-lg font-bold tracking-tight text-slate-900">{invoiceBranch?.name || 'Diagnostic Center'}</p>
+                      <p className="text-lg font-bold tracking-tight text-slate-900">{invoiceBranch?.name || 'FoodSrijan Group'}</p>
                       <p className="mt-2 text-xs leading-5 text-slate-600 whitespace-pre-line">{invoiceBranch?.address || 'Address not available'}</p>
                       <p className="text-xs leading-5 text-slate-600">Contact: {invoiceBranch?.phone || 'Phone not available'}</p>
                       <p className="text-xs leading-5 text-slate-600">Email: {invoiceBranch?.email || 'Email not available'}</p>
@@ -2174,10 +2174,10 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
                   {/* Left Column: Bill To */}
                   <div className="text-left space-y-1">
                     <h3 className="font-bold text-gray-800 text-lg">Bill To</h3>
-                    <p><strong>Patient Name:</strong> {billEntry.patient_name}</p>
+                    <p><strong>Customer Name:</strong> {billEntry.patient_name}</p>
                     <p><strong>Mobile:</strong> {billEntry.mobile || '-'}</p>
                     <p><strong>Address:</strong> {billEntry.address || '-'}</p>
-                    <p><strong>Patient ID:</strong> {billEntry.auto_patient_id}</p>
+                    <p><strong>Customer ID:</strong> {billEntry.auto_patient_id}</p>
                   </div>
                   {/* Right Column: Invoice Details */}
                   <div className="text-right space-y-1">
@@ -2205,7 +2205,7 @@ export default function DailyOperations({ branchId }: DailyOperationsProps) {
                       <td className="border p-2 text-center">1</td>
                       <td className="border p-2">
                         <strong>{billEntry.test_name}</strong><br />
-                        <span className="text-xs text-gray-500">Referring Doctor: {billEntry.referred_doctor || 'Self'}</span>
+                        <span className="text-xs text-gray-500">Referring Staff: {billEntry.referred_doctor || 'Self'}</span>
                       </td>
                       <td className="border p-2 text-center">1</td>
                       <td className="border p-2 text-right">INR {invoiceSubtotal.toFixed(2)}</td>

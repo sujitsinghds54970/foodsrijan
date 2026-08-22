@@ -1,4 +1,4 @@
-export interface Patient {
+export interface Customer {
   id: number;
   first_name: string;
   last_name: string;
@@ -7,7 +7,7 @@ export interface Patient {
   address?: string;
 }
 
-export interface Doctor {
+export interface Staff {
   id: number;
   first_name: string;
   last_name: string;
@@ -30,15 +30,15 @@ export interface DailyEntryRow {
   notes: string;
   payment_status: 'paid' | 'pending' | 'partial';
   branch_id: number;
-  history_count?: number; // Patient visit history
+  history_count?: number; // Customer visit history
 }
 
 export interface GridApiResponse {
   entries: DailyEntryRow[];
-  patients: Patient[];
-  doctors: Doctor[];
+  customers: Customer[];
+  staff: Staff[];
   summary: {
-    total_patients: number;
+    total_customers: number;
     total_revenue: number;
     pending_amount: number;
   };

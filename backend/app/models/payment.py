@@ -51,7 +51,7 @@ class Invoice(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     invoice_number = Column(String, unique=True, nullable=False, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     
     # Invoice details
@@ -81,7 +81,7 @@ class Invoice(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    patient = relationship("Patient", back_populates="invoices")
+    patient = relationship("Customer", back_populates="invoices")
     branch = relationship("Branch")
     payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan")
     items = relationship("InvoiceItem", back_populates="invoice", cascade="all, delete-orphan")
@@ -121,7 +121,7 @@ class Payment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     
     # Payment details
@@ -172,7 +172,7 @@ class Payment(Base):
     
     # Relationships
     invoice = relationship("Invoice", back_populates="payments")
-    patient = relationship("Patient")
+    patient = relationship("Customer")
     branch = relationship("Branch")
 
 
@@ -243,7 +243,7 @@ class PaymentSettings(Base):
 
 
 class PaymentLink(Base):
-    """Payment link for sharing with patients"""
+    """Payment link for sharing with customers"""
     __tablename__ = "payment_links"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -281,7 +281,7 @@ class InsuranceClaim(Base):
     __tablename__ = "insurance_claims"
 
     id = Column(Integer, primary_key=True, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
     
     # Insurance details
@@ -312,7 +312,7 @@ class InsuranceClaim(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    patient = relationship("Patient")
+    patient = relationship("Customer")
     invoice = relationship("Invoice")
 
 
@@ -341,7 +341,7 @@ class PaymentReminder(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
     reminder_type = Column(String, default="due_24h")
     channel = Column(String, nullable=False)
@@ -352,5 +352,5 @@ class PaymentReminder(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     branch = relationship("Branch")
-    patient = relationship("Patient")
+    patient = relationship("Customer")
     invoice = relationship("Invoice")

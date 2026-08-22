@@ -4,9 +4,9 @@ import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import DailyEntryGridToolbar from './DailyEntryGridToolbar';
-import AddPatientModal from './AddPatientModal';
+import AddCustomerModal from './AddPatientModal';
 import { dailyEntryService } from '../../services/dailyEntryService';
-import { DailyEntryRow, GridApiResponse, Patient } from '../../types/daily-entry';
+import { DailyEntryRow, GridApiResponse, Customer } from '../../types/daily-entry';
 import { toast } from 'react-hot-toast';
 import { Card, CardContent, Typography, Chip, Box } from '@mui/material';
 import { TrendingUp, People, AttachMoney } from '@mui/icons-material';
@@ -19,7 +19,7 @@ const DailyEntry: React.FC = () => {
   const [selectedRows, setSelectedRows] = useState<DailyEntryRow[]>([]);
   const [fontSize, setFontSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [summary, setSummary] = useState({
-    total_patients: 0,
+    total_customers: 0,
     total_revenue: 0,
     pending_amount: 0,
   });
@@ -28,7 +28,7 @@ const DailyEntry: React.FC = () => {
   // Column definitions for AG-Grid (Excel-like)
   const columnDefs = useMemo(() => [
     {
-      headerName: 'Patient',
+      headerName: 'Customer',
       field: 'patient_name',
       editable: true,
       filter: 'agTextColumnFilter',
@@ -45,7 +45,7 @@ const DailyEntry: React.FC = () => {
       width: 130,
     },
     {
-      headerName: 'Doctor',
+      headerName: 'Staff',
       field: 'doctor_name',
       editable: true,
       filter: 'agTextColumnFilter',
@@ -70,7 +70,7 @@ const DailyEntry: React.FC = () => {
       width: 120,
     },
     {
-      headerName: 'Test Fee',
+      headerName: 'MenuItem Fee',
       field: 'test_fee',
       editable: true,
       filter: 'agNumberColumnFilter',
@@ -94,7 +94,7 @@ const DailyEntry: React.FC = () => {
       pinned: 'right' as const,
     },
     {
-      headerName: 'Test Type',
+      headerName: 'MenuItem Type',
       field: 'test_type',
       editable: true,
       filter: 'agTextColumnFilter',
@@ -226,19 +226,19 @@ const handleSave = useCallback(async () => {
     toast('Import not implemented yet');
   }, []);
 
-  const [addPatientOpen, setAddPatientOpen] = useState(false);
+  const [addCustomerOpen, setAddCustomerOpen] = useState(false);
 
-  const handleAddPatient = useCallback(() => {
-    setAddPatientOpen(true);
+  const handleAddCustomer = useCallback(() => {
+    setAddCustomerOpen(true);
   }, []);
 
-  const handlePatientAdded = useCallback((newPatient: Patient) => {
-    toast.success(`Added ${newPatient.first_name} ${newPatient.last_name}`);
+  const handleCustomerAdded = useCallback((newCustomer: Customer) => {
+    toast.success(`Added ${newCustomer.first_name} ${newCustomer.last_name}`);
     loadGridData();
   }, [loadGridData]);
 
-  const handlePatientClose = useCallback(() => {
-    setAddPatientOpen(false);
+  const handleCustomerClose = useCallback(() => {
+    setAddCustomerOpen(false);
   }, []);
 
   if (loading) {
@@ -264,8 +264,8 @@ const handleSave = useCallback(async () => {
         <Card>
           <CardContent className="text-center">
             <People color="primary" sx={{ fontSize: 48, mb: 1 }} />
-            <Typography variant="h4">{summary.total_patients}</Typography>
-            <Typography variant="body2" color="text.secondary">Patients</Typography>
+            <Typography variant="h4">{summary.total_customers}</Typography>
+            <Typography variant="body2" color="text.secondary">Customers</Typography>
           </CardContent>
         </Card>
         <Card>
@@ -289,7 +289,7 @@ const handleSave = useCallback(async () => {
         onSave={handleSave}
         onExportExcel={handleExportExcel}
         onImportExcel={handleImportExcel}
-        onAddPatient={handleAddPatient}
+        onAddCustomer={handleAddCustomer}
         onGenerateInvoice={handleGenerateInvoice}
         onFilter={() => {}} // TBD
         fontSize={fontSize}

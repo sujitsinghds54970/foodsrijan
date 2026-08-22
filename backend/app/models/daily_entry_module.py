@@ -30,19 +30,19 @@ class DailyEntryModule(Base):
     auto_patient_id = Column(String(50), unique=True, nullable=False, index=True)  # PAT-YYYYMMDD-XXX
     auto_entry_datetime = Column(DateTime, default=func.now(), nullable=False)
     
-    # Patient Information
+    # Customer Information
     patient_name = Column(String(200), nullable=False, index=True)
     age = Column(String(20), nullable=True)
     mobile = Column(String(15), nullable=False)
     address = Column(Text, nullable=False)
     
-    # Doctor Information
+    # Staff Information
     referred_doctor = Column(String(200), nullable=True, index=True)
     
-    # Test Information
+    # MenuItem Information
     test_name = Column(String(500), nullable=False, index=True)
     
-    # Report Management
+    # Order Management
     report_pdf_url = Column(String(500), nullable=True)
     status = Column(String(20), default="Pending")  # Pending, Completed
     

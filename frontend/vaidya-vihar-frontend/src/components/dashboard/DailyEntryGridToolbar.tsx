@@ -6,7 +6,7 @@ interface ToolbarProps {
   onSave: () => void;
   onExportExcel: () => void;
   onImportExcel: (file: File) => void;
-  onAddPatient: () => void;
+  onAddCustomer: () => void;
   onGenerateInvoice: () => void;
   onFilter: (filter: string) => void;
   fontSize: string;
@@ -18,7 +18,7 @@ const DailyEntryGridToolbar: React.FC<ToolbarProps> = ({
   onSave,
   onExportExcel,
   onImportExcel,
-  onAddPatient,
+  onAddCustomer,
   onGenerateInvoice,
   onFilter,
   fontSize,
@@ -33,13 +33,13 @@ const DailyEntryGridToolbar: React.FC<ToolbarProps> = ({
             Save All
           </Button>
         </Tooltip>
-        <Tooltip title="Add New Patient">
-          <Button variant="outlined" startIcon={<Add />} onClick={onAddPatient}>
-            New Patient
+        <Tooltip title="Add New Customer">
+          <Button variant="outlined" startIcon={<Add />} onClick={onAddCustomer}>
+            New Customer
           </Button>
         </Tooltip>
         {selectedRowsCount > 0 && (
-          <Tooltip title={`Generate invoice for ${selectedRowsCount} patients`}>
+          <Tooltip title={`Generate invoice for ${selectedRowsCount} customers`}>
             <Button variant="contained" color="primary" startIcon={<Receipt />} onClick={onGenerateInvoice}>
               Generate Bills ({selectedRowsCount})
             </Button>

@@ -1,10 +1,10 @@
 """
-Doctor Portal Routes for VaidyaVihar Diagnostic ERP
+Staff Portal Routes for VaidyaVihar Diagnostic ERP
 
-Doctor self-service endpoints:
-- Doctor dashboard
-- View assigned patients
-- View patient reports
+Staff self-service endpoints:
+- Staff dashboard
+- View assigned customers
+- View patient orders
 - Prescription management
 - Schedule management
 """
@@ -16,7 +16,7 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 
 from app.database import get_db
-from app.models.patient_portal import PatientAppointment, PatientPrescription, PrescriptionMedication
+from app.models.patient_portal import CustomerAppointment, CustomerPrescription, PrescriptionMedication
 
 router = APIRouter()
 
@@ -37,7 +37,7 @@ class AppointmentUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-# Doctor Dashboard
+# Staff Dashboard
 @router.get("/dashboard/{doctor_id}")
 async def get_doctor_dashboard(doctor_id: int, db: Session = Depends(get_db)):
     """Get doctor dashboard data"""
@@ -46,26 +46,26 @@ async def get_doctor_dashboard(doctor_id: int, db: Session = Depends(get_db)):
     end_of_day = datetime.combine(today, datetime.max.time())
     
     # Today's appointments
-    today_appointments = db.query(PatientAppointment).filter(
-        PatientAppointment.doctor_id == doctor_id,
-        PatientAppointment.appointment_date.between(start_of_day, end_of_day)
+    today_appointments = db.query(CustomerAppointment).filter(
+        CustomerAppointment.doctor_id == doctor_id,
+        CustomerAppointment.appointment_date.between(start_of_day, end_of_day)
     ).all()
     
     # Upcoming appointments
-    upcoming = db.query(PatientAppointment).filter(
-        PatientAppointment.doctor_id == doctor_id,
-        PatientAppointment.appointment_date > end_of_day,
-        PatientAppointment.status.in_(["pending", "confirmed"])
-    ).order_by(PatientAppointment.appointment_date).limit(10).all()
+    upcoming = db.query(CustomerAppointment).filter(
+        CustomerAppointment.doctor_id == doctor_id,
+        CustomerAppointment.appointment_date > end_of_day,
+        CustomerAppointment.status.in_(["pending", "confirmed"])
+    ).order_by(CustomerAppointment.appointment_date).limit(10).all()
     
-    # Total patients this month
+    # Total customers this month
     month_start = today.replace(day=1)
     month_start_dt = datetime.combine(month_start, datetime.min.time())
     
-    monthly_patients = db.query(PatientAppointment).filter(
-        PatientAppointment.doctor_id == doctor_id,
-        PatientAppointment.appointment_date >= month_start_dt,
-        PatientAppointment.status == "completed"
+    monthly_customers = db.query(CustomerAppointment).filter(
+        CustomerAppointment.doctor_id == doctor_id,
+        CustomerAppointment.appointment_date >= month_start_dt,
+        CustomerAppointment.status == "completed"
     ).count()
     
     return {
@@ -74,7 +74,7 @@ async def get_doctor_dashboard(doctor_id: int, db: Session = Depends(get_db)):
             "today_appointments": len(today_appointments),
             "completed_today": sum(1 for apt in today_appointments if apt.status == "completed"),
             "upcoming_count": len(upcoming),
-            "monthly_patients": monthly_patients,
+            "monthly_customers": monthly_customers,
             "today_appointments_list": [
                 {
                     "id": apt.id,
@@ -111,21 +111,21 @@ async def list_doctor_appointments(
     db: Session = Depends(get_db)
 ):
     """List doctor's appointments"""
-    query = db.query(PatientAppointment).filter(
-        PatientAppointment.doctor_id == doctor_id
+    query = db.query(CustomerAppointment).filter(
+        CustomerAppointment.doctor_id == doctor_id
     )
     
     if date:
         date_obj = datetime.strptime(date, "%Y-%m-%d")
         start = datetime.combine(date_obj.date(), datetime.min.time())
         end = datetime.combine(date_obj.date(), datetime.max.time())
-        query = query.filter(PatientAppointment.appointment_date.between(start, end))
+        query = query.filter(CustomerAppointment.appointment_date.between(start, end))
     
     if status:
-        query = query.filter(PatientAppointment.status == status)
+        query = query.filter(CustomerAppointment.status == status)
     
     appointments = query.order_by(
-        PatientAppointment.appointment_date.asc()
+        CustomerAppointment.appointment_date.asc()
     ).offset(skip).limit(limit).all()
     
     return {
@@ -154,10 +154,10 @@ async def get_today_appointments(doctor_id: int, db: Session = Depends(get_db)):
     start_of_day = datetime.combine(today, datetime.min.time())
     end_of_day = datetime.combine(today, datetime.max.time())
     
-    appointments = db.query(PatientAppointment).filter(
-        PatientAppointment.doctor_id == doctor_id,
-        PatientAppointment.appointment_date.between(start_of_day, end_of_day)
-    ).order_by(PatientAppointment.appointment_time).all()
+    appointments = db.query(CustomerAppointment).filter(
+        CustomerAppointment.doctor_id == doctor_id,
+        CustomerAppointment.appointment_date.between(start_of_day, end_of_day)
+    ).order_by(CustomerAppointment.appointment_time).all()
     
     return {
         "success": True,
@@ -183,8 +183,8 @@ async def update_appointment(
     db: Session = Depends(get_db)
 ):
     """Update appointment status"""
-    appointment = db.query(PatientAppointment).filter(
-        PatientAppointment.id == appointment_id
+    appointment = db.query(CustomerAppointment).filter(
+        CustomerAppointment.id == appointment_id
     ).first()
     
     if not appointment:
@@ -207,18 +207,18 @@ async def update_appointment(
     }
 
 
-# Patient Records
-@router.get("/patients/{doctor_id}")
-async def list_doctor_patients(
+# Customer Records
+@router.get("/customers/{doctor_id}")
+async def list_doctor_customers(
     doctor_id: int,
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db)
 ):
-    """List all patients for a doctor"""
-    appointments = db.query(PatientAppointment).filter(
-        PatientAppointment.doctor_id == doctor_id
-    ).distinct(PatientAppointment.patient_id).all()
+    """List all customers for a doctor"""
+    appointments = db.query(CustomerAppointment).filter(
+        CustomerAppointment.doctor_id == doctor_id
+    ).distinct(CustomerAppointment.patient_id).all()
     
     # Get unique patient IDs
     patient_ids = list(set(apt.patient_id for apt in appointments))
@@ -226,27 +226,27 @@ async def list_doctor_patients(
     return {
         "success": True,
         "patient_count": len(patient_ids),
-        "message": f"Doctor has {len(patient_ids)} unique patients"
+        "message": f"Staff has {len(patient_ids)} unique customers"
     }
 
 
-@router.get("/patients/{doctor_id}/{patient_id}/history")
+@router.get("/customers/{doctor_id}/{patient_id}/history")
 async def get_patient_history(
     doctor_id: int,
     patient_id: int,
     db: Session = Depends(get_db)
 ):
     """Get patient's visit history with this doctor"""
-    appointments = db.query(PatientAppointment).filter(
-        PatientAppointment.doctor_id == doctor_id,
-        PatientAppointment.patient_id == patient_id
-    ).order_by(PatientAppointment.appointment_date.desc()).all()
+    appointments = db.query(CustomerAppointment).filter(
+        CustomerAppointment.doctor_id == doctor_id,
+        CustomerAppointment.patient_id == patient_id
+    ).order_by(CustomerAppointment.appointment_date.desc()).all()
     
     # Get prescriptions
-    prescriptions = db.query(PatientPrescription).filter(
-        PatientPrescription.doctor_id == doctor_id,
-        PatientPrescription.patient_id == patient_id
-    ).order_by(PatientPrescription.prescription_date.desc()).all()
+    prescriptions = db.query(CustomerPrescription).filter(
+        CustomerPrescription.doctor_id == doctor_id,
+        CustomerPrescription.patient_id == patient_id
+    ).order_by(CustomerPrescription.prescription_date.desc()).all()
     
     return {
         "success": True,
@@ -278,7 +278,7 @@ async def get_patient_history(
 @router.post("/prescriptions")
 async def create_prescription(rx_data: PrescriptionCreate, db: Session = Depends(get_db)):
     """Create a new prescription"""
-    prescription = PatientPrescription(
+    prescription = CustomerPrescription(
         patient_id=rx_data.patient_id,
         appointment_id=rx_data.appointment_id,
         doctor_id=rx_data.doctor_id,
@@ -327,15 +327,15 @@ async def list_prescriptions(
     db: Session = Depends(get_db)
 ):
     """List doctor's prescriptions"""
-    query = db.query(PatientPrescription).filter(
-        PatientPrescription.doctor_id == doctor_id
+    query = db.query(CustomerPrescription).filter(
+        CustomerPrescription.doctor_id == doctor_id
     )
     
     if patient_id:
-        query = query.filter(PatientPrescription.patient_id == patient_id)
+        query = query.filter(CustomerPrescription.patient_id == patient_id)
     
     prescriptions = query.order_by(
-        PatientPrescription.prescription_date.desc()
+        CustomerPrescription.prescription_date.desc()
     ).offset(skip).limit(limit).all()
     
     result = []
@@ -367,9 +367,9 @@ async def list_prescriptions(
 @router.get("/prescriptions/{doctor_id}/{prescription_id}")
 async def get_prescription(doctor_id: int, prescription_id: int, db: Session = Depends(get_db)):
     """Get prescription details"""
-    prescription = db.query(PatientPrescription).filter(
-        PatientPrescription.id == prescription_id,
-        PatientPrescription.doctor_id == doctor_id
+    prescription = db.query(CustomerPrescription).filter(
+        CustomerPrescription.id == prescription_id,
+        CustomerPrescription.doctor_id == doctor_id
     ).first()
     
     if not prescription:
@@ -404,22 +404,22 @@ async def get_prescription(doctor_id: int, prescription_id: int, db: Session = D
     }
 
 
-# Reports Access
-@router.get("/reports/{doctor_id}")
-async def list_doctor_reports(
+# Orders Access
+@router.get("/orders/{doctor_id}")
+async def list_doctor_orders(
     doctor_id: int,
     patient_id: Optional[int] = None,
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db)
 ):
-    """List reports for doctor's patients"""
+    """List orders for doctor's customers"""
     # This would integrate with the LIS system
     # For now, return placeholder
     return {
         "success": True,
-        "reports": [],
-        "message": "Reports integration with LIS pending"
+        "orders": [],
+        "message": "Orders integration with LIS pending"
     }
 
 
@@ -446,9 +446,9 @@ async def get_doctor_statistics(
         start = datetime.combine(today - timedelta(days=30), datetime.min.time())
         end = datetime.combine(today, datetime.max.time())
     
-    appointments = db.query(PatientAppointment).filter(
-        PatientAppointment.doctor_id == doctor_id,
-        PatientAppointment.appointment_date.between(start, end)
+    appointments = db.query(CustomerAppointment).filter(
+        CustomerAppointment.doctor_id == doctor_id,
+        CustomerAppointment.appointment_date.between(start, end)
     ).all()
     
     completed = sum(1 for apt in appointments if apt.status == "completed")

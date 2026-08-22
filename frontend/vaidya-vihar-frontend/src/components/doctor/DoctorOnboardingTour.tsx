@@ -6,7 +6,7 @@ type Props = {
   onFinish: () => void
 }
 
-export default function DoctorOnboardingTour({ run, steps, onFinish }: Props) {
+export default function StaffOnboardingTour({ run, steps, onFinish }: Props) {
   const handleCallback = (data: CallBackProps) => {
     const { status } = data
     if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {

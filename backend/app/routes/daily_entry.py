@@ -205,7 +205,7 @@ async def get_daily_summary(
     # Get summary statistics
     summary = db.execute("""
     SELECT 
-        COUNT(*) as total_patients,
+        COUNT(*) as total_customers,
         SUM(consultation_fee) as total_consultation_fee,
         SUM(test_fee) as total_test_fee,
         SUM(total_amount) as total_revenue,
@@ -223,7 +223,7 @@ async def get_daily_summary(
     return {
         "date": date,
         "branch_id": branch_id,
-        "total_patients": summary.total_patients or 0,
+        "total_customers": summary.total_customers or 0,
         "total_revenue": float(summary.total_revenue or 0),
         "pending_amount": float(pending),
     }
@@ -249,7 +249,7 @@ async def get_grid_data(
             u.first_name || ' ' || u.last_name as doctor_name,
             (SELECT COUNT(*) FROM daily_entries de2 WHERE de2.patient_id = de.patient_id AND de2.branch_id = de.branch_id) as history_count
         FROM daily_entries de
-        JOIN patients p ON de.patient_id = p.id
+        JOIN customers p ON de.patient_id = p.id
         LEFT JOIN users u ON de.doctor_id = u.id
         WHERE de.visit_date = ? AND de.branch_id = ?
         ORDER BY de.created_at DESC

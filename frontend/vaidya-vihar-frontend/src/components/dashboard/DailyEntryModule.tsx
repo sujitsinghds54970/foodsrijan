@@ -62,9 +62,9 @@ export default function DailyEntryModule() {
   const [, setGridApi] = useState<GridApi | null>(null)
   
   // Filters
-  const [patientNameFilter, setPatientNameFilter] = useState('')
-  const [referredDoctorFilter, setReferredDoctorFilter] = useState('')
-  const [testNameFilter, setTestNameFilter] = useState('')
+  const [patientNameFilter, setCustomerNameFilter] = useState('')
+  const [referredStaffFilter, setReferredStaffFilter] = useState('')
+  const [testNameFilter, setMenuItemNameFilter] = useState('')
   const [startDate, setStartDate] = useState<Date | null>(null)
   const [endDate, setEndDate] = useState<Date | null>(null)
   
@@ -98,7 +98,7 @@ export default function DailyEntryModule() {
     try {
       const params = new URLSearchParams()
       if (patientNameFilter) params.append('patient_name', patientNameFilter)
-      if (referredDoctorFilter) params.append('referred_doctor', referredDoctorFilter)
+      if (referredStaffFilter) params.append('referred_doctor', referredStaffFilter)
       if (testNameFilter) params.append('test_name', testNameFilter)
       if (startDate) params.append('start_date', startDate.toISOString().split('T')[0])
       if (endDate) params.append('end_date', endDate.toISOString().split('T')[0])
@@ -110,7 +110,7 @@ export default function DailyEntryModule() {
     } finally {
       setLoading(false)
     }
-  }, [token, patientNameFilter, referredDoctorFilter, testNameFilter, startDate, endDate, API_BASE, requestConfig])
+  }, [token, patientNameFilter, referredStaffFilter, testNameFilter, startDate, endDate, API_BASE, requestConfig])
 
   // Fetch expenses
   const fetchExpenses = useCallback(async () => {
@@ -175,10 +175,10 @@ export default function DailyEntryModule() {
       await axios.post(
         `${API_BASE}/api/daily-entries`,
         {
-          patient_name: 'New Patient',
+          patient_name: 'New Customer',
           mobile: '0000000000',
           address: 'Address',
-          test_name: 'Test Name',
+          test_name: 'MenuItem Name',
           fee_amount: 100,
           tax_percent: 0,
           payment_method: 'Cash',
@@ -223,7 +223,7 @@ export default function DailyEntryModule() {
           }
         }
       )
-      toast.success('Report uploaded successfully')
+      toast.success('Order uploaded successfully')
       fetchEntries()
       setUploadingEntryId(null)
     } catch (err: any) {
@@ -304,12 +304,12 @@ export default function DailyEntryModule() {
 
   // Column definitions
   const columnDefs: ColDef[] = [
-    { field: 'auto_patient_id', headerName: 'Patient ID', width: 150, editable: false },
-    { field: 'patient_name', headerName: 'Patient Name', width: 180, editable: true },
+    { field: 'auto_patient_id', headerName: 'Customer ID', width: 150, editable: false },
+    { field: 'patient_name', headerName: 'Customer Name', width: 180, editable: true },
     { field: 'mobile', headerName: 'Mobile', width: 130, editable: true },
     { field: 'address', headerName: 'Address', width: 200, editable: true },
-    { field: 'referred_doctor', headerName: 'Referred Doctor', width: 160, editable: true },
-    { field: 'test_name', headerName: 'Test Name', width: 200, editable: true },
+    { field: 'referred_doctor', headerName: 'Referred Staff', width: 160, editable: true },
+    { field: 'test_name', headerName: 'MenuItem Name', width: 200, editable: true },
     { 
       field: 'fee_amount', 
       headerName: 'Fee (₹)', 
@@ -397,9 +397,9 @@ export default function DailyEntryModule() {
   }
 
   const clearFilters = () => {
-    setPatientNameFilter('')
-    setReferredDoctorFilter('')
-    setTestNameFilter('')
+    setCustomerNameFilter('')
+    setReferredStaffFilter('')
+    setMenuItemNameFilter('')
     setStartDate(null)
     setEndDate(null)
   }
@@ -420,7 +420,7 @@ export default function DailyEntryModule() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-3xl font-black gradient-text">📊 Daily Entry Module</h2>
-            <p className="text-slate-600 mt-2">Manage daily patient entries, expenses, and reports for your branch</p>
+            <p className="text-slate-600 mt-2">Manage daily patient entries, expenses, and orders for your branch</p>
           </div>
           <div className="flex gap-3">
             <button
@@ -455,7 +455,7 @@ export default function DailyEntryModule() {
             <p className="text-3xl font-black text-blue-700">₹{stats.net_profit.toLocaleString()}</p>
           </div>
           <div className="premium-card p-6 bg-gradient-to-br from-purple-50 to-pink-50">
-            <p className="text-xs uppercase tracking-wider text-purple-600 font-bold mb-2">👥 Patient Count</p>
+            <p className="text-xs uppercase tracking-wider text-purple-600 font-bold mb-2">👥 Customer Count</p>
             <p className="text-3xl font-black text-purple-700">{stats.patient_count}</p>
           </div>
         </div>
@@ -467,23 +467,23 @@ export default function DailyEntryModule() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <input
             type="text"
-            placeholder="Patient Name"
+            placeholder="Customer Name"
             value={patientNameFilter}
-            onChange={(e) => setPatientNameFilter(e.target.value)}
+            onChange={(e) => setCustomerNameFilter(e.target.value)}
             className="px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-purple-500 focus:outline-none"
           />
           <input
             type="text"
-            placeholder="Referred Doctor"
-            value={referredDoctorFilter}
-            onChange={(e) => setReferredDoctorFilter(e.target.value)}
+            placeholder="Referred Staff"
+            value={referredStaffFilter}
+            onChange={(e) => setReferredStaffFilter(e.target.value)}
             className="px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-purple-500 focus:outline-none"
           />
           <input
             type="text"
-            placeholder="Test Name"
+            placeholder="MenuItem Name"
             value={testNameFilter}
-            onChange={(e) => setTestNameFilter(e.target.value)}
+            onChange={(e) => setMenuItemNameFilter(e.target.value)}
             className="px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-purple-500 focus:outline-none"
           />
           <DatePicker
@@ -619,7 +619,7 @@ export default function DailyEntryModule() {
               <QRCodeSVG value={qrCodeData.patientId} size={256} />
             </div>
             <p className="text-center text-slate-600 font-semibold mb-6">
-              Patient ID: <span className="font-black">{qrCodeData.patientId}</span>
+              Customer ID: <span className="font-black">{qrCodeData.patientId}</span>
             </p>
             <button
               onClick={() => setQrCodeData(null)}

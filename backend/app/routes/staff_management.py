@@ -6,12 +6,12 @@ from datetime import datetime, timedelta, time
 from decimal import Decimal
 
 from app.database import get_db
-from app.utils.auth_system import auth_guard, require_staff, get_current_user
-from app.models import User, Branch, Staff, AttendanceRecord, SalaryRecord
+from app.utils.auth_system import auth_guard, require_StaffEmployee, get_current_user
+from app.models import User, Branch, StaffEmployee, AttendanceRecord, SalaryRecord
 from pydantic import BaseModel, Field
 from datetime import time as dt_time
 
-# Pydantic models for staff management
+# Pydantic models for StaffEmployee management
 class StaffCreate(BaseModel):
     user_id: int
     department: str = Field(..., min_length=1, max_length=100)
@@ -85,7 +85,7 @@ class AttendanceRecordUpdate(BaseModel):
 
 class AttendanceRecordResponse(BaseModel):
     id: int
-    staff_id: int
+    staff_employee_id: int
     attendance_date: datetime
     check_in_time: Optional[datetime]
     check_out_time: Optional[datetime]
@@ -96,9 +96,9 @@ class AttendanceRecordResponse(BaseModel):
     approved_by: Optional[int]
     created_at: datetime
     
-    # Include staff info
+    # Include StaffEmployee info
     employee_id: str
-    staff_name: str
+    StaffEmployee_name: str
     department: str
     
     class Config:
@@ -114,7 +114,7 @@ class SalaryRecordCreate(BaseModel):
 
 class SalaryRecordResponse(BaseModel):
     id: int
-    staff_id: int
+    staff_employee_id: int
     month: int
     year: int
     base_salary: float
@@ -127,9 +127,9 @@ class SalaryRecordResponse(BaseModel):
     payment_mode: Optional[str]
     created_at: datetime
     
-    # Include staff info
+    # Include StaffEmployee info
     employee_id: str
-    staff_name: str
+    StaffEmployee_name: str
     department: str
     
     class Config:
@@ -137,36 +137,36 @@ class SalaryRecordResponse(BaseModel):
 
 router = APIRouter()
 
-@router.post("/staff/", response_model=StaffResponse)
-def create_staff(
-    staff_data: StaffCreate,
-    current_user: User = Depends(require_staff),
+@router.post("/StaffEmployee/", response_model=StaffResponse)
+def create_StaffEmployee(
+    StaffEmployee_data: StaffCreate,
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
-    """Create a new staff member"""
+    """Create a new StaffEmployee member"""
     
     # Check if user exists
-    user = db.query(User).filter(User.id == staff_data.user_id).first()
+    user = db.query(User).filter(User.id == StaffEmployee_data.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
     # Check branch access
     if current_user.role != 'super_admin':
-        staff_data.branch_id = current_user.branch_id
+        StaffEmployee_data.branch_id = current_user.branch_id
     
     # Generate employee ID
-    branch = db.query(Branch).filter(Branch.id == staff_data.branch_id).first()
+    branch = db.query(Branch).filter(Branch.id == StaffEmployee_data.branch_id).first()
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
     
     branch_code = branch.name[:2].upper()
-    last_staff = db.query(Staff).filter(
-        Staff.branch_id == staff_data.branch_id
-    ).order_by(desc(Staff.id)).first()
+    last_StaffEmployee = db.query(StaffEmployee).filter(
+        StaffEmployee.branch_id == StaffEmployee_data.branch_id
+    ).order_by(desc(StaffEmployee.id)).first()
     
-    if last_staff:
+    if last_StaffEmployee:
         try:
-            last_number = int(last_staff.employee_id[-4:])
+            last_number = int(last_StaffEmployee.employee_id[-4:])
             new_number = last_number + 1
         except:
             new_number = 1
@@ -176,59 +176,59 @@ def create_staff(
     employee_id = f"VV{branch_code}{new_number:04d}"
     
     # Check if employee ID already exists
-    if db.query(Staff).filter(Staff.employee_id == employee_id).first():
+    if db.query(StaffEmployee).filter(StaffEmployee.employee_id == employee_id).first():
         raise HTTPException(status_code=400, detail="Employee ID already exists")
     
-    # Create staff record
-    db_staff = Staff(
-        branch_id=staff_data.branch_id,
-        user_id=staff_data.user_id,
+    # Create StaffEmployee record
+    db_StaffEmployee = StaffEmployee(
+        branch_id=StaffEmployee_data.branch_id,
+        user_id=StaffEmployee_data.user_id,
         employee_id=employee_id,
-        department=staff_data.department,
-        position=staff_data.position,
-        date_of_joining=staff_data.date_of_joining,
-        salary=staff_data.salary,
-        date_of_birth=staff_data.date_of_birth,
-        qualification=staff_data.qualification,
-        experience_years=staff_data.experience_years
+        department=StaffEmployee_data.department,
+        position=StaffEmployee_data.position,
+        date_of_joining=StaffEmployee_data.date_of_joining,
+        salary=StaffEmployee_data.salary,
+        date_of_birth=StaffEmployee_data.date_of_birth,
+        qualification=StaffEmployee_data.qualification,
+        experience_years=StaffEmployee_data.experience_years
     )
     
-    db.add(db_staff)
+    db.add(db_StaffEmployee)
     db.commit()
-    db.refresh(db_staff)
+    db.refresh(db_StaffEmployee)
     
     # Log activity
     auth_guard.log_activity(
         db=db,
         user=current_user,
         action="create",
-        entity_type="staff",
-        entity_id=db_staff.id,
-        description=f"Created staff member {employee_id}"
+        entity_type="StaffEmployee",
+        entity_id=db_StaffEmployee.id,
+        description=f"Created StaffEmployee member {employee_id}"
     )
     
-    return db_staff
+    return db_StaffEmployee
 
-@router.get("/staff/", response_model=List[StaffResponse])
-def get_staff_list(
+@router.get("/StaffEmployee/", response_model=List[StaffResponse])
+def get_StaffEmployee_list(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     search: Optional[str] = Query(None),
     department: Optional[str] = Query(None),
     branch_id: Optional[int] = Query(None),
-    current_user: User = Depends(require_staff),
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
-    """Get list of staff members"""
+    """Get list of StaffEmployee members"""
     
     # Filter by branch access
     if current_user.role == 'super_admin':
-        query = db.query(Staff).join(User).join(Branch)
+        query = db.query(StaffEmployee).join(User).join(Branch)
         if branch_id:
-            query = query.filter(Staff.branch_id == branch_id)
+            query = query.filter(StaffEmployee.branch_id == branch_id)
     else:
-        query = db.query(Staff).join(User).join(Branch).filter(
-            Staff.branch_id == current_user.branch_id
+        query = db.query(StaffEmployee).join(User).join(Branch).filter(
+            StaffEmployee.branch_id == current_user.branch_id
         )
     
     # Search functionality
@@ -237,97 +237,97 @@ def get_staff_list(
             User.first_name.ilike(f"%{search}%"),
             User.last_name.ilike(f"%{search}%"),
             User.username.ilike(f"%{search}%"),
-            Staff.employee_id.ilike(f"%{search}%")
+            StaffEmployee.employee_id.ilike(f"%{search}%")
         )
         query = query.filter(search_filter)
     
 
     if department:
         # Department filter
-        query = query.filter(Staff.department == department)
+        query = query.filter(StaffEmployee.department == department)
     
-    # Only active staff
-    query = query.filter(Staff.is_active == True, User.is_active == True)
+    # Only active StaffEmployee
+    query = query.filter(StaffEmployee.is_active == True, User.is_active == True)
     
-    staff_list = query.order_by(desc(Staff.date_of_joining)).offset(skip).limit(limit).all()
+    StaffEmployee_list = query.order_by(desc(StaffEmployee.date_of_joining)).offset(skip).limit(limit).all()
     
-    return staff_list
+    return StaffEmployee_list
 
-@router.get("/staff/{staff_id}", response_model=StaffResponse)
-def get_staff(
-    staff_id: int,
-    current_user: User = Depends(require_staff),
+@router.get("/StaffEmployee/{staff_employee_id}", response_model=StaffResponse)
+def get_StaffEmployee(
+    staff_employee_id: int,
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
-    """Get staff member by ID"""
+    """Get StaffEmployee member by ID"""
     
-    staff = db.query(Staff).filter(Staff.id == staff_id).join(User).join(Branch).first()
+    StaffEmployee = db.query(StaffEmployee).filter(StaffEmployee.id == staff_employee_id).join(User).join(Branch).first()
     
-    if not staff:
-        raise HTTPException(status_code=404, detail="Staff member not found")
+    if not StaffEmployee:
+        raise HTTPException(status_code=404, detail="StaffEmployee member not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and staff.branch_id != current_user.branch_id:
-        raise HTTPException(status_code=403, detail="Access denied to this staff member")
+    if current_user.role != 'super_admin' and StaffEmployee.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=403, detail="Access denied to this StaffEmployee member")
     
-    return staff
+    return StaffEmployee
 
-@router.put("/staff/{staff_id}", response_model=StaffResponse)
-def update_staff(
-    staff_id: int,
-    staff_data: StaffUpdate,
-    current_user: User = Depends(require_staff),
+@router.put("/StaffEmployee/{staff_employee_id}", response_model=StaffResponse)
+def update_StaffEmployee(
+    staff_employee_id: int,
+    StaffEmployee_data: StaffUpdate,
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
-    """Update staff member information"""
+    """Update StaffEmployee member information"""
     
-    staff = db.query(Staff).filter(Staff.id == staff_id).first()
+    StaffEmployee = db.query(StaffEmployee).filter(StaffEmployee.id == staff_employee_id).first()
     
-    if not staff:
-        raise HTTPException(status_code=404, detail="Staff member not found")
+    if not StaffEmployee:
+        raise HTTPException(status_code=404, detail="StaffEmployee member not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and staff.branch_id != current_user.branch_id:
-        raise HTTPException(status_code=403, detail="Access denied to this staff member")
+    if current_user.role != 'super_admin' and StaffEmployee.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=403, detail="Access denied to this StaffEmployee member")
     
     # Update fields
-    for field, value in staff_data.dict(exclude_unset=True).items():
-        setattr(staff, field, value)
+    for field, value in StaffEmployee_data.dict(exclude_unset=True).items():
+        setattr(StaffEmployee, field, value)
     
     db.commit()
-    db.refresh(staff)
+    db.refresh(StaffEmployee)
     
     # Log activity
     auth_guard.log_activity(
         db=db,
         user=current_user,
         action="update",
-        entity_type="staff",
-        entity_id=staff.id,
-        description=f"Updated staff member {staff.employee_id}"
+        entity_type="StaffEmployee",
+        entity_id=StaffEmployee.id,
+        description=f"Updated StaffEmployee member {StaffEmployee.employee_id}"
     )
     
-    return staff
+    return StaffEmployee
 
-@router.delete("/staff/{staff_id}")
-def deactivate_staff(
-    staff_id: int,
-    current_user: User = Depends(require_staff),
+@router.delete("/StaffEmployee/{staff_employee_id}")
+def deactivate_StaffEmployee(
+    staff_employee_id: int,
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
-    """Deactivate staff member (soft delete)"""
+    """Deactivate StaffEmployee member (soft delete)"""
     
-    staff = db.query(Staff).filter(Staff.id == staff_id).first()
+    StaffEmployee = db.query(StaffEmployee).filter(StaffEmployee.id == staff_employee_id).first()
     
-    if not staff:
-        raise HTTPException(status_code=404, detail="Staff member not found")
+    if not StaffEmployee:
+        raise HTTPException(status_code=404, detail="StaffEmployee member not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and staff.branch_id != current_user.branch_id:
-        raise HTTPException(status_code=403, detail="Access denied to this staff member")
+    if current_user.role != 'super_admin' and StaffEmployee.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=403, detail="Access denied to this StaffEmployee member")
     
-    # Deactivate staff
-    staff.is_active = False
+    # Deactivate StaffEmployee
+    StaffEmployee.is_active = False
     db.commit()
     
     # Log activity
@@ -335,36 +335,36 @@ def deactivate_staff(
         db=db,
         user=current_user,
         action="deactivate",
-        entity_type="staff",
-        entity_id=staff.id,
-        description=f"Deactivated staff member {staff.employee_id}"
+        entity_type="StaffEmployee",
+        entity_id=StaffEmployee.id,
+        description=f"Deactivated StaffEmployee member {StaffEmployee.employee_id}"
     )
     
-    return {"message": "Staff member deactivated successfully"}
+    return {"message": "StaffEmployee member deactivated successfully"}
 
 # Attendance Management
 @router.post("/attendance/", response_model=AttendanceRecordResponse)
 def create_attendance_record(
     attendance_data: AttendanceRecordCreate,
-    staff_id: int,
-    current_user: User = Depends(require_staff),
+    staff_employee_id: int,
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
-    """Create attendance record for staff"""
+    """Create attendance record for StaffEmployee"""
     
-    staff = db.query(Staff).filter(Staff.id == staff_id).join(User).join(Branch).first()
+    StaffEmployee = db.query(StaffEmployee).filter(StaffEmployee.id == staff_employee_id).join(User).join(Branch).first()
     
-    if not staff:
-        raise HTTPException(status_code=404, detail="Staff member not found")
+    if not StaffEmployee:
+        raise HTTPException(status_code=404, detail="StaffEmployee member not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and staff.branch_id != current_user.branch_id:
-        raise HTTPException(status_code=403, detail="Access denied to this staff member")
+    if current_user.role != 'super_admin' and StaffEmployee.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=403, detail="Access denied to this StaffEmployee member")
     
     # Check for existing attendance record for the same date
     existing_record = db.query(AttendanceRecord).filter(
         and_(
-            AttendanceRecord.staff_id == staff_id,
+            AttendanceRecord.staff_employee_id == staff_employee_id,
             AttendanceRecord.attendance_date >= attendance_data.attendance_date.date(),
             AttendanceRecord.attendance_date < attendance_data.attendance_date.date() + timedelta(days=1)
         )
@@ -378,7 +378,7 @@ def create_attendance_record(
     
     # Create attendance record
     db_attendance = AttendanceRecord(
-        staff_id=staff_id,
+        staff_employee_id=staff_employee_id,
         attendance_date=attendance_data.attendance_date,
         check_in_time=attendance_data.check_in_time,
         check_out_time=attendance_data.check_out_time,
@@ -400,7 +400,7 @@ def create_attendance_record(
         action="create",
         entity_type="attendance_record",
         entity_id=db_attendance.id,
-        description=f"Created attendance record for {staff.employee_id} on {attendance_data.attendance_date.date()}"
+        description=f"Created attendance record for {StaffEmployee.employee_id} on {attendance_data.attendance_date.date()}"
     )
     
     return db_attendance
@@ -409,29 +409,29 @@ def create_attendance_record(
 def get_attendance_records(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    staff_id: Optional[int] = Query(None),
+    staff_employee_id: Optional[int] = Query(None),
     start_date: Optional[datetime] = Query(None),
     end_date: Optional[datetime] = Query(None),
     status: Optional[str] = Query(None),
     branch_id: Optional[int] = Query(None),
-    current_user: User = Depends(require_staff),
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
     """Get attendance records with filtering"""
     
     # Filter by branch access
     if current_user.role == 'super_admin':
-        query = db.query(AttendanceRecord).join(Staff).join(User).join(Branch)
+        query = db.query(AttendanceRecord).join(StaffEmployee).join(User).join(Branch)
         if branch_id:
-            query = query.filter(Staff.branch_id == branch_id)
+            query = query.filter(StaffEmployee.branch_id == branch_id)
     else:
-        query = db.query(AttendanceRecord).join(Staff).join(User).join(Branch).filter(
-            Staff.branch_id == current_user.branch_id
+        query = db.query(AttendanceRecord).join(StaffEmployee).join(User).join(Branch).filter(
+            StaffEmployee.branch_id == current_user.branch_id
         )
     
     # Apply filters
-    if staff_id:
-        query = query.filter(AttendanceRecord.staff_id == staff_id)
+    if staff_employee_id:
+        query = query.filter(AttendanceRecord.staff_employee_id == staff_employee_id)
     if start_date:
         query = query.filter(AttendanceRecord.attendance_date >= start_date)
     if end_date:
@@ -447,18 +447,18 @@ def get_attendance_records(
 def update_attendance_record(
     attendance_id: int,
     attendance_data: AttendanceRecordUpdate,
-    current_user: User = Depends(require_staff),
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
     """Update attendance record"""
     
-    attendance = db.query(AttendanceRecord).filter(AttendanceRecord.id == attendance_id).join(Staff).join(User).join(Branch).first()
+    attendance = db.query(AttendanceRecord).filter(AttendanceRecord.id == attendance_id).join(StaffEmployee).join(User).join(Branch).first()
     
     if not attendance:
         raise HTTPException(status_code=404, detail="Attendance record not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and attendance.staff.branch_id != current_user.branch_id:
+    if current_user.role != 'super_admin' and attendance.StaffEmployee.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this attendance record")
     
     # Update fields
@@ -484,21 +484,21 @@ def update_attendance_record(
 def get_attendance_summary(
     year: int = Query(..., ge=2020, le=2030),
     month: int = Query(..., ge=1, le=12),
-    staff_id: Optional[int] = Query(None),
+    staff_employee_id: Optional[int] = Query(None),
     branch_id: Optional[int] = Query(None),
-    current_user: User = Depends(require_staff),
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
     """Get attendance summary for a specific month"""
     
     # Filter by branch access
     if current_user.role == 'super_admin':
-        query = db.query(AttendanceRecord).join(Staff).join(User).join(Branch)
+        query = db.query(AttendanceRecord).join(StaffEmployee).join(User).join(Branch)
         if branch_id:
-            query = query.filter(Staff.branch_id == branch_id)
+            query = query.filter(StaffEmployee.branch_id == branch_id)
     else:
-        query = db.query(AttendanceRecord).join(Staff).join(User).join(Branch).filter(
-            Staff.branch_id == current_user.branch_id
+        query = db.query(AttendanceRecord).join(StaffEmployee).join(User).join(Branch).filter(
+            StaffEmployee.branch_id == current_user.branch_id
         )
     
     # Date range for the month
@@ -515,8 +515,8 @@ def get_attendance_summary(
         )
     )
     
-    if staff_id:
-        query = query.filter(AttendanceRecord.staff_id == staff_id)
+    if staff_employee_id:
+        query = query.filter(AttendanceRecord.staff_employee_id == staff_employee_id)
     
     records = query.all()
     
@@ -539,25 +539,25 @@ def get_attendance_summary(
 @router.post("/salary/", response_model=SalaryRecordResponse)
 def create_salary_record(
     salary_data: SalaryRecordCreate,
-    staff_id: int,
-    current_user: User = Depends(require_staff),
+    staff_employee_id: int,
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
-    """Create salary record for staff"""
+    """Create salary record for StaffEmployee"""
     
-    staff = db.query(Staff).filter(Staff.id == staff_id).join(User).join(Branch).first()
+    StaffEmployee = db.query(StaffEmployee).filter(StaffEmployee.id == staff_employee_id).join(User).join(Branch).first()
     
-    if not staff:
-        raise HTTPException(status_code=404, detail="Staff member not found")
+    if not StaffEmployee:
+        raise HTTPException(status_code=404, detail="StaffEmployee member not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and staff.branch_id != current_user.branch_id:
-        raise HTTPException(status_code=403, detail="Access denied to this staff member")
+    if current_user.role != 'super_admin' and StaffEmployee.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=403, detail="Access denied to this StaffEmployee member")
     
     # Check if salary record already exists for this month/year
     existing_record = db.query(SalaryRecord).filter(
         and_(
-            SalaryRecord.staff_id == staff_id,
+            SalaryRecord.staff_employee_id == staff_employee_id,
             SalaryRecord.month == salary_data.month,
             SalaryRecord.year == salary_data.year
         )
@@ -575,7 +575,7 @@ def create_salary_record(
     
     # Create salary record
     db_salary = SalaryRecord(
-        staff_id=staff_id,
+        staff_employee_id=staff_employee_id,
         month=salary_data.month,
         year=salary_data.year,
         base_salary=salary_data.base_salary,
@@ -597,7 +597,7 @@ def create_salary_record(
         action="create",
         entity_type="salary_record",
         entity_id=db_salary.id,
-        description=f"Created salary record for {staff.employee_id} for {salary_data.year}-{salary_data.month:02d}"
+        description=f"Created salary record for {StaffEmployee.employee_id} for {salary_data.year}-{salary_data.month:02d}"
     )
     
     return db_salary
@@ -606,28 +606,28 @@ def create_salary_record(
 def get_salary_records(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    staff_id: Optional[int] = Query(None),
+    staff_employee_id: Optional[int] = Query(None),
     year: Optional[int] = Query(None),
     month: Optional[int] = Query(None),
     branch_id: Optional[int] = Query(None),
-    current_user: User = Depends(require_staff),
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
     """Get salary records with filtering"""
     
     # Filter by branch access
     if current_user.role == 'super_admin':
-        query = db.query(SalaryRecord).join(Staff).join(User).join(Branch)
+        query = db.query(SalaryRecord).join(StaffEmployee).join(User).join(Branch)
         if branch_id:
-            query = query.filter(Staff.branch_id == branch_id)
+            query = query.filter(StaffEmployee.branch_id == branch_id)
     else:
-        query = db.query(SalaryRecord).join(Staff).join(User).join(Branch).filter(
-            Staff.branch_id == current_user.branch_id
+        query = db.query(SalaryRecord).join(StaffEmployee).join(User).join(Branch).filter(
+            StaffEmployee.branch_id == current_user.branch_id
         )
     
     # Apply filters
-    if staff_id:
-        query = query.filter(SalaryRecord.staff_id == staff_id)
+    if staff_employee_id:
+        query = query.filter(SalaryRecord.staff_employee_id == staff_employee_id)
     if year:
         query = query.filter(SalaryRecord.year == year)
     if month:
@@ -640,18 +640,18 @@ def get_salary_records(
 @router.put("/salary/{salary_id}/mark-paid")
 def mark_salary_as_paid(
     salary_id: int,
-    current_user: User = Depends(require_staff),
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
     """Mark salary as paid"""
     
-    salary = db.query(SalaryRecord).filter(SalaryRecord.id == salary_id).join(Staff).join(User).join(Branch).first()
+    salary = db.query(SalaryRecord).filter(SalaryRecord.id == salary_id).join(StaffEmployee).join(User).join(Branch).first()
     
     if not salary:
         raise HTTPException(status_code=404, detail="Salary record not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and salary.staff.branch_id != current_user.branch_id:
+    if current_user.role != 'super_admin' and salary.StaffEmployee.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this salary record")
     
     # Mark as paid
@@ -667,7 +667,7 @@ def mark_salary_as_paid(
         action="update",
         entity_type="salary_record",
         entity_id=salary.id,
-        description=f"Marked salary as paid for {salary.staff.employee_id}"
+        description=f"Marked salary as paid for {salary.StaffEmployee.employee_id}"
     )
     
     return {"message": "Salary marked as paid successfully"}
@@ -675,19 +675,19 @@ def mark_salary_as_paid(
 @router.get("/departments")
 def get_departments(
     branch_id: Optional[int] = Query(None),
-    current_user: User = Depends(require_staff),
+    current_user: User = Depends(require_StaffEmployee),
     db: Session = Depends(get_db)
 ):
     """Get list of departments"""
     
     # Filter by branch access
     if current_user.role == 'super_admin':
-        query = db.query(Staff.department).distinct()
+        query = db.query(StaffEmployee.department).distinct()
         if branch_id:
-            query = query.filter(Staff.branch_id == branch_id)
+            query = query.filter(StaffEmployee.branch_id == branch_id)
     else:
-        query = db.query(Staff.department).filter(
-            Staff.branch_id == current_user.branch_id
+        query = db.query(StaffEmployee.department).filter(
+            StaffEmployee.branch_id == current_user.branch_id
         ).distinct()
     
     departments = query.all()

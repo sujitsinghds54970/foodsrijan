@@ -11,7 +11,7 @@ from app.utils.auth_system import (
     auth_guard, TokenData, get_current_user
 )
 from app.models import User, Branch, ActivityLog
-from app.models.staff import StaffProfile
+from app.models.hr import StaffProfile
 from app.schemas.user import UserCreate, UserResponse, TokenResponse
 from app.utils.auth_system import auth_guard
 from app.utils.schema_compat import ensure_staff_daily_ops_column
@@ -33,7 +33,14 @@ def _public_file_url(path: Optional[str]) -> Optional[str]:
 
 
 def _build_user_photo_payload(db: Session, user: User) -> dict:
-    profile = db.query(StaffProfile).filter(StaffProfile.user_id == user.id).first()
+    profile = None
+    if user.role != "super_admin":
+        try:
+            profile = db.query(StaffProfile).filter(StaffProfile.user_id == user.id).first()
+        except Exception:
+            # Older local databases may not contain newer staff profile columns.
+            db.rollback()
+            profile = None
     photo_url = _public_file_url(profile.photo_path) if profile else None
     if not photo_url and user.role == "super_admin":
         if table_exists(db, "system_settings"):
@@ -295,7 +302,7 @@ def public_register_user(
     user_data: UserCreate,
     db: Session = Depends(get_db)
 ):
-    """Public registration endpoint for patients and doctors - Returns auth token for auto-login"""
+    """Public registration endpoint for customers and staff - Returns auth token for auto-login"""
     
     # Check if username already exists
     if db.query(User).filter(User.username == user_data.username).first():
@@ -332,7 +339,7 @@ def public_register_user(
             detail="Invalid role specified"
         )
     
-    # For doctors, require branch_id
+    # For staff, require branch_id
     if user_data.role == 'doctor' and not user_data.branch_id:
         raise HTTPException(
             status_code=400,

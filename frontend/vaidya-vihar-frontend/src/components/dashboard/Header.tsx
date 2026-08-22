@@ -31,7 +31,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
   const { user: authUser } = auth
   const location = useLocation()
   const [showDropdown, setShowDropdown] = useState(false)
-  const [branchName, setBranchName] = useState<string>('VaidyaVihar Diagnostic')
+  const [branchName, setBranchName] = useState<string>('FoodSrijan Group')
   const [branchLogoSrc, setBranchLogoSrc] = useState<string>('/default-branch-logo.png')
   const dropdownRef = useRef<HTMLDivElement | null>(null)
   const API_BASE =
@@ -42,8 +42,10 @@ export default function Header({ user, onLogout }: HeaderProps) {
 
   const normalizeHeaderTitle = (value?: string | null) => {
     const normalized = (value || '').trim()
-    if (!normalized) return 'VaidyaVihar Diagnostic'
-    return normalized === 'Vaidya Vihar Diagnostic' ? 'VaidyaVihar Diagnostic' : normalized
+    if (!normalized) return 'FoodSrijan Group'
+    return normalized === 'Vaidya Vihar Diagnostic' || normalized === 'VaidyaVihar Diagnostic'
+      ? 'FoodSrijan Group'
+      : normalized
   }
 
   const role = (authUser?.role || user?.role || '').toLowerCase()
@@ -113,7 +115,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
   const roleLabel = role ? role.replace('_', ' ') : 'Staff'
 
   return (
-    <header className="relative z-50 overflow-visible border-b border-white/30 bg-gradient-to-r from-indigo-600/90 via-blue-600/85 to-cyan-600/85 px-8 py-5 shadow-xl backdrop-blur-xl dark:border-slate-700 dark:from-indigo-950 dark:via-slate-900 dark:to-blue-950">
+    <header className="relative z-50 overflow-visible border-b border-white/30 bg-[#2D3436] px-8 py-5 shadow-xl backdrop-blur-xl dark:border-slate-700">
       {/* Animated Background */}
       <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-purple-300/20 to-pink-300/20 rounded-full blur-3xl -mr-32 -mt-32" />
 

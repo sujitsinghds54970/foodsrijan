@@ -1,19 +1,17 @@
 # Backend
-backend/**pycache**/
+**/__pycache__/
+*.py[cod]
 backend/.venv/
 backend/venv/
 backend/uploads/
 *.db
 backend/backend.log
-.vscode
-.do
-Procfile
-docker-compose*.yml
-
-text
-backend/*.db
-backend/*.db-shm
-backend/*.db-wal
+*.db-shm
+*.db-wal
+*.log
+*_output.txt
+backend/.env
+backend/.env.*
 
 # Frontend
 node_modules/
@@ -21,8 +19,19 @@ frontend/vaidya-vihar-frontend/node_modules/
 frontend/vaidya-vihar-frontend/build/
 frontend/vaidya-vihar-frontend/dist/
 frontend/vaidya-vihar-frontend/.env
+frontend/vaidya-vihar-frontend/.env.*
+
+# Local tooling and generated output
+.vscode/
+.idea/
+build/
+dist/
+coverage/
+*.tmp
+*.bak
 
 # OS
 .DS_Store
+Thumbs.db
 
 text

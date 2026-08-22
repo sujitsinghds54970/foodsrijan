@@ -6,18 +6,18 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
-class PatientProfile(Base):
+class CustomerProfile(Base):
     __tablename__ = "patient_profiles"
 
     id = Column(Integer, primary_key=True, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True, unique=True, index=True)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=True, unique=True, index=True)
 
     patient_code = Column(String(64), nullable=False, unique=True, index=True)
     full_name = Column(String(255), nullable=False)
     mobile = Column(String(20), nullable=False, unique=True, index=True)
     email = Column(String(255), nullable=True)
     otp_verification = Column(Boolean, nullable=False, default=False)
-    referring_doctor_id = Column(Integer, ForeignKey("doctors.id"), nullable=True, index=True)
+    referring_doctor_id = Column(Integer, ForeignKey("staff.id"), nullable=True, index=True)
     family_members_json = Column(JSON, nullable=False, default=list)
 
     password = Column(String(255), nullable=False)
@@ -40,7 +40,7 @@ class PatientProfile(Base):
         foreign_keys="FamilyMember.owner_profile_id",
         cascade="all, delete-orphan",
     )
-    referring_doctor = relationship("Doctor", foreign_keys=[referring_doctor_id])
+    referring_doctor = relationship("Staff", foreign_keys=[referring_doctor_id])
 
 
 class FamilyMember(Base):
@@ -56,8 +56,8 @@ class FamilyMember(Base):
     mobile = Column(String(20), nullable=True)
 
     owner_profile = relationship(
-        "PatientProfile",
+        "CustomerProfile",
         back_populates="family_members",
         foreign_keys=[owner_profile_id],
     )
-    linked_profile = relationship("PatientProfile", foreign_keys=[linked_profile_id])
+    linked_profile = relationship("CustomerProfile", foreign_keys=[linked_profile_id])

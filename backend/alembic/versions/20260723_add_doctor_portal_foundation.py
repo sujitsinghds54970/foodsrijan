@@ -20,12 +20,12 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("doctors", sa.Column("upi_id", sa.String(length=120), nullable=True))
-    op.add_column("doctors", sa.Column("bank_account", sa.String(length=100), nullable=True))
-    op.add_column("doctors", sa.Column("ifsc", sa.String(length=30), nullable=True))
-    op.add_column("doctors", sa.Column("commission_percentage", sa.Float(), nullable=False, server_default="0"))
-    op.add_column("doctors", sa.Column("loyalty_tier", sa.String(length=20), nullable=False, server_default="Silver"))
-    op.add_column("patients", sa.Column("tags", sa.JSON(), nullable=False, server_default="[]"))
+    op.add_column("staff", sa.Column("upi_id", sa.String(length=120), nullable=True))
+    op.add_column("staff", sa.Column("bank_account", sa.String(length=100), nullable=True))
+    op.add_column("staff", sa.Column("ifsc", sa.String(length=30), nullable=True))
+    op.add_column("staff", sa.Column("commission_percentage", sa.Float(), nullable=False, server_default="0"))
+    op.add_column("staff", sa.Column("loyalty_tier", sa.String(length=20), nullable=False, server_default="Silver"))
+    op.add_column("customers", sa.Column("tags", sa.JSON(), nullable=False, server_default="[]"))
 
     op.create_table(
         "patient_search_logs",
@@ -34,7 +34,7 @@ def upgrade() -> None:
         sa.Column("query", sa.String(length=255), nullable=False),
         sa.Column("result_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(["doctor_id"], ["doctors.id"]),
+        sa.ForeignKeyConstraint(["doctor_id"], ["staff.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_patient_search_logs_id", "patient_search_logs", ["id"], unique=False)
@@ -49,7 +49,7 @@ def upgrade() -> None:
         sa.Column("is_custom", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(["doctor_id"], ["doctors.id"]),
+        sa.ForeignKeyConstraint(["doctor_id"], ["staff.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_doctor_test_panels_id", "doctor_test_panels", ["id"], unique=False)
@@ -69,8 +69,8 @@ def upgrade() -> None:
         sa.Column("qr_token", sa.String(length=64), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
-        sa.ForeignKeyConstraint(["doctor_id"], ["doctors.id"]),
-        sa.ForeignKeyConstraint(["patient_id"], ["patients.id"]),
+        sa.ForeignKeyConstraint(["doctor_id"], ["staff.id"]),
+        sa.ForeignKeyConstraint(["patient_id"], ["customers.id"]),
         sa.ForeignKeyConstraint(["branch_id"], ["branches.id"]),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("qr_token"),
@@ -87,9 +87,9 @@ def downgrade() -> None:
     op.drop_table("doctor_orders")
     op.drop_table("doctor_test_panels")
     op.drop_table("patient_search_logs")
-    op.drop_column("patients", "tags")
-    op.drop_column("doctors", "loyalty_tier")
-    op.drop_column("doctors", "commission_percentage")
-    op.drop_column("doctors", "ifsc")
-    op.drop_column("doctors", "bank_account")
-    op.drop_column("doctors", "upi_id")
+    op.drop_column("customers", "tags")
+    op.drop_column("staff", "loyalty_tier")
+    op.drop_column("staff", "commission_percentage")
+    op.drop_column("staff", "ifsc")
+    op.drop_column("staff", "bank_account")
+    op.drop_column("staff", "upi_id")

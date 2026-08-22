@@ -10,7 +10,7 @@ import {
   createInvoice,
   createTransaction,
   generateInvoicePdf,
-  getGstReport,
+  getGstOrder,
   getProfitLoss,
   listExpenses,
   listInvoices,
@@ -100,7 +100,7 @@ export default function AccountsModule({ branchId }: AccountsModuleProps) {
 
       const [pl, gst] = await Promise.all([
         getProfitLoss({ start: `${startDate}T00:00:00`, end: `${endDate}T23:59:59`, branch_id: effectiveBranchId }),
-        getGstReport({ month, year, branch_id: effectiveBranchId }),
+        getGstOrder({ month, year, branch_id: effectiveBranchId }),
       ])
 
       setPlSummary(pl)
@@ -465,7 +465,7 @@ export default function AccountsModule({ branchId }: AccountsModuleProps) {
             <input
               value={newInvoice.patient_name}
               onChange={(e) => setNewInvoice((s) => ({ ...s, patient_name: e.target.value }))}
-              placeholder="Patient name"
+              placeholder="Customer name"
               className="rounded border border-slate-300 px-3 py-2"
             />
             <input
@@ -514,7 +514,7 @@ export default function AccountsModule({ branchId }: AccountsModuleProps) {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-3 py-2 text-left">Invoice #</th>
-                  <th className="px-3 py-2 text-left">Patient</th>
+                  <th className="px-3 py-2 text-left">Customer</th>
                   <th className="px-3 py-2 text-left">Total</th>
                   <th className="px-3 py-2 text-left">Status</th>
                   <th className="px-3 py-2 text-left">Due</th>

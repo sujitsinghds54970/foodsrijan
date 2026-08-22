@@ -1,6 +1,6 @@
 """
 OTP Request Model for Multi-Role Authentication
-Supports Patient, Staff, Director, Doctor, CEO OTP verification
+Supports Customer, Staff, Director, Staff, CEO OTP verification
 """
 
 from datetime import datetime

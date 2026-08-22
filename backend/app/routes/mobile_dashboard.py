@@ -13,14 +13,14 @@ def mobile_dashboard(
     role = current_user.role
 
     if role == "technician":
-        pending_tests = db.query(LabTest).filter(
-            LabTest.technician_id == current_user.id,
-            LabTest.status == "pending"
+        pending_menu_items = db.query(LabMenuItem).filter(
+            LabMenuItem.technician_id == current_user.id,
+            LabMenuItem.status == "pending"
         ).count()
-        return {"role": "technician", "pending_tests": pending_tests}
+        return {"role": "technician", "pending_menu_items": pending_menu_items}
 
     elif role == "admin":
-        total_patients = db.query(PatientEntry).count()
-        return {"role": "admin", "total_patients": total_patients}
+        total_customers = db.query(CustomerEntry).count()
+        return {"role": "admin", "total_customers": total_customers}
 
     return {"role": role, "message": "No dashboard available"}

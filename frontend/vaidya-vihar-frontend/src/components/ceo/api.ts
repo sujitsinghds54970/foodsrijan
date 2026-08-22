@@ -50,13 +50,13 @@ export interface CeoDashboardResponse {
     operational: {
       title: string
       daily_entries_today: number
-      tests_processed_today: number
+      menu_items_processed_today: number
       average_tat_minutes: number
       machine_utilization_percent: number
     }
     sales: {
       title: string
-      new_patients_month: number
+      new_customers_month: number
       appointments_month: number
       doctor_referrals_total: number
       patient_visits_total: number
@@ -228,7 +228,7 @@ export interface CeoPolicyItem {
 export interface CeoMasterSummaryResponse {
   total_branches: number
   total_users: number
-  total_patients: number
+  total_customers: number
 }
 
 export interface CeoUserDirectoryRow {
@@ -239,7 +239,7 @@ export interface CeoUserDirectoryRow {
   role: string
   branch: string
   status: string
-  source: 'users' | 'patients' | string
+  source: 'users' | 'customers' | string
 }
 
 export interface CeoProactiveInsightsResponse {
@@ -707,7 +707,7 @@ export interface CeoFinancePredictiveAnalyticsResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoFinanceDoctorReferralFinancialsResponse {
+export interface CeoFinanceStaffReferralFinancialsResponse {
   is_mock: boolean
   referral_revenue_breakdown: Array<{
     doctor_name: string
@@ -813,7 +813,7 @@ export interface CeoFinanceLisOperationsOverviewResponse {
   network_summary: {
     today_test_volume: number
     average_tat_minutes: number
-    pending_tests: number
+    pending_menu_items: number
     sample_rejection_rate: number
     qc_status: string
     readiness_score: number
@@ -846,10 +846,10 @@ export interface CeoFinanceLisOperationsOverviewResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoDoctorNetworkHealthResponse {
+export interface CeoStaffNetworkHealthResponse {
   is_mock: boolean
   score: number
-  total_doctors: number
+  total_staff: number
   growth_mom_percent: number
   revenue_contribution_percent: number
   engagement_score: number
@@ -868,7 +868,7 @@ export interface CeoDoctorNetworkHealthResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoDoctorPerformanceAnalyticsResponse {
+export interface CeoStaffPerformanceAnalyticsResponse {
   is_mock: boolean
   leaderboard: Array<{
     doctor_id: number
@@ -925,7 +925,7 @@ export interface CeoDoctorPerformanceAnalyticsResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoDoctorFinancialCommissionResponse {
+export interface CeoStaffFinancialCommissionResponse {
   is_mock: boolean
   commission_dashboard: Array<{
     doctor_id: number
@@ -953,7 +953,7 @@ export interface CeoDoctorFinancialCommissionResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoDoctorCommissionSimulatorResponse {
+export interface CeoStaffCommissionSimulatorResponse {
   is_mock: boolean
   structure: string
   base_commission_percent: number
@@ -974,7 +974,7 @@ export interface CeoDoctorCommissionSimulatorResponse {
   }
 }
 
-export interface CeoDoctorPayoutAutomationResponse {
+export interface CeoStaffPayoutAutomationResponse {
   is_mock: boolean
   generated_at: string
   run_id: string
@@ -992,7 +992,7 @@ export interface CeoDoctorPayoutAutomationResponse {
   }
 }
 
-export interface CeoDoctorEngagementRelationshipResponse {
+export interface CeoStaffEngagementRelationshipResponse {
   is_mock: boolean
   doctor_profiles: Array<{
     doctor_id: number
@@ -1009,7 +1009,7 @@ export interface CeoDoctorEngagementRelationshipResponse {
     doctor_name: string
     notes: string
   }>
-  flight_risk_doctors: Array<{
+  flight_risk_staff: Array<{
     doctor_id: number
     doctor_name: string
     risk_level: string
@@ -1037,7 +1037,7 @@ export interface CeoDoctorEngagementRelationshipResponse {
   }
 }
 
-export interface CeoDoctorGrowthAcquisitionResponse {
+export interface CeoStaffGrowthAcquisitionResponse {
   is_mock: boolean
   market_opportunities: Array<{
     doctor_name: string
@@ -1066,7 +1066,7 @@ export interface CeoDoctorGrowthAcquisitionResponse {
   }
 }
 
-export interface CeoDoctorGrowthWhatIfResponse {
+export interface CeoStaffGrowthWhatIfResponse {
   is_mock: boolean
   scenario: string
   inputs: {
@@ -1089,7 +1089,7 @@ export interface CeoDoctorGrowthWhatIfResponse {
   }
 }
 
-export interface CeoDoctorOperationalExcellenceResponse {
+export interface CeoStaffOperationalExcellenceResponse {
   is_mock: boolean
   service_level_dashboard: {
     average_tat_hours: number
@@ -1118,7 +1118,7 @@ export interface CeoDoctorOperationalExcellenceResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoDoctorWowFeaturesResponse {
+export interface CeoStaffWowFeaturesResponse {
   is_mock: boolean
   doctor_360_briefing: {
     title: string
@@ -1146,9 +1146,9 @@ export interface CeoDoctorWowFeaturesResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoPatientOverviewResponse {
+export interface CeoCustomerOverviewResponse {
   is_mock: boolean
-  total_patients: number
+  total_customers: number
   growth: {
     mom_percent: number
     yoy_percent: number
@@ -1161,11 +1161,11 @@ export interface CeoPatientOverviewResponse {
   patient_lifetime_value: number
   referral_source_analysis: Array<{
     source: string
-    patients: number
+    customers: number
   }>
   monthly_growth_trend: Array<{
     month: string
-    patients: number
+    customers: number
   }>
   table_reference: {
     daily_entries_count: number
@@ -1177,7 +1177,7 @@ export interface CeoPatientOverviewResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoPatientJourneyExperienceResponse {
+export interface CeoCustomerJourneyExperienceResponse {
   is_mock: boolean
   journey_funnel: Array<{
     stage: string
@@ -1198,7 +1198,7 @@ export interface CeoPatientJourneyExperienceResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoPatientRetentionLoyaltyResponse {
+export interface CeoCustomerRetentionLoyaltyResponse {
   is_mock: boolean
   retention_rate_percent: number
   churn_rate_percent: number
@@ -1220,15 +1220,15 @@ export interface CeoPatientRetentionLoyaltyResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoPatientSegmentationHealthResponse {
+export interface CeoCustomerSegmentationHealthResponse {
   is_mock: boolean
   demographics: {
     age: Array<{ group: string; value: number }>
     gender: Array<{ group: string; value: number }>
     location: Array<{ group: string; value: number }>
   }
-  segment_by_condition: Array<{ condition: string; patients: number }>
-  segment_by_value: Array<{ segment: string; patients: number }>
+  segment_by_condition: Array<{ condition: string; customers: number }>
+  segment_by_value: Array<{ segment: string; customers: number }>
   geographic_density: Array<{ zone: string; density_score: number }>
   population_health_insights: string[]
   table_reference: {
@@ -1241,7 +1241,7 @@ export interface CeoPatientSegmentationHealthResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoPatientFinancialAnalyticsResponse {
+export interface CeoCustomerFinancialAnalyticsResponse {
   is_mock: boolean
   revenue_by_segment: Array<{ segment: string; revenue: number }>
   revenue_per_patient: number
@@ -1258,9 +1258,9 @@ export interface CeoPatientFinancialAnalyticsResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoPatientPredictiveInsightsResponse {
+export interface CeoCustomerPredictiveInsightsResponse {
   is_mock: boolean
-  churn_risk_patients: Array<{
+  churn_risk_customers: Array<{
     patient_id: string
     name: string
     risk_score: number
@@ -1281,7 +1281,7 @@ export interface CeoPatientPredictiveInsightsResponse {
   future_data_mapping: Record<string, string>
 }
 
-export interface CeoPatientPredictiveWhatIfResponse {
+export interface CeoCustomerPredictiveWhatIfResponse {
   is_mock: boolean
   scenario: string
   inputs: {
@@ -1305,14 +1305,14 @@ export interface CeoPatientPredictiveWhatIfResponse {
   }
 }
 
-export interface CeoPatientWowFeaturesResponse {
+export interface CeoCustomerWowFeaturesResponse {
   is_mock: boolean
   patient_360_profiles: Array<{
     patient_id: string
     name: string
     interactions: string[]
-    tests: string[]
-    reports: string[]
+    menu_items: string[]
+    orders: string[]
     feedback: string
     journey_timeline: Array<{
       date: string
@@ -2825,7 +2825,7 @@ export async function getCeoFinancePredictiveAnalytics(): Promise<CeoFinancePred
   return response.data
 }
 
-export async function getCeoFinanceDoctorReferralFinancials(): Promise<CeoFinanceDoctorReferralFinancialsResponse> {
+export async function getCeoFinanceStaffReferralFinancials(): Promise<CeoFinanceStaffReferralFinancialsResponse> {
   const response = await axios.get(`${API_BASE}/api/ceo/finance/doctor-referral-financials`)
   return response.data
 }
@@ -2850,93 +2850,93 @@ export async function getCeoFinanceLisOperationsOverview(): Promise<CeoFinanceLi
   return response.data
 }
 
-export async function getCeoDoctorNetworkHealth(): Promise<CeoDoctorNetworkHealthResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/doctors/network-health`)
+export async function getCeoStaffNetworkHealth(): Promise<CeoStaffNetworkHealthResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/staff/network-health`)
   return response.data
 }
 
-export async function getCeoDoctorPerformanceAnalytics(): Promise<CeoDoctorPerformanceAnalyticsResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/doctors/performance-analytics`)
+export async function getCeoStaffPerformanceAnalytics(): Promise<CeoStaffPerformanceAnalyticsResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/staff/performance-analytics`)
   return response.data
 }
 
-export async function getCeoDoctorFinancialCommission(): Promise<CeoDoctorFinancialCommissionResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/doctors/financial-commission`)
+export async function getCeoStaffFinancialCommission(): Promise<CeoStaffFinancialCommissionResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/staff/financial-commission`)
   return response.data
 }
 
-export async function getCeoDoctorCommissionSimulation(params: { structure: string; base_commission_percent: number }): Promise<CeoDoctorCommissionSimulatorResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/doctors/commission-simulator`, { params })
+export async function getCeoStaffCommissionSimulation(params: { structure: string; base_commission_percent: number }): Promise<CeoStaffCommissionSimulatorResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/staff/commission-simulator`, { params })
   return response.data
 }
 
-export async function triggerCeoDoctorPayoutAutomation(): Promise<CeoDoctorPayoutAutomationResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/doctors/commission-payout-automation`)
+export async function triggerCeoStaffPayoutAutomation(): Promise<CeoStaffPayoutAutomationResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/staff/commission-payout-automation`)
   return response.data
 }
 
-export async function getCeoDoctorEngagementRelationship(): Promise<CeoDoctorEngagementRelationshipResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/doctors/engagement-relationship`)
+export async function getCeoStaffEngagementRelationship(): Promise<CeoStaffEngagementRelationshipResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/staff/engagement-relationship`)
   return response.data
 }
 
-export async function getCeoDoctorGrowthAcquisition(): Promise<CeoDoctorGrowthAcquisitionResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/doctors/growth-acquisition`)
+export async function getCeoStaffGrowthAcquisition(): Promise<CeoStaffGrowthAcquisitionResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/staff/growth-acquisition`)
   return response.data
 }
 
-export async function getCeoDoctorGrowthWhatIfSimulation(params: { specialty: string; commission_increase_percent: number }): Promise<CeoDoctorGrowthWhatIfResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/doctors/growth-what-if-simulator`, { params })
+export async function getCeoStaffGrowthWhatIfSimulation(params: { specialty: string; commission_increase_percent: number }): Promise<CeoStaffGrowthWhatIfResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/staff/growth-what-if-simulator`, { params })
   return response.data
 }
 
-export async function getCeoDoctorOperationalExcellence(): Promise<CeoDoctorOperationalExcellenceResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/doctors/operational-excellence`)
+export async function getCeoStaffOperationalExcellence(): Promise<CeoStaffOperationalExcellenceResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/staff/operational-excellence`)
   return response.data
 }
 
-export async function getCeoDoctorWowFeatures(): Promise<CeoDoctorWowFeaturesResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/doctors/wow-features`)
+export async function getCeoStaffWowFeatures(): Promise<CeoStaffWowFeaturesResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/staff/wow-features`)
   return response.data
 }
 
-export async function getCeoPatientOverview(): Promise<CeoPatientOverviewResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/patients/overview`)
+export async function getCeoCustomerOverview(): Promise<CeoCustomerOverviewResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/customers/overview`)
   return response.data
 }
 
-export async function getCeoPatientJourneyExperience(): Promise<CeoPatientJourneyExperienceResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/patients/journey-experience`)
+export async function getCeoCustomerJourneyExperience(): Promise<CeoCustomerJourneyExperienceResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/customers/journey-experience`)
   return response.data
 }
 
-export async function getCeoPatientRetentionLoyalty(): Promise<CeoPatientRetentionLoyaltyResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/patients/retention-loyalty`)
+export async function getCeoCustomerRetentionLoyalty(): Promise<CeoCustomerRetentionLoyaltyResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/customers/retention-loyalty`)
   return response.data
 }
 
-export async function getCeoPatientSegmentationHealth(): Promise<CeoPatientSegmentationHealthResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/patients/segmentation-health`)
+export async function getCeoCustomerSegmentationHealth(): Promise<CeoCustomerSegmentationHealthResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/customers/segmentation-health`)
   return response.data
 }
 
-export async function getCeoPatientFinancialAnalytics(): Promise<CeoPatientFinancialAnalyticsResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/patients/financial-analytics`)
+export async function getCeoCustomerFinancialAnalytics(): Promise<CeoCustomerFinancialAnalyticsResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/customers/financial-analytics`)
   return response.data
 }
 
-export async function getCeoPatientPredictiveInsights(): Promise<CeoPatientPredictiveInsightsResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/patients/predictive-insights`)
+export async function getCeoCustomerPredictiveInsights(): Promise<CeoCustomerPredictiveInsightsResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/customers/predictive-insights`)
   return response.data
 }
 
-export async function getCeoPatientPredictiveWhatIfSimulation(params: { condition: string; city: string; discount_percent: number }): Promise<CeoPatientPredictiveWhatIfResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/patients/predictive-what-if-simulator`, { params })
+export async function getCeoCustomerPredictiveWhatIfSimulation(params: { condition: string; city: string; discount_percent: number }): Promise<CeoCustomerPredictiveWhatIfResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/customers/predictive-what-if-simulator`, { params })
   return response.data
 }
 
-export async function getCeoPatientWowFeatures(): Promise<CeoPatientWowFeaturesResponse> {
-  const response = await axios.get(`${API_BASE}/api/ceo/patients/wow-features`)
+export async function getCeoCustomerWowFeatures(): Promise<CeoCustomerWowFeaturesResponse> {
+  const response = await axios.get(`${API_BASE}/api/ceo/customers/wow-features`)
   return response.data
 }
 

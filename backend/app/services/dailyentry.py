@@ -13,7 +13,7 @@ Last Updated: 2026-03-22
 Features:
 - Branch-specific Excel file management
 - Daily, Monthly, and Yearly reporting
-- Patient record CRUD operations
+- Customer record CRUD operations
 - Data archiving and backup
 - Branch transfer functionality
 - Concurrent access handling
@@ -66,7 +66,7 @@ class BranchConfig:
     BASE_DATA_PATH: str = "C:/ERP_Data/{BRANCH_ID}/"
     
     # File naming patterns
-    DAILY_LOG_PATTERN: str = "Daily_Patient_Log_{BRANCH_ID}_{YEAR}_{MONTH}.xlsx"
+    DAILY_LOG_PATTERN: str = "Daily_Customer_Log_{BRANCH_ID}_{YEAR}_{MONTH}.xlsx"
     YEARLY_SUMMARY_PATTERN: str = "{YEAR}_Summary.xlsx"
     
     # Folder structure
@@ -144,12 +144,12 @@ class ExcelColumns:
     
     HEADERS = [
         "Timestamp",
-        "Patient ID",
-        "Patient Name",
+        "Customer ID",
+        "Customer Name",
         "Age",
         "Gender",
-        "Test Type",
-        "Referring Doctor",
+        "MenuItem Type",
+        "Referring Staff",
         "Status",
         "Contact Number",
         "Notes",
@@ -176,8 +176,8 @@ class ExcelColumns:
 # ============================================================================
 
 @dataclass
-class PatientRecord:
-    """Patient record data model"""
+class CustomerRecord:
+    """Customer record data model"""
     patient_id: str
     patient_name: str
     age: int
@@ -230,8 +230,8 @@ class PatientRecord:
         ]
     
     @classmethod
-    def from_excel_row(cls, row: List[Any], branch_id: str) -> 'PatientRecord':
-        """Create PatientRecord from Excel row"""
+    def from_excel_row(cls, row: List[Any], branch_id: str) -> 'CustomerRecord':
+        """Create CustomerRecord from Excel row"""
         return cls(
             timestamp=row[0] if isinstance(row[0], datetime) else datetime.fromisoformat(str(row[0])),
             patient_id=str(row[1]),
@@ -281,8 +281,8 @@ class DataValidationError(DailyEntryError):
         super().__init__(message, "DE_VALIDATION_ERROR", branch_id)
 
 
-class PatientNotFoundError(DailyEntryError):
-    """Patient not found error"""
+class CustomerNotFoundError(DailyEntryError):
+    """Customer not found error"""
     def __init__(self, message: str, branch_id: str = ""):
         super().__init__(message, "DE_NOT_FOUND", branch_id)
 
@@ -464,7 +464,7 @@ class DailyEntryManager:
         # Statistics cache
         self.stats_cache = StatisticsCache(ttl_seconds=config.CACHE_TTL_SECONDS) if config.CACHE_ENABLED else None
         
-        # Patient ID counter lock
+        # Customer ID counter lock
         self._id_counter_lock = threading.Lock()
         
         self.logger.info(f"Initialized DailyEntryManager for branch: {self.branch_name} ({self.branch_id})")
@@ -541,7 +541,7 @@ class DailyEntryManager:
         try:
             wb = Workbook()
             ws = wb.active
-            ws.title = "Patient Records"
+            ws.title = "Customer Records"
             
             # Add headers
             ws.append(ExcelColumns.HEADERS)
@@ -604,17 +604,17 @@ class DailyEntryManager:
             
             date_str = timestamp.strftime("%Y%m%d")
             
-            # Get current file and count today's patients
+            # Get current file and count today's customers
             filepath = self.get_current_excel_file()
             
             with self.file_lock.acquire(filepath):
                 wb = load_workbook(filepath)
                 ws = wb.active
                 
-                # Count patients with same date prefix
+                # Count customers with same date prefix
                 sequence = 1
                 for row in ws.iter_rows(min_row=2, values_only=True):
-                    if row[1]:  # Patient ID column
+                    if row[1]:  # Customer ID column
                         patient_id = str(row[1])
                         if patient_id.startswith(f"{self.config.BRANCH_CODE}-{date_str}"):
                             try:
@@ -634,7 +634,7 @@ class DailyEntryManager:
         Validate patient data before saving
         
         Args:
-            patient_data: Patient data dictionary
+            patient_data: Customer data dictionary
         
         Raises:
             DataValidationError: If validation fails
@@ -648,7 +648,7 @@ class DailyEntryManager:
         # Name length
         if len(patient_data['patient_name']) > self.config.MAX_PATIENT_NAME_LENGTH:
             raise DataValidationError(
-                f"Patient name exceeds maximum length of {self.config.MAX_PATIENT_NAME_LENGTH}",
+                f"Customer name exceeds maximum length of {self.config.MAX_PATIENT_NAME_LENGTH}",
                 self.branch_id
             )
         
@@ -694,9 +694,9 @@ class DailyEntryManager:
     # CRUD OPERATIONS
     # ========================================================================
     
-    @log_operation("Add Patient Record")
+    @log_operation("Add Customer Record")
     @retry_on_failure(max_attempts=3)
-    def add_patient_record(self, patient_data: Dict[str, Any], created_by: str = "System") -> PatientRecord:
+    def add_patient_record(self, patient_data: Dict[str, Any], created_by: str = "System") -> CustomerRecord:
         """
         Add a new patient record to the current month's Excel file
         
@@ -705,7 +705,7 @@ class DailyEntryManager:
             created_by: Username of the person creating the record
         
         Returns:
-            Created PatientRecord object
+            Created CustomerRecord object
         
         Raises:
             DataValidationError: If validation fails
@@ -718,7 +718,7 @@ class DailyEntryManager:
         patient_id = self._generate_patient_id()
         
         # Create patient record
-        record = PatientRecord(
+        record = CustomerRecord(
             patient_id=patient_id,
             patient_name=patient_data['patient_name'],
             age=int(patient_data['age']),
@@ -762,12 +762,12 @@ class DailyEntryManager:
         self.logger.info(f"Added patient record: {patient_id}")
         return record
     
-    def get_todays_patients(self) -> List[PatientRecord]:
+    def get_todays_customers(self) -> List[CustomerRecord]:
         """
         Get all patient records from today
         
         Returns:
-            List of PatientRecord objects from today
+            List of CustomerRecord objects from today
         """
         today = date.today()
         filepath = self.get_current_excel_file()
@@ -794,7 +794,7 @@ class DailyEntryManager:
                 
                 if record_date == today:
                     try:
-                        record = PatientRecord.from_excel_row(list(row), self.branch_id)
+                        record = CustomerRecord.from_excel_row(list(row), self.branch_id)
                         records.append(record)
                     except Exception as e:
                         self.logger.warning(f"Failed to parse row: {e}")
@@ -854,16 +854,16 @@ class DailyEntryManager:
         yearly_df = pd.concat(all_data, ignore_index=True)
         return yearly_df
     
-    def search_patients(self, search_term: str, date_range: Optional[Tuple[date, date]] = None) -> List[PatientRecord]:
+    def search_customers(self, search_term: str, date_range: Optional[Tuple[date, date]] = None) -> List[CustomerRecord]:
         """
-        Search for patients across records
+        Search for customers across records
         
         Args:
             search_term: Search term (patient name, ID, contact number)
             date_range: Optional tuple of (start_date, end_date)
         
         Returns:
-            List of matching PatientRecord objects
+            List of matching CustomerRecord objects
         """
         search_term = search_term.lower().strip()
         results = []
@@ -897,7 +897,7 @@ class DailyEntryManager:
                         search_term in patient_name or 
                         search_term in contact):
                         try:
-                            record = PatientRecord.from_excel_row(list(row), self.branch_id)
+                            record = CustomerRecord.from_excel_row(list(row), self.branch_id)
                             results.append(record)
                         except Exception as e:
                             self.logger.warning(f"Failed to parse search result row: {e}")
@@ -907,21 +907,21 @@ class DailyEntryManager:
         
         return results
     
-    @log_operation("Update Patient Status")
+    @log_operation("Update Customer Status")
     @retry_on_failure(max_attempts=3)
     def update_patient_status(self, patient_id: str, new_status: str) -> bool:
         """
         Update patient status
         
         Args:
-            patient_id: Patient ID to update
+            patient_id: Customer ID to update
             new_status: New status value
         
         Returns:
             True if updated successfully
         
         Raises:
-            PatientNotFoundError: If patient not found
+            CustomerNotFoundError: If patient not found
             DataValidationError: If status is invalid
         """
         # Validate status
@@ -935,7 +935,7 @@ class DailyEntryManager:
         filepath, row_num = self._find_patient_row(patient_id)
         
         if not filepath:
-            raise PatientNotFoundError(f"Patient not found: {patient_id}", self.branch_id)
+            raise CustomerNotFoundError(f"Customer not found: {patient_id}", self.branch_id)
         
         # Backup before update
         self._create_backup(filepath)
@@ -978,10 +978,10 @@ class DailyEntryManager:
         today = date.today()
         
         # Today's statistics
-        todays_patients = self.get_todays_patients()
-        today_count = len(todays_patients)
+        todays_customers = self.get_todays_customers()
+        today_count = len(todays_customers)
         today_by_status = {}
-        for patient in todays_patients:
+        for patient in todays_customers:
             status = patient.status
             today_by_status[status] = today_by_status.get(status, 0) + 1
         
@@ -997,17 +997,17 @@ class DailyEntryManager:
             'branch_id': self.branch_id,
             'branch_name': self.branch_name,
             'today': {
-                'total_patients': today_count,
+                'total_customers': today_count,
                 'by_status': today_by_status,
                 'date': today.isoformat()
             },
             'this_month': {
-                'total_patients': month_count,
+                'total_customers': month_count,
                 'year': today.year,
                 'month': today.month
             },
             'this_year': {
-                'total_patients': year_count,
+                'total_customers': year_count,
                 'year': today.year
             },
             'generated_at': datetime.now().isoformat()
@@ -1038,14 +1038,14 @@ class DailyEntryManager:
         if not os.path.exists(filepath):
             return {
                 'date': target_date.isoformat(),
-                'total_patients': 0,
+                'total_customers': 0,
                 'by_status': {},
                 'by_gender': {},
                 'by_test_type': {},
                 'message': 'No data available for this date'
             }
         
-        patients = []
+        customers = []
         
         with self.file_lock.acquire(filepath):
             wb = load_workbook(filepath, read_only=True)
@@ -1067,8 +1067,8 @@ class DailyEntryManager:
                 
                 if record_date == target_date:
                     try:
-                        record = PatientRecord.from_excel_row(list(row), self.branch_id)
-                        patients.append(record)
+                        record = CustomerRecord.from_excel_row(list(row), self.branch_id)
+                        customers.append(record)
                     except Exception as e:
                         self.logger.warning(f"Failed to parse row in daily summary: {e}")
                         continue
@@ -1080,7 +1080,7 @@ class DailyEntryManager:
         by_gender = {}
         by_test_type = {}
         
-        for patient in patients:
+        for patient in customers:
             # By status
             by_status[patient.status] = by_status.get(patient.status, 0) + 1
             
@@ -1094,7 +1094,7 @@ class DailyEntryManager:
             'date': target_date.isoformat(),
             'branch_id': self.branch_id,
             'branch_name': self.branch_name,
-            'total_patients': len(patients),
+            'total_customers': len(customers),
             'by_status': by_status,
             'by_gender': by_gender,
             'by_test_type': by_test_type,
@@ -1112,7 +1112,7 @@ class DailyEntryManager:
         Find the Excel file and row number for a patient ID
         
         Args:
-            patient_id: Patient ID to find
+            patient_id: Customer ID to find
         
         Returns:
             Tuple of (filepath, row_number) or (None, None) if not found
@@ -1244,7 +1244,7 @@ class DailyEntryManager:
         
         # Find Excel files in base directory
         for filename in os.listdir(base_dir):
-            if not filename.endswith('.xlsx') or not filename.startswith('Daily_Patient_Log'):
+            if not filename.endswith('.xlsx') or not filename.startswith('Daily_Customer_Log'):
                 continue
             
             filepath = os.path.join(base_dir, filename)
@@ -1292,14 +1292,14 @@ class DailyEntryManager:
     # BRANCH TRANSFER
     # ========================================================================
     
-    @log_operation("Transfer Patient Between Branches")
+    @log_operation("Transfer Customer Between Branches")
     def transfer_between_branches(self, patient_id: str, target_branch_id: str, 
                                   target_manager: 'DailyEntryManager') -> Dict[str, Any]:
         """
         Transfer a patient record to another branch
         
         Args:
-            patient_id: Patient ID to transfer
+            patient_id: Customer ID to transfer
             target_branch_id: Target branch ID
             target_manager: DailyEntryManager instance for target branch
         
@@ -1307,14 +1307,14 @@ class DailyEntryManager:
             Dictionary with transfer results
         
         Raises:
-            PatientNotFoundError: If patient not found
+            CustomerNotFoundError: If patient not found
             DailyEntryError: If transfer fails
         """
         # Find patient in source branch
         filepath, row_num = self._find_patient_row(patient_id)
         
         if not filepath:
-            raise PatientNotFoundError(f"Patient not found: {patient_id}", self.branch_id)
+            raise CustomerNotFoundError(f"Customer not found: {patient_id}", self.branch_id)
         
         # Read patient data
         patient_record = None
@@ -1325,7 +1325,7 @@ class DailyEntryManager:
             
             row_data = list(ws[row_num])
             row_values = [cell.value for cell in row_data]
-            patient_record = PatientRecord.from_excel_row(row_values, self.branch_id)
+            patient_record = CustomerRecord.from_excel_row(row_values, self.branch_id)
             
             wb.close()
         
@@ -1400,14 +1400,14 @@ class DailyEntryManager:
         except Exception as e:
             raise FileAccessError(f"Failed to export CSV: {str(e)}", self.branch_id)
     
-    def export_to_pdf(self, data: pd.DataFrame, filename: str, title: str = "Patient Report") -> str:
+    def export_to_pdf(self, data: pd.DataFrame, filename: str, title: str = "Customer Order") -> str:
         """
         Export data to PDF file
         
         Args:
             data: DataFrame to export
             filename: Output filename
-            title: Report title
+            title: Order title
         
         Returns:
             Path to exported file
@@ -1460,7 +1460,7 @@ class DailyEntryManager:
         except Exception as e:
             raise FileAccessError(f"Failed to export PDF: {str(e)}", self.branch_id)
     
-    @log_operation("Export Daily Report")
+    @log_operation("Export Daily Order")
     def export_daily_report(self, target_date: Optional[date] = None, 
                            format: str = 'csv') -> str:
         """
@@ -1493,18 +1493,18 @@ class DailyEntryManager:
         df_filtered = df[df['Timestamp'].dt.date == target_date]
         
         # Generate filename
-        filename = f"Daily_Report_{self.branch_id}_{target_date.strftime('%Y%m%d')}.{format}"
+        filename = f"Daily_Order_{self.branch_id}_{target_date.strftime('%Y%m%d')}.{format}"
         
         # Export based on format
         if format.lower() == 'csv':
             return self.export_to_csv(df_filtered, filename)
         elif format.lower() == 'pdf':
-            title = f"Daily Report - {target_date.strftime('%Y-%m-%d')}"
+            title = f"Daily Order - {target_date.strftime('%Y-%m-%d')}"
             return self.export_to_pdf(df_filtered, filename, title)
         else:
             raise DataValidationError(f"Unsupported export format: {format}", self.branch_id)
     
-    @log_operation("Export Monthly Report")
+    @log_operation("Export Monthly Order")
     def export_monthly_report(self, year: int, month: int, format: str = 'csv') -> str:
         """
         Export monthly report to file
@@ -1522,17 +1522,17 @@ class DailyEntryManager:
         if df.empty:
             raise FileAccessError(f"No data available for {year}-{month:02d}", self.branch_id)
         
-        filename = f"Monthly_Report_{self.branch_id}_{year}_{month:02d}.{format}"
+        filename = f"Monthly_Order_{self.branch_id}_{year}_{month:02d}.{format}"
         
         if format.lower() == 'csv':
             return self.export_to_csv(df, filename)
         elif format.lower() == 'pdf':
-            title = f"Monthly Report - {year}-{month:02d}"
+            title = f"Monthly Order - {year}-{month:02d}"
             return self.export_to_pdf(df, filename, title)
         else:
             raise DataValidationError(f"Unsupported export format: {format}", self.branch_id)
     
-    @log_operation("Export Yearly Report")
+    @log_operation("Export Yearly Order")
     def export_yearly_report(self, year: int, format: str = 'csv') -> str:
         """
         Export yearly report to file
@@ -1549,12 +1549,12 @@ class DailyEntryManager:
         if df.empty:
             raise FileAccessError(f"No data available for {year}", self.branch_id)
         
-        filename = f"Yearly_Report_{self.branch_id}_{year}.{format}"
+        filename = f"Yearly_Order_{self.branch_id}_{year}.{format}"
         
         if format.lower() == 'csv':
             return self.export_to_csv(df, filename)
         elif format.lower() == 'pdf':
-            title = f"Yearly Report - {year}"
+            title = f"Yearly Order - {year}"
             return self.export_to_pdf(df, filename, title)
         else:
             raise DataValidationError(f"Unsupported export format: {format}", self.branch_id)
@@ -1614,7 +1614,7 @@ if __name__ == "__main__":
         'patient_name': 'John Doe',
         'age': 35,
         'gender': 'Male',
-        'test_type': 'Blood Test',
+        'test_type': 'Blood MenuItem',
         'referring_doctor': 'Dr. Smith',
         'status': 'Pending',
         'contact_number': '1234567890',
@@ -1625,9 +1625,9 @@ if __name__ == "__main__":
         record = manager.add_patient_record(patient_data, created_by="Admin")
         print(f"Added patient: {record.patient_id}")
         
-        # Get today's patients
-        todays_patients = manager.get_todays_patients()
-        print(f"Today's patients: {len(todays_patients)}")
+        # Get today's customers
+        todays_customers = manager.get_todays_customers()
+        print(f"Today's customers: {len(todays_customers)}")
         
         # Get branch statistics
         stats = manager.get_branch_statistics()

@@ -4,20 +4,20 @@ import toast from 'react-hot-toast'
 
 import { useAuth } from '../../contexts/AuthContext'
 import {
-  connectPatientWearable,
-  getPatientEmergencyAlerts,
-  getPatientFamilyProfile,
-  getPatientHomeCollectionMap,
-  getPatientSecondOpinionRequests,
-  getPatientVaultDocuments,
-  getPatientWearables,
-  requestPatientSecondOpinion,
-  uploadPatientVaultDocument,
+  connectCustomerWearable,
+  getCustomerEmergencyAlerts,
+  getCustomerFamilyProfile,
+  getCustomerHomeCollectionMap,
+  getCustomerSecondOpinionRequests,
+  getCustomerVaultDocuments,
+  getCustomerWearables,
+  requestCustomerSecondOpinion,
+  uploadCustomerVaultDocument,
 } from './b2cApi'
 
 import 'leaflet/dist/leaflet.css'
 
-interface PatientPremiumPhase4Props {
+interface CustomerPremiumPhase4Props {
   active: boolean
 }
 
@@ -25,7 +25,7 @@ type WearableProvider = 'Apple Health' | 'Google Fit' | 'Fitbit'
 
 const DEFAULT_CENTER: [number, number] = [28.6139, 77.209]
 
-export default function PatientPremiumPhase4({ active }: PatientPremiumPhase4Props) {
+export default function CustomerPremiumPhase4({ active }: CustomerPremiumPhase4Props) {
   const { token } = useAuth()
   const patientToken = typeof window !== 'undefined' ? localStorage.getItem('patient_portal_token') : null
   const apiToken = patientToken || token
@@ -40,7 +40,7 @@ export default function PatientPremiumPhase4({ active }: PatientPremiumPhase4Pro
   const [vaultLabel, setVaultLabel] = useState('Upload prescription / report')
   const [wearableProvider, setWearableProvider] = useState<WearableProvider>('Apple Health')
   const [wearableToken, setWearableToken] = useState('')
-  const [secondOpinionReportId, setSecondOpinionReportId] = useState('')
+  const [secondOpinionOrderId, setSecondOpinionOrderId] = useState('')
   const [secondOpinionPanel, setSecondOpinionPanel] = useState('Senior Specialist Panel')
 
   const routePoints = useMemo(() => {
@@ -53,12 +53,12 @@ export default function PatientPremiumPhase4({ active }: PatientPremiumPhase4Pro
     setLoading(true)
     try {
       const [familyRes, mapRes, docsRes, wearablesRes, alertsRes, secondOpinionRes] = await Promise.all([
-        getPatientFamilyProfile(apiToken),
-        getPatientHomeCollectionMap(apiToken),
-        getPatientVaultDocuments(apiToken),
-        getPatientWearables(apiToken),
-        getPatientEmergencyAlerts(apiToken),
-        getPatientSecondOpinionRequests(apiToken),
+        getCustomerFamilyProfile(apiToken),
+        getCustomerHomeCollectionMap(apiToken),
+        getCustomerVaultDocuments(apiToken),
+        getCustomerWearables(apiToken),
+        getCustomerEmergencyAlerts(apiToken),
+        getCustomerSecondOpinionRequests(apiToken),
       ])
       setFamilyProfile(familyRes)
       setMapData(mapRes)
@@ -95,7 +95,7 @@ export default function PatientPremiumPhase4({ active }: PatientPremiumPhase4Pro
       return
     }
     try {
-      const result = await uploadPatientVaultDocument(apiToken, vaultFile, vaultLabel)
+      const result = await uploadCustomerVaultDocument(apiToken, vaultFile, vaultLabel)
       setVaultDocs((prev) => [result.document, ...prev])
       setVaultFile(null)
       setVaultLabel('Upload prescription / report')
@@ -108,7 +108,7 @@ export default function PatientPremiumPhase4({ active }: PatientPremiumPhase4Pro
   const connectWearable = async () => {
     if (!apiToken) return
     try {
-      const result = await connectPatientWearable(apiToken, { provider: wearableProvider, token: wearableToken || undefined })
+      const result = await connectCustomerWearable(apiToken, { provider: wearableProvider, token: wearableToken || undefined })
       toast.success(result.message)
       setWearableToken('')
       await loadAll()
@@ -119,13 +119,13 @@ export default function PatientPremiumPhase4({ active }: PatientPremiumPhase4Pro
 
   const requestSecondOpinion = async () => {
     if (!apiToken) return
-    const reportId = Number(secondOpinionReportId)
+    const reportId = Number(secondOpinionOrderId)
     if (!reportId) {
       toast.error('Enter a valid report ID')
       return
     }
     try {
-      const result = await requestPatientSecondOpinion(apiToken, {
+      const result = await requestCustomerSecondOpinion(apiToken, {
         report_id: reportId,
         specialist_panel: secondOpinionPanel,
       })
@@ -172,7 +172,7 @@ export default function PatientPremiumPhase4({ active }: PatientPremiumPhase4Pro
               Refresh
             </button>
           </div>
-          <p className="mt-2 text-sm text-slate-600">{familyProfile?.summary || 'Single account shared by the family for reports, vault uploads, and bookings.'}</p>
+          <p className="mt-2 text-sm text-slate-600">{familyProfile?.summary || 'Single account shared by the family for orders, vault uploads, and bookings.'}</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl bg-white p-3 shadow-sm">
               <p className="text-xs uppercase text-slate-500">Primary Member</p>
@@ -240,7 +240,7 @@ export default function PatientPremiumPhase4({ active }: PatientPremiumPhase4Pro
               <Polyline positions={routePoints} pathOptions={{ color: '#0f766e', weight: 4 }} />
               {mapData?.patient_location && (
                 <CircleMarker center={[mapData.patient_location.lat, mapData.patient_location.lng]} radius={11} pathOptions={{ color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.85 }}>
-                  <Popup>Patient Home</Popup>
+                  <Popup>Customer Home</Popup>
                 </CircleMarker>
               )}
               {mapData?.phlebotomist_location && (
@@ -259,7 +259,7 @@ export default function PatientPremiumPhase4({ active }: PatientPremiumPhase4Pro
         <div className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Centralized Health Vault</p>
-            <h3 className="mt-1 text-lg font-bold text-slate-900">Upload Scanned Reports</h3>
+            <h3 className="mt-1 text-lg font-bold text-slate-900">Upload Scanned Orders</h3>
             <div className="mt-3 space-y-2">
               <input value={vaultLabel} onChange={(event) => setVaultLabel(event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" placeholder="Vault label" />
               <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={(event) => setVaultFile(event.target.files?.[0] || null)} className="w-full rounded-xl border border-dashed border-slate-300 px-3 py-2 text-sm" />
@@ -294,7 +294,7 @@ export default function PatientPremiumPhase4({ active }: PatientPremiumPhase4Pro
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Second Opinion Service</p>
           <h3 className="mt-1 text-lg font-bold text-slate-900">Premium Specialist Panel</h3>
           <div className="mt-3 space-y-2">
-            <input value={secondOpinionReportId} onChange={(event) => setSecondOpinionReportId(event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" placeholder="Report ID" />
+            <input value={secondOpinionOrderId} onChange={(event) => setSecondOpinionOrderId(event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" placeholder="Order ID" />
             <input value={secondOpinionPanel} onChange={(event) => setSecondOpinionPanel(event.target.value)} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" placeholder="Specialist panel" />
             <button type="button" onClick={() => void requestSecondOpinion()} className="w-full rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">
               Request Second Opinion
@@ -334,7 +334,7 @@ export default function PatientPremiumPhase4({ active }: PatientPremiumPhase4Pro
             ) : (
               secondOpinions.map((item) => (
                 <div key={item.id} className="rounded-xl border border-slate-200 p-3 text-sm">
-                  <p className="font-semibold text-slate-900">Report #{item.report_id}</p>
+                  <p className="font-semibold text-slate-900">Order #{item.report_id}</p>
                   <p className="text-xs text-slate-500">{item.specialist_panel}</p>
                   <p className="text-xs text-slate-500">Status: {item.status}</p>
                 </div>

@@ -4,11 +4,11 @@ import { useAuth } from '../../contexts/AuthContext'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import Overview from './Overview'
-import PatientManagement from './PatientManagement'
+import CustomerManagement from './PatientManagement'
 import StaffManagement from '../staff/StaffManagementModule'
 import InventoryManagement from './InventoryManagement'
 import Analytics from './Analytics'
-import Reports from './Reports'
+import Orders from './Reports'
 import BranchLISDashboard from '../branch/BranchLISDashboard'
 import BranchPaymentsDashboard from '../branch/BranchPaymentsDashboard'
 import Accounting from './Accounting'
@@ -16,9 +16,9 @@ import Accounts from './Accounts'
 import HR from './HR'
 import PayrollDashboard from '../payroll/PayrollDashboard'
 import BranchDirectorSalaryDashboard from '../branch-director/BranchDirectorSalaryDashboard'
-import PatientPortal from './PatientPortal'
-import DoctorManagementCRMModule from '../doctors/DoctorManagementCRMModule'
-import DoctorPortal from './DoctorPortal'
+import CustomerPortal from './PatientPortal'
+import StaffManagementCRMModule from '../doctors/DoctorManagementCRMModule'
+import StaffPortal from './DoctorPortal'
 import BranchManagement from './BranchManagement'
 import DailyOperations from './DailyOperations'
 import MyProfileTab from '../staff/MyProfileTab'
@@ -30,17 +30,17 @@ import PerformanceTab from '../staff/PerformanceTab'
 import CeoDashboard from '../ceo/CeoDashboard'
 import CeoOverview from '../ceo/CeoOverview'
 import CeoComplianceLegal from '../ceo/CeoComplianceLegal'
-import CeoDoctorNetwork from '../ceo/CeoDoctorNetwork'
+import CeoStaffNetwork from '../ceo/CeoDoctorNetwork'
 import CeoFinanceAccounts from '../ceo/CeoFinanceAccounts'
 import CeoInventorySupply from '../ceo/CeoInventorySupply'
-import CeoPatientInsights from '../ceo/CeoPatientInsights'
+import CeoCustomerInsights from '../ceo/CeoPatientInsights'
 import CeoPeopleCulture from '../ceo/CeoPeopleCulture'
 import CeoSystemSettings from '../ceo/CeoSystemSettings'
 import CeoProfile from '../ceo/CeoProfile'
 import BranchDetailsDashboard from '../branch/BranchDetailsDashboard'
 import BranchNotificationCenter from '../branch/BranchNotificationCenter'
 
-type ActiveTab = 'overview' | 'ceo-overview' | 'ceo-profile' | 'ceo-people-culture' | 'ceo-finance-accounts' | 'ceo-doctor-network' | 'ceo-patient-insights' | 'ceo-inventory-supply' | 'ceo-compliance-legal' | 'ceo-system-settings' | 'patients' | 'daily-operations' | 'staff' | 'payroll' | 'branch-notifications' | 'staff-profile' | 'staff-salary' | 'staff-attendance' | 'staff-tasks' | 'staff-notifications' | 'staff-performance' | 'inventory' | 'analytics' | 'reports' | 'lis' | 'payments' | 'accounting' | 'accounts' | 'hr' | 'doctor-portal' | 'patient-portal' | 'branch-management' | 'ceo' | 'branch-details'
+type ActiveTab = 'overview' | 'ceo-overview' | 'ceo-profile' | 'ceo-people-culture' | 'ceo-finance-accounts' | 'ceo-doctor-network' | 'ceo-patient-insights' | 'ceo-inventory-supply' | 'ceo-compliance-legal' | 'ceo-system-settings' | 'customers' | 'daily-operations' | 'staff' | 'payroll' | 'branch-notifications' | 'staff-profile' | 'staff-salary' | 'staff-attendance' | 'staff-tasks' | 'staff-notifications' | 'staff-performance' | 'inventory' | 'analytics' | 'orders' | 'lis' | 'payments' | 'accounting' | 'accounts' | 'hr' | 'doctor-portal' | 'patient-portal' | 'branch-management' | 'ceo' | 'branch-details'
 
 const tabPathMap: Record<ActiveTab, string> = {
   overview: '/branch/dashboard',
@@ -53,7 +53,7 @@ const tabPathMap: Record<ActiveTab, string> = {
   'ceo-inventory-supply': '/ceo/inventory-supply',
   'ceo-compliance-legal': '/ceo/compliance-legal',
   'ceo-system-settings': '/ceo/system-settings',
-  patients: '/branch/patients',
+  customers: '/branch/customers',
   'daily-operations': '/branch/daily-operations',
   staff: '/branch/staff',
   payroll: '/branch/payroll',
@@ -66,7 +66,7 @@ const tabPathMap: Record<ActiveTab, string> = {
   'staff-performance': '/staff/performance',
   inventory: '/branch/inventory',
   analytics: '/branch/analytics',
-  reports: '/branch/reports',
+  orders: '/branch/orders',
   lis: '/branch/lis',
   payments: '/branch/payments',
   accounting: '/branch/accounting',
@@ -104,7 +104,7 @@ function tabFromPath(pathname: string): ActiveTab {
   if (path === '/branch/management' || path.startsWith('/branch/management/')) return 'branch-management'
   if (path === '/branch/inventory' || path.startsWith('/branch/inventory/')) return 'inventory'
   if (path === '/branch/analytics' || path.startsWith('/branch/analytics/')) return 'analytics'
-  if (path === '/branch/reports' || path.startsWith('/branch/reports/')) return 'reports'
+  if (path === '/branch/orders' || path.startsWith('/branch/orders/')) return 'orders'
   if (path === '/branch/lis' || path.startsWith('/branch/lis/')) return 'lis'
   if (path === '/branch/payments' || path.startsWith('/branch/payments/')) return 'payments'
   if (path === '/branch/accounting' || path.startsWith('/branch/accounting/')) return 'accounting'
@@ -114,7 +114,7 @@ function tabFromPath(pathname: string): ActiveTab {
   if (path === '/branch/patient-portal' || path.startsWith('/branch/patient-portal/')) return 'patient-portal'
   if (path === '/branch-details' || path.startsWith('/branch-details/')) return 'branch-details'
   if (path === '/ceo' || path.startsWith('/ceo/')) return 'ceo'
-  if (path === '/branch/patients' || path.startsWith('/branch/patients/')) return 'patients'
+  if (path === '/branch/customers' || path.startsWith('/branch/customers/')) return 'customers'
   return 'overview'
 }
 
@@ -206,7 +206,7 @@ export default function Dashboard() {
       <div className="min-h-screen overflow-hidden" style={{
         background: 'linear-gradient(135deg, #fafbff 0%, #f0f4ff 50%, #e8efff 100%)'
       }}>
-        <PatientPortal activeTab={activeTab} />
+        <CustomerPortal activeTab={activeTab} />
       </div>
     )
   }
@@ -239,17 +239,17 @@ export default function Dashboard() {
       case 'ceo-finance-accounts':
         return normalizedRole === 'super_admin' ? <CeoFinanceAccounts /> : <Overview />
       case 'ceo-doctor-network':
-        return normalizedRole === 'super_admin' ? <CeoDoctorNetwork /> : <Overview />
+        return normalizedRole === 'super_admin' ? <CeoStaffNetwork /> : <Overview />
       case 'ceo-patient-insights':
-        return normalizedRole === 'super_admin' ? <CeoPatientInsights /> : <Overview />
+        return normalizedRole === 'super_admin' ? <CeoCustomerInsights /> : <Overview />
       case 'ceo-inventory-supply':
         return normalizedRole === 'super_admin' ? <CeoInventorySupply /> : <Overview />
       case 'ceo-compliance-legal':
         return normalizedRole === 'super_admin' ? <CeoComplianceLegal /> : <Overview />
       case 'ceo-system-settings':
         return normalizedRole === 'super_admin' ? <CeoSystemSettings /> : <Overview />
-      case 'patients':
-        return <PatientManagement />
+      case 'customers':
+        return <CustomerManagement />
       case 'daily-operations':
         return <DailyOperations />
       case 'staff':
@@ -278,8 +278,8 @@ export default function Dashboard() {
         return <InventoryManagement />
       case 'analytics':
         return <Analytics />
-      case 'reports':
-        return <Reports />
+      case 'orders':
+        return <Orders />
       case 'lis':
         return <BranchLISDashboard />
       case 'payments':
@@ -291,7 +291,7 @@ export default function Dashboard() {
       case 'hr':
         return <HR activeTab={activeTab} />
       case 'doctor-portal':
-        return normalizedRole === 'doctor' ? <DoctorPortal /> : <DoctorManagementCRMModule />
+        return normalizedRole === 'doctor' ? <StaffPortal /> : <StaffManagementCRMModule />
       case 'branch-management':
         return <BranchManagement />
       case 'ceo':
@@ -306,7 +306,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{
-      background: 'linear-gradient(135deg, #fafbff 0%, #f0f4ff 50%, #e8efff 100%)'
+      background: 'linear-gradient(135deg, #fffaf6 0%, #f8f9fa 55%, #eef8f5 100%)'
     }}>
       <Sidebar activeTab={activeTab} setActiveTab={handleTabChange} />
       <div className="flex-1 flex flex-col overflow-hidden">

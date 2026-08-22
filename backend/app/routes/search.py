@@ -1,6 +1,6 @@
 """
 Search endpoints for autocomplete functionality in Daily Operations.
-Provides lightweight search APIs for Doctors, Tests, and Patients.
+Provides lightweight search APIs for Staffs, MenuItems, and Customers.
 """
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, HTTPException
@@ -14,14 +14,14 @@ from app.models.daily_entry_module import DailyEntryModule
 router = APIRouter(prefix="/api", tags=["search"])
 
 
-@router.get("/doctors/search")
-def search_doctors(
+@router.get("/staff/search")
+def search_staff(
     q: str = Query("", min_length=0, max_length=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Search for doctors by name, filtered to the user's branch.
+    Search for staff by name, filtered to the user's branch.
     Searches referred_doctor field in DailyEntryModule.
     Returns: List of {id, name}
     """
@@ -37,20 +37,20 @@ def search_doctors(
     if q.strip():
         query = query.filter(DailyEntryModule.referred_doctor.ilike(f"%{q}%"))
     
-    doctors = query.order_by(DailyEntryModule.referred_doctor).limit(10).all()
+    staff = query.order_by(DailyEntryModule.referred_doctor).limit(10).all()
     
     # Return as list of {id, name} where id is the doctor name itself
-    return [{"id": doctor[0], "name": doctor[0]} for doctor in doctors]
+    return [{"id": doctor[0], "name": doctor[0]} for doctor in staff]
 
 
-@router.get("/tests/search")
-def search_tests(
+@router.get("/menu_items/search")
+def search_menu_items(
     q: str = Query("", min_length=0, max_length=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Search for tests by name, filtered to the user's branch.
+    Search for menu_items by name, filtered to the user's branch.
     Searches test_name field in DailyEntryModule.
     Returns: List of {id, name} (id is the test_name for consistency)
     """
@@ -66,20 +66,20 @@ def search_tests(
     if q.strip():
         query = query.filter(DailyEntryModule.test_name.ilike(f"%{q}%"))
     
-    tests = query.order_by(DailyEntryModule.test_name).limit(10).all()
+    menu_items = query.order_by(DailyEntryModule.test_name).limit(10).all()
     
     # Return as list of {id, name} where id is the test_name itself
-    return [{"id": test[0], "name": test[0]} for test in tests]
+    return [{"id": test[0], "name": test[0]} for test in menu_items]
 
 
-@router.get("/patients/search")
-def search_patients(
+@router.get("/customers/search")
+def search_customers(
     q: str = Query("", min_length=0, max_length=100),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Search for patients by name or auto_patient_id, filtered to the user's branch.
+    Search for customers by name or auto_patient_id, filtered to the user's branch.
     Searches patient_name and auto_patient_id fields in DailyEntryModule.
     Returns: List of {id, name, auto_patient_id}
     """
@@ -102,7 +102,7 @@ def search_patients(
             (DailyEntryModule.auto_patient_id.ilike(search_term))
         )
     
-    patients = query.order_by(DailyEntryModule.patient_name).limit(10).all()
+    customers = query.order_by(DailyEntryModule.patient_name).limit(10).all()
     
     return [
         {
@@ -110,5 +110,5 @@ def search_patients(
             "name": patient[1],  # patient_name
             "patient_id": patient[0]
         }
-        for patient in patients
+        for patient in customers
     ]

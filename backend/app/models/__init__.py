@@ -1,6 +1,6 @@
-from app.models.doctor import Doctor
-from app.models.doctor_portal import CMECourse, DoctorAuditLog, DoctorMessage, DoctorReferralLog, LoyaltyReward, Order, PatientSearchLog, TestPanel
-from app.models.referring_doctor import ReferringDoctor, ReferralLog, DoctorShareLink
+from app.models.staff import Staff
+from app.models.doctor_portal import CMECourse, StaffAuditLog, StaffMessage, StaffReferralLog, LoyaltyReward, Order, CustomerSearchLog, MenuItemPanel
+from app.models.referring_doctor import ReferringStaff, ReferralLog, StaffShareLink
 from app.models.branch_bank_details import BranchBankDetails
 from app.models.inventory import (
     InventoryItemV2,
@@ -30,7 +30,7 @@ from app.models.payroll import (
     StaffSalaryConfig,
     StaffTaxDeclaration,
 )
-from app.models.patient import PatientProfile, FamilyMember
+from app.models.customer import CustomerProfile, FamilyMember
 from app.models.patient_b2c import (
     DigitalConsent,
     FollowUpReminder,
@@ -38,13 +38,13 @@ from app.models.patient_b2c import (
     HealthGoal,
     HealthTrend,
     LoyaltyReward,
-    PatientB2CAppointment,
-    PatientB2CAuditLog,
+    CustomerB2CAppointment,
+    CustomerB2CAuditLog,
     Referral,
-    ReportSummary,
-    TestCatalog,
+    OrderSummary,
+    MenuItemCatalog,
 )
-from app.models.patient_phase4 import EmergencyAlert, PatientVaultDocument, SecondOpinionRequest, WearableSync
+from app.models.patient_phase4 import EmergencyAlert, CustomerVaultDocument, SecondOpinionRequest, WearableSync
 from app.models.payment import Invoice, InvoiceItem, Payment
 from app.models.lab_result import LabResult
 from app.models.appointment import Appointment
@@ -89,9 +89,9 @@ class Branch(Base):
 
     # Relationships
     users = relationship("User", back_populates="branch")
-    patients = relationship("Patient", back_populates="branch")
+    customers = relationship("Customer", back_populates="branch")
     daily_entries = relationship("DailyEntry", back_populates="branch")
-    staff = relationship("Staff", back_populates="branch")
+    StaffEmployee = relationship("StaffEmployee", back_populates="branch")
     inventory_items = relationship("InventoryItem", back_populates="branch")
     invoices = relationship("Invoice", back_populates="branch")
     calendar_days = relationship("CalendarDay", back_populates="branch")
@@ -106,7 +106,7 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
-    role = Column(String(50), default="staff")  # super_admin, branch_admin, staff, patient
+    role = Column(String(50), default="StaffEmployee")  # super_admin, branch_admin, StaffEmployee, patient
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
@@ -121,8 +121,8 @@ class User(Base):
     branch = relationship("Branch", back_populates="users")
     activity_logs = relationship("ActivityLog", back_populates="user")
 
-class Patient(Base):
-    __tablename__ = "patients"
+class Customer(Base):
+    __tablename__ = "customers"
 
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(String(20), unique=True, nullable=False)  # Auto-generated
@@ -154,7 +154,7 @@ class Patient(Base):
     is_active = Column(Boolean, default=True)
     
     # Relationships
-    branch = relationship("Branch", back_populates="patients")
+    branch = relationship("Branch", back_populates="customers")
     daily_entries = relationship("DailyEntry", back_populates="patient")
     appointments = relationship("Appointment", back_populates="patient")
     invoices = relationship("Invoice", back_populates="patient")
@@ -165,23 +165,23 @@ class DailyEntry(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
-    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=True)
+    patient_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     
     # Entry Details
     entry_date = Column(DateTime, nullable=False)
     entry_time = Column(DateTime, default=func.now())
     
-    # Doctor Information
+    # StaffEmployee Information
     doctor_name = Column(String(200), nullable=False)
     doctor_specialization = Column(String(100), nullable=True)
     consultation_fee = Column(DECIMAL(10, 2), nullable=False)
     
-    # Patient Information
+    # Customer Information
     patient_name = Column(String(200), nullable=False)
     patient_mobile = Column(String(15), nullable=False)
     patient_address = Column(Text, nullable=False)
     
-    # Test Information
+    # MenuItem Information
     test_names = Column(Text, nullable=False)  # JSON or comma-separated
     test_cost = Column(DECIMAL(10, 2), default=0)
     discount = Column(DECIMAL(10, 2), default=0)
@@ -200,11 +200,11 @@ class DailyEntry(Base):
     
     # Relationships
     branch = relationship("Branch", back_populates="daily_entries")
-    patient = relationship("Patient", back_populates="daily_entries")
+    patient = relationship("Customer", back_populates="daily_entries")
     creator = relationship("User")
 
-class Staff(Base):
-    __tablename__ = "staff"
+class StaffEmployee(Base):
+    __tablename__ = "staff_employees"
 
     id = Column(Integer, primary_key=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
@@ -232,16 +232,16 @@ class Staff(Base):
     created_at = Column(DateTime, default=func.now())
     
     # Relationships
-    branch = relationship("Branch", back_populates="staff")
+    branch = relationship("Branch", back_populates="StaffEmployee")
     user = relationship("User")
-    attendance_records = relationship("AttendanceRecord", back_populates="staff")
-    salary_records = relationship("SalaryRecord", back_populates="staff")
+    attendance_records = relationship("AttendanceRecord", back_populates="StaffEmployee_employee")
+    salary_records = relationship("SalaryRecord", back_populates="StaffEmployee_employee")
 
 class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_id = Column(Integer, ForeignKey("staff.id"), nullable=False)
+    staff_employee_id = Column(Integer, ForeignKey("staff_employees.id"), nullable=False)
     
     # Date & Time
     attendance_date = Column(DateTime, nullable=False)
@@ -259,14 +259,14 @@ class AttendanceRecord(Base):
     created_at = Column(DateTime, default=func.now())
     
     # Relationships
-    staff = relationship("Staff", back_populates="attendance_records")
+    StaffEmployee_employee = relationship("StaffEmployee", back_populates="attendance_records")
     approver = relationship("User")
 
 class SalaryRecord(Base):
     __tablename__ = "salary_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    staff_id = Column(Integer, ForeignKey("staff.id"), nullable=False)
+    staff_employee_id = Column(Integer, ForeignKey("staff_employees.id"), nullable=False)
     
     # Salary Details
     month = Column(Integer, nullable=False)  # 1-12
@@ -287,7 +287,7 @@ class SalaryRecord(Base):
     created_at = Column(DateTime, default=func.now())
     
     # Relationships
-    staff = relationship("Staff", back_populates="salary_records")
+    StaffEmployee_employee = relationship("StaffEmployee", back_populates="salary_records")
 
 class InventoryItem(Base):
     __tablename__ = "inventory_items"

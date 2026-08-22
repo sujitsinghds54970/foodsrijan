@@ -148,7 +148,7 @@ export interface StatutoryContributionItem {
   total: number
 }
 
-export interface BranchPayrollStatutoryReport {
+export interface BranchPayrollStatutoryOrder {
   payroll_run_id: number
   month: number
   year: number

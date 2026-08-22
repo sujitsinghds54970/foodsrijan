@@ -138,7 +138,7 @@ def generate_offer_letter_pdf(user_data: dict[str, Any], branch_data: dict[str, 
     c.setFont("Helvetica", 11)
     c.drawString(62, cursor, f"Joining Date: {joining_date}")
     cursor -= 16
-    c.drawString(62, cursor, f"Reporting Manager: {reporting_manager}")
+    c.drawString(62, cursor, f"Ordering Manager: {reporting_manager}")
     cursor -= 16
     c.drawString(62, cursor, f"Compensation: {salary}")
     cursor -= 26

@@ -5,8 +5,8 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 
-class ReferringDoctor(Base):
-    __tablename__ = "referring_doctors"
+class ReferringStaff(Base):
+    __tablename__ = "referring_staff"
 
     id = Column(Integer, primary_key=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
@@ -53,7 +53,7 @@ class ReferralLog(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
-    doctor_id = Column(Integer, ForeignKey("referring_doctors.id"), nullable=False, index=True)
+    doctor_id = Column(Integer, ForeignKey("referring_staff.id"), nullable=False, index=True)
 
     patient_name = Column(String(200), nullable=False)
     patient_mobile = Column(String(20), nullable=True)
@@ -66,17 +66,17 @@ class ReferralLog(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, nullable=False, default=func.now())
 
-    doctor = relationship("ReferringDoctor", back_populates="referral_logs")
+    doctor = relationship("ReferringStaff", back_populates="referral_logs")
     branch = relationship("Branch")
     creator = relationship("User")
 
 
-class DoctorShareLink(Base):
+class StaffShareLink(Base):
     __tablename__ = "doctor_share_links"
 
     id = Column(Integer, primary_key=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
-    doctor_id = Column(Integer, ForeignKey("referring_doctors.id"), nullable=False, index=True)
+    doctor_id = Column(Integer, ForeignKey("referring_staff.id"), nullable=False, index=True)
 
     token = Column(String(64), nullable=False, unique=True, index=True)
     filename = Column(String(255), nullable=False)
@@ -89,6 +89,6 @@ class DoctorShareLink(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, nullable=False, default=func.now())
 
-    doctor = relationship("ReferringDoctor")
+    doctor = relationship("ReferringStaff")
     branch = relationship("Branch")
     creator = relationship("User")

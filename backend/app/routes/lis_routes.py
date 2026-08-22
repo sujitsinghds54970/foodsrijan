@@ -2,10 +2,10 @@
 LIS (Laboratory Information System) Routes for VaidyaVihar Diagnostic ERP
 
 Lab testing management endpoints:
-- Test orders
+- MenuItem orders
 - Sample management
 - Result entry
-- Report generation
+- Order generation
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -17,26 +17,26 @@ import uuid
 
 from app.database import get_db
 from app.models.lis import (
-    TestOrder, TestOrderItem, TestStatus, Sample, SampleType,
-    TestResult, ResultFlag, TestCategory, LabTestMaster, GeneratedReport
+    MenuItemOrder, MenuItemOrderItem, MenuItemStatus, Sample, SampleType,
+    MenuItemResult, ResultFlag, MenuItemCategory, LabMenuItemMaster, GeneratedOrder
 )
 
 router = APIRouter()
 
 
 # Pydantic Schemas
-class TestOrderCreate(BaseModel):
+class MenuItemOrderCreate(BaseModel):
     patient_id: int
     referred_by: Optional[str] = None
     referred_by_id: Optional[int] = None
     priority: str = "routine"
-    tests: List[dict]
+    menu_items: List[dict]
     clinical_history: Optional[str] = None
     notes: Optional[str] = None
     branch_id: Optional[int] = None
 
 
-class TestResultCreate(BaseModel):
+class MenuItemResultCreate(BaseModel):
     order_item_id: int
     parameter_name: str
     result_value: Optional[str] = None
@@ -53,7 +53,7 @@ class SampleCollect(BaseModel):
     collection_notes: Optional[str] = None
 
 
-class TestMasterCreate(BaseModel):
+class MenuItemMasterCreate(BaseModel):
     test_code: str
     test_name: str
     test_name_hindi: Optional[str] = None
@@ -85,15 +85,15 @@ def generate_report_number():
     return f"RPT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:4].upper()}"
 
 
-# Test Master Endpoints
+# MenuItem Master Endpoints
 @router.post("/test-master")
-async def create_test_master(test_data: TestMasterCreate, db: Session = Depends(get_db)):
+async def create_test_master(test_data: MenuItemMasterCreate, db: Session = Depends(get_db)):
     """Create a new test master entry"""
-    test = LabTestMaster(
+    test = LabMenuItemMaster(
         test_code=test_data.test_code,
         test_name=test_data.test_name,
         test_name_hindi=test_data.test_name_hindi,
-        category=TestCategory(test_data.category),
+        category=MenuItemCategory(test_data.category),
         sample_type=SampleType(test_data.sample_type),
         base_price=test_data.base_price,
         discounted_price=test_data.discounted_price,
@@ -128,18 +128,18 @@ async def list_test_master(
     db: Session = Depends(get_db)
 ):
     """List test master entries"""
-    query = db.query(LabTestMaster)
+    query = db.query(LabMenuItemMaster)
     
     if category:
-        query = query.filter(LabTestMaster.category == TestCategory(category))
+        query = query.filter(LabMenuItemMaster.category == MenuItemCategory(category))
     
-    query = query.filter(LabTestMaster.is_active == is_active)
+    query = query.filter(LabMenuItemMaster.is_active == is_active)
     
-    tests = query.offset(skip).limit(limit).all()
+    menu_items = query.offset(skip).limit(limit).all()
     
     return {
         "success": True,
-        "tests": [
+        "menu_items": [
             {
                 "id": t.id,
                 "test_code": t.test_code,
@@ -150,14 +150,14 @@ async def list_test_master(
                 "discounted_price": t.discounted_price,
                 "turnaround_time_hours": t.turnaround_time_hours
             }
-            for t in tests
+            for t in menu_items
         ]
     }
 
 
-# Test Order Endpoints
+# MenuItem Order Endpoints
 @router.post("/orders")
-async def create_test_order(order_data: TestOrderCreate, db: Session = Depends(get_db)):
+async def create_test_order(order_data: MenuItemOrderCreate, db: Session = Depends(get_db)):
     """Create a new test order"""
     # Generate order number
     order_number = generate_order_number()
@@ -165,18 +165,18 @@ async def create_test_order(order_data: TestOrderCreate, db: Session = Depends(g
     # Calculate total amount
     total_amount = sum(
         test.get("quantity", 1) * test.get("price", 0) 
-        for test in order_data.tests
+        for test in order_data.menu_items
     )
     
     # Calculate expected delivery date
     max_turnaround = max(
         test.get("turnaround_time", 24) 
-        for test in order_data.tests
+        for test in order_data.menu_items
     )
     expected_delivery = datetime.utcnow() + timedelta(hours=max_turnaround)
     
     # Create order
-    test_order = TestOrder(
+    test_order = MenuItemOrder(
         order_number=order_number,
         patient_id=order_data.patient_id,
         referred_by=order_data.referred_by,
@@ -194,8 +194,8 @@ async def create_test_order(order_data: TestOrderCreate, db: Session = Depends(g
     db.flush()
     
     # Add test items
-    for test in order_data.tests:
-        test_item = TestOrderItem(
+    for test in order_data.menu_items:
+        test_item = MenuItemOrderItem(
             order_id=test_order.id,
             test_master_id=test.get("test_master_id"),
             test_name=test.get("test_name"),
@@ -236,22 +236,22 @@ async def list_test_orders(
     db: Session = Depends(get_db)
 ):
     """List test orders"""
-    query = db.query(TestOrder)
+    query = db.query(MenuItemOrder)
     
     if patient_id:
-        query = query.filter(TestOrder.patient_id == patient_id)
+        query = query.filter(MenuItemOrder.patient_id == patient_id)
     if status:
-        query = query.filter(TestOrder.status == TestStatus(status))
+        query = query.filter(MenuItemOrder.status == MenuItemStatus(status))
     if priority:
-        query = query.filter(TestOrder.priority == priority)
+        query = query.filter(MenuItemOrder.priority == priority)
     if branch_id:
-        query = query.filter(TestOrder.branch_id == branch_id)
+        query = query.filter(MenuItemOrder.branch_id == branch_id)
     if start_date:
-        query = query.filter(TestOrder.order_date >= start_date)
+        query = query.filter(MenuItemOrder.order_date >= start_date)
     if end_date:
-        query = query.filter(TestOrder.order_date <= end_date)
+        query = query.filter(MenuItemOrder.order_date <= end_date)
     
-    orders = query.order_by(TestOrder.order_date.desc()).offset(skip).limit(limit).all()
+    orders = query.order_by(MenuItemOrder.order_date.desc()).offset(skip).limit(limit).all()
     
     return {
         "success": True,
@@ -275,12 +275,12 @@ async def list_test_orders(
 @router.get("/orders/{order_id}")
 async def get_test_order(order_id: int, db: Session = Depends(get_db)):
     """Get test order details"""
-    order = db.query(TestOrder).filter(TestOrder.id == order_id).first()
+    order = db.query(MenuItemOrder).filter(MenuItemOrder.id == order_id).first()
     
     if not order:
-        raise HTTPException(status_code=404, detail="Test order not found")
+        raise HTTPException(status_code=404, detail="MenuItem order not found")
     
-    items = db.query(TestOrderItem).filter(TestOrderItem.order_id == order_id).all()
+    items = db.query(MenuItemOrderItem).filter(MenuItemOrderItem.order_id == order_id).all()
     
     return {
         "success": True,
@@ -317,12 +317,12 @@ async def get_test_order(order_id: int, db: Session = Depends(get_db)):
 @router.put("/orders/{order_id}/status")
 async def update_order_status(order_id: int, new_status: str, db: Session = Depends(get_db)):
     """Update test order status"""
-    order = db.query(TestOrder).filter(TestOrder.id == order_id).first()
+    order = db.query(MenuItemOrder).filter(MenuItemOrder.id == order_id).first()
     
     if not order:
-        raise HTTPException(status_code=404, detail="Test order not found")
+        raise HTTPException(status_code=404, detail="MenuItem order not found")
     
-    order.status = TestStatus(new_status)
+    order.status = MenuItemStatus(new_status)
     
     # Update timestamps based on status
     if new_status == "sample_collected":
@@ -347,10 +347,10 @@ async def update_order_status(order_id: int, new_status: str, db: Session = Depe
 @router.post("/samples")
 async def create_sample(sample_data: SampleCollect, db: Session = Depends(get_db)):
     """Record sample collection"""
-    order = db.query(TestOrder).filter(TestOrder.id == sample_data.order_id).first()
+    order = db.query(MenuItemOrder).filter(MenuItemOrder.id == sample_data.order_id).first()
     
     if not order:
-        raise HTTPException(status_code=404, detail="Test order not found")
+        raise HTTPException(status_code=404, detail="MenuItem order not found")
     
     # Generate sample ID
     sample_id = generate_sample_id()
@@ -368,7 +368,7 @@ async def create_sample(sample_data: SampleCollect, db: Session = Depends(get_db
     db.add(sample)
     
     # Update order status
-    order.status = TestStatus.SAMPLE_COLLECTED
+    order.status = MenuItemStatus.SAMPLE_COLLECTED
     order.sample_collection_date = datetime.utcnow()
     
     db.commit()
@@ -388,14 +388,14 @@ async def create_sample(sample_data: SampleCollect, db: Session = Depends(get_db
 
 # Result Entry Endpoints
 @router.post("/results")
-async def enter_test_result(result_data: TestResultCreate, db: Session = Depends(get_db)):
+async def enter_test_result(result_data: MenuItemResultCreate, db: Session = Depends(get_db)):
     """Enter test result"""
-    order_item = db.query(TestOrderItem).filter(TestOrderItem.id == result_data.order_item_id).first()
+    order_item = db.query(MenuItemOrderItem).filter(MenuItemOrderItem.id == result_data.order_item_id).first()
     
     if not order_item:
-        raise HTTPException(status_code=404, detail="Test order item not found")
+        raise HTTPException(status_code=404, detail="MenuItem order item not found")
     
-    result = TestResult(
+    result = MenuItemResult(
         order_item_id=result_data.order_item_id,
         parameter_name=result_data.parameter_name,
         result_value=result_data.result_value,
@@ -409,7 +409,7 @@ async def enter_test_result(result_data: TestResultCreate, db: Session = Depends
     db.add(result)
     
     # Update order item status
-    order_item.status = TestStatus.RESULT_ENTERED
+    order_item.status = MenuItemStatus.RESULT_ENTERED
     order_item.result_entered_at = datetime.utcnow()
     
     db.commit()
@@ -430,11 +430,11 @@ async def enter_test_result(result_data: TestResultCreate, db: Session = Depends
 @router.get("/orders/{order_id}/results")
 async def get_order_results(order_id: int, db: Session = Depends(get_db)):
     """Get all results for an order"""
-    items = db.query(TestOrderItem).filter(TestOrderItem.order_id == order_id).all()
+    items = db.query(MenuItemOrderItem).filter(MenuItemOrderItem.order_id == order_id).all()
     
     results = []
     for item in items:
-        item_results = db.query(TestResult).filter(TestResult.order_item_id == item.id).all()
+        item_results = db.query(MenuItemResult).filter(MenuItemResult.order_item_id == item.id).all()
         results.append({
             "item_id": item.id,
             "test_name": item.test_name,
@@ -460,18 +460,18 @@ async def get_order_results(order_id: int, db: Session = Depends(get_db)):
 @router.post("/orders/{order_id}/verify")
 async def verify_order_results(order_id: int, db: Session = Depends(get_db)):
     """Verify all results for an order"""
-    order = db.query(TestOrder).filter(TestOrder.id == order_id).first()
+    order = db.query(MenuItemOrder).filter(MenuItemOrder.id == order_id).first()
     
     if not order:
-        raise HTTPException(status_code=404, detail="Test order not found")
+        raise HTTPException(status_code=404, detail="MenuItem order not found")
     
-    items = db.query(TestOrderItem).filter(TestOrderItem.order_id == order_id).all()
+    items = db.query(MenuItemOrderItem).filter(MenuItemOrderItem.order_id == order_id).all()
     
     for item in items:
-        item.status = TestStatus.VERIFIED
+        item.status = MenuItemStatus.VERIFIED
         item.result_verified_at = datetime.utcnow()
     
-    order.status = TestStatus.VERIFIED
+    order.status = MenuItemStatus.VERIFIED
     
     db.commit()
     
@@ -481,20 +481,20 @@ async def verify_order_results(order_id: int, db: Session = Depends(get_db)):
     }
 
 
-# Report Generation Endpoints
+# Order Generation Endpoints
 @router.post("/orders/{order_id}/generate-report")
 async def generate_report(order_id: int, db: Session = Depends(get_db)):
     """Generate report for an order"""
-    order = db.query(TestOrder).filter(TestOrder.id == order_id).first()
+    order = db.query(MenuItemOrder).filter(MenuItemOrder.id == order_id).first()
     
     if not order:
-        raise HTTPException(status_code=404, detail="Test order not found")
+        raise HTTPException(status_code=404, detail="MenuItem order not found")
     
     # Check if all results are verified
-    items = db.query(TestOrderItem).filter(TestOrderItem.order_id == order_id).all()
+    items = db.query(MenuItemOrderItem).filter(MenuItemOrderItem.order_id == order_id).all()
     
     for item in items:
-        if item.status != TestStatus.VERIFIED:
+        if item.status != MenuItemStatus.VERIFIED:
             raise HTTPException(
                 status_code=400, 
                 detail=f"Cannot generate report: {item.test_name} results not verified"
@@ -503,7 +503,7 @@ async def generate_report(order_id: int, db: Session = Depends(get_db)):
     # Generate report number
     report_number = generate_report_number()
     
-    report = GeneratedReport(
+    report = GeneratedOrder(
         report_number=report_number,
         order_id=order_id,
         report_type="lab_report",
@@ -513,7 +513,7 @@ async def generate_report(order_id: int, db: Session = Depends(get_db)):
     db.add(report)
     
     # Update order status
-    order.status = TestStatus.REPORT_GENERATED
+    order.status = MenuItemStatus.REPORT_GENERATED
     
     db.commit()
     db.refresh(report)
@@ -530,13 +530,13 @@ async def generate_report(order_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/reports/{report_id}")
+@router.get("/orders/{report_id}")
 async def get_report(report_id: int, db: Session = Depends(get_db)):
     """Get report details"""
-    report = db.query(GeneratedReport).filter(GeneratedReport.id == report_id).first()
+    report = db.query(GeneratedOrder).filter(GeneratedOrder.id == report_id).first()
     
     if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="Order not found")
     
     return {
         "success": True,
@@ -566,8 +566,8 @@ async def get_lis_statistics(
         end_date = datetime.utcnow()
     
     # Count orders by status
-    orders = db.query(TestOrder).filter(
-        TestOrder.order_date.between(start_date, end_date)
+    orders = db.query(MenuItemOrder).filter(
+        MenuItemOrder.order_date.between(start_date, end_date)
     ).all()
     
     stats = {

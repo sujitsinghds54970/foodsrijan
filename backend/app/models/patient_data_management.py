@@ -72,10 +72,10 @@ class User(Base):
     branch: Mapped["Branch"] = relationship("Branch", back_populates="users")
 
 
-class Doctor(Base):
-    __tablename__ = "doctors"
+class Staff(Base):
+    __tablename__ = "staff"
     __table_args__ = (
-        UniqueConstraint("branch_id", "name", name="uq_doctors_branch_name"),
+        UniqueConstraint("branch_id", "name", name="uq_staff_branch_name"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -86,14 +86,14 @@ class Doctor(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
-    branch: Mapped["Branch"] = relationship("Branch", back_populates="doctors")
-    visits: Mapped[List["PatientVisit"]] = relationship("PatientVisit", back_populates="doctor")
+    branch: Mapped["Branch"] = relationship("Branch", back_populates="staff")
+    visits: Mapped[List["CustomerVisit"]] = relationship("CustomerVisit", back_populates="doctor")
 
 
-class Test(Base):
-    __tablename__ = "tests"
+class MenuItem(Base):
+    __tablename__ = "menu_items"
     __table_args__ = (
-        UniqueConstraint("branch_id", "name", name="uq_tests_branch_name"),
+        UniqueConstraint("branch_id", "name", name="uq_menu_items_branch_name"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -104,28 +104,28 @@ class Test(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
-    branch: Mapped["Branch"] = relationship("Branch", back_populates="tests")
-    panel_links: Mapped[List["PanelTest"]] = relationship("PanelTest", back_populates="test")
+    branch: Mapped["Branch"] = relationship("Branch", back_populates="menu_items")
+    panel_links: Mapped[List["PanelMenuItem"]] = relationship("PanelMenuItem", back_populates="test")
 
 
-class PanelTest(Base):
-    __tablename__ = "panel_tests"
+class PanelMenuItem(Base):
+    __tablename__ = "panel_menu_items"
     __table_args__ = (
-        UniqueConstraint("panel_name", "test_id", name="uq_panel_tests_panel_test"),
+        UniqueConstraint("panel_name", "test_id", name="uq_panel_menu_items_panel_test"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     panel_name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
-    test_id: Mapped[int] = mapped_column(ForeignKey("tests.id"), nullable=False, index=True)
+    test_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"), nullable=False, index=True)
     quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
-    test: Mapped["Test"] = relationship("Test", back_populates="panel_links")
+    test: Mapped["MenuItem"] = relationship("MenuItem", back_populates="panel_links")
 
 
-class Patient(Base):
-    __tablename__ = "patients"
+class Customer(Base):
+    __tablename__ = "customers"
     __table_args__ = (
-        UniqueConstraint("branch_id", "name", "phone", name="uq_patients_branch_name_phone"),
+        UniqueConstraint("branch_id", "name", "phone", name="uq_customers_branch_name_phone"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -139,11 +139,11 @@ class Patient(Base):
     referred_by: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
-    branch: Mapped["Branch"] = relationship("Branch", back_populates="patients")
-    visits: Mapped[List["PatientVisit"]] = relationship("PatientVisit", back_populates="patient")
+    branch: Mapped["Branch"] = relationship("Branch", back_populates="customers")
+    visits: Mapped[List["CustomerVisit"]] = relationship("CustomerVisit", back_populates="patient")
 
 
-class PatientVisit(Base):
+class CustomerVisit(Base):
     __tablename__ = "patient_visits"
     __table_args__ = (
         Index("ix_patient_visits_branch_visit_date", "branch_id", "visit_date"),
@@ -151,8 +151,8 @@ class PatientVisit(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     branch_id: Mapped[int] = mapped_column(ForeignKey("branches.id"), nullable=False, index=True)
-    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id"), nullable=False, index=True)
-    doctor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("doctors.id"), nullable=True, index=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), nullable=False, index=True)
+    doctor_id: Mapped[Optional[int]] = mapped_column(ForeignKey("staff.id"), nullable=True, index=True)
 
     receipt_no: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     visit_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
@@ -175,34 +175,34 @@ class PatientVisit(Base):
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     branch: Mapped["Branch"] = relationship("Branch", back_populates="visits")
-    patient: Mapped["Patient"] = relationship("Patient", back_populates="visits")
-    doctor: Mapped[Optional["Doctor"]] = relationship("Doctor", back_populates="visits")
-    tests: Mapped[List["VisitTest"]] = relationship(
-        "VisitTest", back_populates="visit", cascade="all, delete-orphan"
+    patient: Mapped["Customer"] = relationship("Customer", back_populates="visits")
+    doctor: Mapped[Optional["Staff"]] = relationship("Staff", back_populates="visits")
+    menu_items: Mapped[List["VisitMenuItem"]] = relationship(
+        "VisitMenuItem", back_populates="visit", cascade="all, delete-orphan"
     )
     payments: Mapped[List["Payment"]] = relationship(
         "Payment", back_populates="visit", cascade="all, delete-orphan"
     )
-    deliveries: Mapped[List["ReportDelivery"]] = relationship(
-        "ReportDelivery", back_populates="visit", cascade="all, delete-orphan"
+    deliveries: Mapped[List["OrderDelivery"]] = relationship(
+        "OrderDelivery", back_populates="visit", cascade="all, delete-orphan"
     )
 
 
-class VisitTest(Base):
-    __tablename__ = "visit_tests"
+class VisitMenuItem(Base):
+    __tablename__ = "visit_menu_items"
     __table_args__ = (
-        UniqueConstraint("visit_id", "test_id", name="uq_visit_tests_visit_test"),
+        UniqueConstraint("visit_id", "test_id", name="uq_visit_menu_items_visit_test"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     visit_id: Mapped[int] = mapped_column(ForeignKey("patient_visits.id"), nullable=False, index=True)
-    test_id: Mapped[int] = mapped_column(ForeignKey("tests.id"), nullable=False, index=True)
+    test_id: Mapped[int] = mapped_column(ForeignKey("menu_items.id"), nullable=False, index=True)
     fee: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)  # historical fee snapshot
     discount_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, nullable=False)
     net_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
 
-    visit: Mapped["PatientVisit"] = relationship("PatientVisit", back_populates="tests")
-    test: Mapped["Test"] = relationship("Test")
+    visit: Mapped["CustomerVisit"] = relationship("CustomerVisit", back_populates="menu_items")
+    test: Mapped["MenuItem"] = relationship("MenuItem")
 
 
 class Payment(Base):
@@ -220,10 +220,10 @@ class Payment(Base):
     created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
-    visit: Mapped["PatientVisit"] = relationship("PatientVisit", back_populates="payments")
+    visit: Mapped["CustomerVisit"] = relationship("CustomerVisit", back_populates="payments")
 
 
-class ReportDelivery(Base):
+class OrderDelivery(Base):
     __tablename__ = "report_deliveries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -233,7 +233,7 @@ class ReportDelivery(Base):
     delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     remarks: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    visit: Mapped["PatientVisit"] = relationship("PatientVisit", back_populates="deliveries")
+    visit: Mapped["CustomerVisit"] = relationship("CustomerVisit", back_populates="deliveries")
 
 
 class AuditLog(Base):

@@ -1,9 +1,9 @@
 """
-Patient Portal Routes for VaidyaVihar Diagnostic ERP
+Customer Portal Routes for VaidyaVihar Diagnostic ERP
 
-Patient self-service endpoints:
-- Patient registration and authentication
-- View own reports
+Customer self-service endpoints:
+- Customer registration and authentication
+- View own orders
 - Book appointments
 - Profile management
 """
@@ -19,15 +19,15 @@ import string
 
 from app.database import get_db
 from app.models.patient_portal import (
-    PatientPortalUser, PatientAppointment, PatientReportAccess,
-    PatientFeedback, PatientFamilyMember, PatientDocument
+    CustomerPortalUser, CustomerAppointment, CustomerOrderAccess,
+    CustomerFeedback, CustomerFamilyMember, CustomerDocument
 )
 
 router = APIRouter()
 
 
 # Pydantic Schemas
-class PatientPortalRegister(BaseModel):
+class CustomerPortalRegister(BaseModel):
     patient_id: Optional[int] = None
     username: str
     email: EmailStr
@@ -35,16 +35,16 @@ class PatientPortalRegister(BaseModel):
     password: str
 
 
-class PatientPortalLogin(BaseModel):
+class CustomerPortalLogin(BaseModel):
     username: str
     password: str
 
 
-class PatientPortalOTPRequest(BaseModel):
+class CustomerPortalOTPRequest(BaseModel):
     phone: str
 
 
-class PatientPortalOTPVerify(BaseModel):
+class CustomerPortalOTPVerify(BaseModel):
     phone: str
     otp: str
 
@@ -80,19 +80,19 @@ def generate_access_token():
 
 # Authentication Endpoints
 @router.post("/register")
-async def register_patient_portal(user_data: PatientPortalRegister, db: Session = Depends(get_db)):
+async def register_patient_portal(user_data: CustomerPortalRegister, db: Session = Depends(get_db)):
     """Register a new patient portal user"""
     # Check if username or email already exists
-    existing_user = db.query(PatientPortalUser).filter(
-        (PatientPortalUser.username == user_data.username) |
-        (PatientPortalUser.email == user_data.email)
+    existing_user = db.query(CustomerPortalUser).filter(
+        (CustomerPortalUser.username == user_data.username) |
+        (CustomerPortalUser.email == user_data.email)
     ).first()
     
     if existing_user:
         raise HTTPException(status_code=400, detail="Username or email already exists")
     
     # Create user
-    portal_user = PatientPortalUser(
+    portal_user = CustomerPortalUser(
         patient_id=user_data.patient_id,
         username=user_data.username,
         email=user_data.email,
@@ -118,10 +118,10 @@ async def register_patient_portal(user_data: PatientPortalRegister, db: Session 
 
 
 @router.post("/login")
-async def login_patient_portal(credentials: PatientPortalLogin, db: Session = Depends(get_db)):
+async def login_patient_portal(credentials: CustomerPortalLogin, db: Session = Depends(get_db)):
     """Login to patient portal"""
-    user = db.query(PatientPortalUser).filter(
-        PatientPortalUser.username == credentials.username
+    user = db.query(CustomerPortalUser).filter(
+        CustomerPortalUser.username == credentials.username
     ).first()
     
     if not user or user.password_hash != credentials.password:
@@ -149,10 +149,10 @@ async def login_patient_portal(credentials: PatientPortalLogin, db: Session = De
 
 
 @router.post("/otp/request")
-async def request_otp(otp_request: PatientPortalOTPRequest, db: Session = Depends(get_db)):
+async def request_otp(otp_request: CustomerPortalOTPRequest, db: Session = Depends(get_db)):
     """Request OTP for login"""
-    user = db.query(PatientPortalUser).filter(
-        PatientPortalUser.phone == otp_request.phone
+    user = db.query(CustomerPortalUser).filter(
+        CustomerPortalUser.phone == otp_request.phone
     ).first()
     
     if not user:
@@ -175,10 +175,10 @@ async def request_otp(otp_request: PatientPortalOTPRequest, db: Session = Depend
 
 
 @router.post("/otp/verify")
-async def verify_otp(otp_verify: PatientPortalOTPVerify, db: Session = Depends(get_db)):
+async def verify_otp(otp_verify: CustomerPortalOTPVerify, db: Session = Depends(get_db)):
     """Verify OTP and login"""
-    user = db.query(PatientPortalUser).filter(
-        PatientPortalUser.phone == otp_verify.phone
+    user = db.query(CustomerPortalUser).filter(
+        CustomerPortalUser.phone == otp_verify.phone
     ).first()
     
     if not user:
@@ -210,14 +210,14 @@ async def verify_otp(otp_verify: PatientPortalOTPVerify, db: Session = Depends(g
     }
 
 
-# Patient Appointments
+# Customer Appointments
 @router.post("/appointments")
 async def book_appointment(appointment_data: AppointmentBooking, db: Session = Depends(get_db)):
     """Book an appointment"""
     # Generate appointment number
     appointment_number = f"PAT-APT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
     
-    appointment = PatientAppointment(
+    appointment = CustomerAppointment(
         appointment_number=appointment_number,
         patient_id=appointment_data.patient_id,
         doctor_id=appointment_data.doctor_id,
@@ -254,15 +254,15 @@ async def list_patient_appointments(
     db: Session = Depends(get_db)
 ):
     """List patient's appointments"""
-    query = db.query(PatientAppointment).filter(
-        PatientAppointment.patient_id == patient_id
+    query = db.query(CustomerAppointment).filter(
+        CustomerAppointment.patient_id == patient_id
     )
     
     if status:
-        query = query.filter(PatientAppointment.status == status)
+        query = query.filter(CustomerAppointment.status == status)
     
     appointments = query.order_by(
-        PatientAppointment.appointment_date.desc()
+        CustomerAppointment.appointment_date.desc()
     ).offset(skip).limit(limit).all()
     
     return {
@@ -285,8 +285,8 @@ async def list_patient_appointments(
 @router.get("/appointments/{appointment_id}")
 async def get_appointment(appointment_id: int, db: Session = Depends(get_db)):
     """Get appointment details"""
-    appointment = db.query(PatientAppointment).filter(
-        PatientAppointment.id == appointment_id
+    appointment = db.query(CustomerAppointment).filter(
+        CustomerAppointment.id == appointment_id
     ).first()
     
     if not appointment:
@@ -310,8 +310,8 @@ async def get_appointment(appointment_id: int, db: Session = Depends(get_db)):
 @router.delete("/appointments/{appointment_id}")
 async def cancel_appointment(appointment_id: int, reason: str, db: Session = Depends(get_db)):
     """Cancel an appointment"""
-    appointment = db.query(PatientAppointment).filter(
-        PatientAppointment.id == appointment_id
+    appointment = db.query(CustomerAppointment).filter(
+        CustomerAppointment.id == appointment_id
     ).first()
     
     if not appointment:
@@ -332,8 +332,8 @@ async def cancel_appointment(appointment_id: int, reason: str, db: Session = Dep
     }
 
 
-# Reports Access
-@router.post("/reports/access")
+# Orders Access
+@router.post("/orders/access")
 async def request_report_access(
     patient_id: int,
     report_id: str,
@@ -341,10 +341,10 @@ async def request_report_access(
 ):
     """Request access to a report"""
     # Check if access already exists
-    existing = db.query(PatientReportAccess).filter(
-        PatientReportAccess.patient_id == patient_id,
-        PatientReportAccess.report_id == report_id,
-        PatientReportAccess.is_active == True
+    existing = db.query(CustomerOrderAccess).filter(
+        CustomerOrderAccess.patient_id == patient_id,
+        CustomerOrderAccess.report_id == report_id,
+        CustomerOrderAccess.is_active == True
     ).first()
     
     if existing:
@@ -358,7 +358,7 @@ async def request_report_access(
     # Create new access
     access_token = generate_access_token()
     
-    access = PatientReportAccess(
+    access = CustomerOrderAccess(
         patient_id=patient_id,
         report_id=report_id,
         access_token=access_token,
@@ -375,15 +375,15 @@ async def request_report_access(
     }
 
 
-@router.get("/reports/verify")
+@router.get("/orders/verify")
 async def verify_report_access(
     access_token: str,
     db: Session = Depends(get_db)
 ):
     """Verify report access token"""
-    access = db.query(PatientReportAccess).filter(
-        PatientReportAccess.access_token == access_token,
-        PatientReportAccess.is_active == True
+    access = db.query(CustomerOrderAccess).filter(
+        CustomerOrderAccess.access_token == access_token,
+        CustomerOrderAccess.is_active == True
     ).first()
     
     if not access:
@@ -412,7 +412,7 @@ async def submit_feedback(
     db: Session = Depends(get_db)
 ):
     """Submit patient feedback"""
-    feedback = PatientFeedback(
+    feedback = CustomerFeedback(
         patient_id=patient_id,
         feedback_type=feedback_data.feedback_type,
         rating=feedback_data.rating,
@@ -449,7 +449,7 @@ async def add_family_member(
     db: Session = Depends(get_db)
 ):
     """Add family member"""
-    member = PatientFamilyMember(
+    member = CustomerFamilyMember(
         portal_user_id=portal_user_id,
         name=name,
         relationship=relationship,
@@ -476,8 +476,8 @@ async def add_family_member(
 @router.get("/family-members/{portal_user_id}")
 async def list_family_members(portal_user_id: int, db: Session = Depends(get_db)):
     """List family members"""
-    members = db.query(PatientFamilyMember).filter(
-        PatientFamilyMember.portal_user_id == portal_user_id
+    members = db.query(CustomerFamilyMember).filter(
+        CustomerFamilyMember.portal_user_id == portal_user_id
     ).all()
     
     return {
@@ -499,8 +499,8 @@ async def list_family_members(portal_user_id: int, db: Session = Depends(get_db)
 @router.get("/profile/{portal_user_id}")
 async def get_portal_profile(portal_user_id: int, db: Session = Depends(get_db)):
     """Get portal user profile"""
-    user = db.query(PatientPortalUser).filter(
-        PatientPortalUser.id == portal_user_id
+    user = db.query(CustomerPortalUser).filter(
+        CustomerPortalUser.id == portal_user_id
     ).first()
     
     if not user:
@@ -529,8 +529,8 @@ async def update_portal_profile(
     db: Session = Depends(get_db)
 ):
     """Update portal user profile"""
-    user = db.query(PatientPortalUser).filter(
-        PatientPortalUser.id == portal_user_id
+    user = db.query(CustomerPortalUser).filter(
+        CustomerPortalUser.id == portal_user_id
     ).first()
     
     if not user:

@@ -458,7 +458,7 @@ const CeoComplianceLegal = () => {
             <p className="text-sm font-semibold text-slate-700">Incident Dashboard</p>
             <div className="mt-3 overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Incident ID</th><th className="pb-2 pr-4">Category</th><th className="pb-2 pr-4">Severity</th><th className="pb-2 pr-4">Branch</th><th className="pb-2 pr-4">Status</th><th className="pb-2">Reported At</th></tr></thead>
+                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Incident ID</th><th className="pb-2 pr-4">Category</th><th className="pb-2 pr-4">Severity</th><th className="pb-2 pr-4">Branch</th><th className="pb-2 pr-4">Status</th><th className="pb-2">Ordered At</th></tr></thead>
                 <tbody>
                   {(incidentRisk?.incident_dashboard || []).map((row) => (
                     <tr key={row.incident_id} className="border-b border-slate-100">
@@ -498,7 +498,7 @@ const CeoComplianceLegal = () => {
             >
               <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Concern category" />
               <textarea className="h-24 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Describe concern anonymously" />
-              <button type="submit" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white">Submit Anonymous Report</button>
+              <button type="submit" className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white">Submit Anonymous Order</button>
             </form>
           </div>
 
@@ -599,10 +599,10 @@ const CeoComplianceLegal = () => {
           </div>
 
           <div className={`${CARD_CLASS} col-span-12`}>
-            <p className="text-sm font-semibold text-slate-700">Inspection Report Repository</p>
+            <p className="text-sm font-semibold text-slate-700">Inspection Order Repository</p>
             <div className="mt-3 overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Report ID</th><th className="pb-2 pr-4">Inspection</th><th className="pb-2 pr-4">Branch</th><th className="pb-2 pr-4">Report Date</th><th className="pb-2">Status</th></tr></thead>
+                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Order ID</th><th className="pb-2 pr-4">Inspection</th><th className="pb-2 pr-4">Branch</th><th className="pb-2 pr-4">Order Date</th><th className="pb-2">Status</th></tr></thead>
                 <tbody>
                   {(auditReadiness?.inspection_report_repository || []).map((row) => (
                     <tr key={row.report_id} className="border-b border-slate-100">
@@ -665,7 +665,7 @@ const CeoComplianceLegal = () => {
             <p className="text-sm font-semibold text-slate-700">Data Breach Incident Log</p>
             <div className="mt-3 overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Incident ID</th><th className="pb-2 pr-4">Branch</th><th className="pb-2 pr-4">Severity</th><th className="pb-2 pr-4">Reported On</th><th className="pb-2">Resolution Status</th></tr></thead>
+                <thead><tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500"><th className="pb-2 pr-4">Incident ID</th><th className="pb-2 pr-4">Branch</th><th className="pb-2 pr-4">Severity</th><th className="pb-2 pr-4">Ordered On</th><th className="pb-2">Resolution Status</th></tr></thead>
                 <tbody>
                   {(privacySecurity?.data_breach_incident_log || []).map((row) => (
                     <tr key={row.incident_id} className="border-b border-slate-100">

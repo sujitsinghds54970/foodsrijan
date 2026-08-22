@@ -19,12 +19,12 @@ router = APIRouter(
 
 
 def _table_reference_snapshot(db: Session) -> dict[str, Any]:
-    staff_count = int(db.query(func.count(StaffProfile.id)).scalar() or 0)
+    StaffEmployee_count = int(db.query(func.count(StaffProfile.id)).scalar() or 0)
     payroll_run_count = int(db.query(func.count(PayrollRun.id)).scalar() or 0)
     attendance_count = int(db.query(func.count(Attendance.id)).scalar() or 0)
     branch_count = int(db.query(func.count(Branch.id)).scalar() or 0)
     return {
-        "staff_profiles_count": staff_count,
+        "staff_profiles_count": StaffEmployee_count,
         "payroll_runs_count": payroll_run_count,
         "attendance_logs_count": attendance_count,
         "branches_count": branch_count,
@@ -63,8 +63,8 @@ def get_people_health_score(db: Session = Depends(get_db)):
         },
         "table_reference": _table_reference_snapshot(db),
         "future_data_mapping": {
-            "engagement": "Derived from staff attendance consistency and participation trends (StaffProfile + Attendance).",
-            "attrition": "Derived from active/inactive staff lifecycle and payroll continuity (StaffProfile + PayrollRun).",
+            "engagement": "Derived from StaffEmployee attendance consistency and participation trends (StaffProfile + Attendance).",
+            "attrition": "Derived from active/inactive StaffEmployee lifecycle and payroll continuity (StaffProfile + PayrollRun).",
             "leadership_pipeline": "Derived from manager coverage, tenure, and role progression across branches (StaffProfile + Branch).",
         },
     }
@@ -249,7 +249,7 @@ def get_people_leadership_development(db: Session = Depends(get_db)):
             "pipeline_readiness": "StaffProfile tenure, role history, manager ratings, and assessment scores.",
             "manager_effectiveness": "Branch-level engagement + retention metrics from Attendance and Payroll trends.",
             "internal_promotion_rate": "Open-role fill records mapped to existing StaffProfile promotions.",
-            "skills_gap_analysis": "Role competency matrix against current staff certifications and branch demand.",
+            "skills_gap_analysis": "Role competency matrix against current StaffEmployee certifications and branch demand.",
             "hipo_pool": "Performance, attendance, and leadership nominations from StaffProfile + HR assessments.",
         },
     }

@@ -6,7 +6,7 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
-class TestCatalog(Base):
+class MenuItemCatalog(Base):
     __tablename__ = "patient_test_catalog"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -17,7 +17,7 @@ class TestCatalog(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
-class PatientB2CAppointment(Base):
+class CustomerB2CAppointment(Base):
     __tablename__ = "patient_b2c_appointments"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -30,7 +30,7 @@ class PatientB2CAppointment(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")
 
 
 class DigitalConsent(Base):
@@ -41,10 +41,10 @@ class DigitalConsent(Base):
     consent_text = Column(Text, nullable=False)
     signed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    appointment = relationship("PatientB2CAppointment")
+    appointment = relationship("CustomerB2CAppointment")
 
 
-class PatientB2CAuditLog(Base):
+class CustomerB2CAuditLog(Base):
     __tablename__ = "patient_b2c_audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -55,10 +55,10 @@ class PatientB2CAuditLog(Base):
     event_meta = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")
 
 
-class ReportSummary(Base):
+class OrderSummary(Base):
     __tablename__ = "patient_report_summaries"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -69,7 +69,7 @@ class ReportSummary(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")
 
 
 class HealthTrend(Base):
@@ -83,7 +83,7 @@ class HealthTrend(Base):
     graph_data = Column(JSON, nullable=False, default=list)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")
 
 
 class HealthScore(Base):
@@ -94,7 +94,7 @@ class HealthScore(Base):
     score = Column(Integer, nullable=False)
     last_calculated = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")
 
 
 class FollowUpReminder(Base):
@@ -107,7 +107,7 @@ class FollowUpReminder(Base):
     status = Column(String(40), nullable=False, default="active", index=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")
 
 
 class LoyaltyReward(Base):
@@ -120,7 +120,7 @@ class LoyaltyReward(Base):
     description = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")
 
 
 class Referral(Base):
@@ -132,8 +132,8 @@ class Referral(Base):
     bonus_earned = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 
-    referrer = relationship("PatientProfile", foreign_keys=[referrer_id])
-    referee = relationship("PatientProfile", foreign_keys=[referee_id])
+    referrer = relationship("CustomerProfile", foreign_keys=[referrer_id])
+    referee = relationship("CustomerProfile", foreign_keys=[referee_id])
 
 
 class HealthGoal(Base):
@@ -147,4 +147,4 @@ class HealthGoal(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    patient_profile = relationship("PatientProfile")
+    patient_profile = relationship("CustomerProfile")

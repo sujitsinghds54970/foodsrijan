@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, desc, func
 import uuid
 
-from app.models import DailyEntry, Patient, Branch, User, Invoice, LabResult
+from app.models import DailyEntry, Customer, Branch, User, Invoice, LabResult
 from app.utils.auth_system import auth_guard
-from app.schemas.user import MonthlyReportRequest, ExportResponse
+from app.schemas.user import MonthlyOrderRequest, ExportResponse
 
 class ExcelExportService:
     def __init__(self, base_path: str = "/tmp/exports"):
@@ -68,7 +68,7 @@ class ExcelExportService:
                 # Get patient info if available
                 patient_info = ""
                 if entry.patient_id:
-                    patient = db.query(Patient).filter(Patient.id == entry.patient_id).first()
+                    patient = db.query(Customer).filter(Customer.id == entry.patient_id).first()
                     if patient:
                         patient_info = f"{patient.first_name} {patient.last_name}"
                 
@@ -77,14 +77,14 @@ class ExcelExportService:
                     "Time": entry.entry_time.strftime("%H:%M:%S"),
                     "Branch": branch.name if branch else "N/A",
                     "Branch Location": branch.location if branch else "N/A",
-                    "Doctor Name": entry.doctor_name,
-                    "Doctor Specialization": entry.doctor_specialization or "N/A",
+                    "StaffEmployee Name": entry.doctor_name,
+                    "StaffEmployee Specialization": entry.doctor_specialization or "N/A",
                     "Consultation Fee": float(entry.consultation_fee),
-                    "Patient Name": entry.patient_name,
-                    "Patient Mobile": entry.patient_mobile,
-                    "Patient Address": entry.patient_address,
-                    "Test Names": entry.test_names,
-                    "Test Cost": float(entry.test_cost),
+                    "Customer Name": entry.patient_name,
+                    "Customer Mobile": entry.patient_mobile,
+                    "Customer Address": entry.patient_address,
+                    "MenuItem Names": entry.test_names,
+                    "MenuItem Cost": float(entry.test_cost),
                     "Discount": float(entry.discount),
                     "Total Amount": float(entry.total_amount),
                     "Payment Status": entry.payment_status,
@@ -93,7 +93,7 @@ class ExcelExportService:
                     "Balance Amount": float(entry.total_amount - entry.amount_paid),
                     "Referred By": entry.referred_by or "N/A",
                     "Notes": entry.notes or "N/A",
-                    "Patient ID": entry.patient_id if entry.patient_id else "Walk-in"
+                    "Customer ID": entry.patient_id if entry.patient_id else "Walk-in"
                 })
             
             # Create DataFrame
@@ -105,15 +105,15 @@ class ExcelExportService:
             
             with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
                 # Main report sheet
-                df.to_excel(writer, sheet_name='Monthly Report', index=False)
+                df.to_excel(writer, sheet_name='Monthly Order', index=False)
                 
                 # Summary sheet
                 summary_data = {
                     "Metric": [
-                        "Total Patients",
+                        "Total Customers",
                         "Total Entries",
                         "Total Consultation Fee",
-                        "Total Test Cost",
+                        "Total MenuItem Cost",
                         "Total Amount",
                         "Total Paid",
                         "Total Pending",
@@ -123,10 +123,10 @@ class ExcelExportService:
                         "Insurance Payments"
                     ],
                     "Value": [
-                        df["Patient Mobile"].nunique(),
+                        df["Customer Mobile"].nunique(),
                         len(df),
                         df["Consultation Fee"].sum(),
-                        df["Test Cost"].sum(),
+                        df["MenuItem Cost"].sum(),
                         df["Total Amount"].sum(),
                         df["Amount Paid"].sum(),
                         df["Balance Amount"].sum(),
@@ -140,18 +140,18 @@ class ExcelExportService:
                 summary_df = pd.DataFrame(summary_data)
                 summary_df.to_excel(writer, sheet_name='Summary', index=False)
                 
-                # Doctor-wise report
-                doctor_summary = df.groupby("Doctor Name").agg({
-                    "Patient Mobile": "nunique",
+                # StaffEmployee-wise report
+                doctor_summary = df.groupby("StaffEmployee Name").agg({
+                    "Customer Mobile": "nunique",
                     "Total Amount": "sum",
                     "Amount Paid": "sum"
                 }).reset_index()
-                doctor_summary.columns = ["Doctor Name", "Total Patients", "Total Amount", "Total Paid"]
-                doctor_summary.to_excel(writer, sheet_name='Doctor Summary', index=False)
+                doctor_summary.columns = ["StaffEmployee Name", "Total Customers", "Total Amount", "Total Paid"]
+                doctor_summary.to_excel(writer, sheet_name='StaffEmployee Summary', index=False)
                 
                 # Payment status report
                 payment_status = df.groupby("Payment Status").agg({
-                    "Patient Mobile": "nunique",
+                    "Customer Mobile": "nunique",
                     "Total Amount": "sum",
                     "Amount Paid": "sum"
                 }).reset_index()
@@ -171,38 +171,38 @@ class ExcelExportService:
                 message=f"Error generating report: {str(e)}"
             )
     
-    def generate_staff_attendance_report(
+    def generate_StaffEmployee_attendance_report(
         self,
         db: Session,
         year: int,
         month: int,
         branch_id: Optional[int] = None
     ) -> ExportResponse:
-        """Generate staff attendance Excel report"""
+        """Generate StaffEmployee attendance Excel report"""
         
         try:
-            from app.models import Staff, AttendanceRecord
+            from app.models import StaffEmployee, AttendanceRecord
             
-            # Query staff with attendance records
-            query = db.query(Staff).join(AttendanceRecord)
+            # Query StaffEmployee with attendance records
+            query = db.query(StaffEmployee).join(AttendanceRecord)
             
             # Filter by branch if specified
             if branch_id:
-                query = query.filter(Staff.branch_id == branch_id)
+                query = query.filter(StaffEmployee.branch_id == branch_id)
             
-            staff_list = query.all()
+            StaffEmployee_list = query.all()
             
-            if not staff_list:
+            if not StaffEmployee_list:
                 return ExportResponse(
                     success=False,
-                    message=f"No staff records found for {year}-{month:02d}"
+                    message=f"No StaffEmployee records found for {year}-{month:02d}"
                 )
             
             report_data = []
             
-            for staff in staff_list:
+            for StaffEmployee in StaffEmployee_list:
                 # Get branch info
-                branch = db.query(Branch).filter(Branch.id == staff.branch_id).first()
+                branch = db.query(Branch).filter(Branch.id == StaffEmployee.branch_id).first()
                 
                 # Get attendance records for the month
                 start_date = datetime(year, month, 1)
@@ -213,7 +213,7 @@ class ExcelExportService:
                 
                 attendance_records = db.query(AttendanceRecord).filter(
                     and_(
-                        AttendanceRecord.staff_id == staff.id,
+                        AttendanceRecord.staff_employee_id == StaffEmployee.id,
                         AttendanceRecord.attendance_date >= start_date,
                         AttendanceRecord.attendance_date <= end_date
                     )
@@ -227,35 +227,35 @@ class ExcelExportService:
                 leave_days = len([r for r in attendance_records if r.status == "leave"])
                 
                 report_data.append({
-                    "Employee ID": staff.employee_id,
-                    "Staff Name": f"{staff.user.first_name} {staff.user.last_name}",
+                    "Employee ID": StaffEmployee.employee_id,
+                    "StaffEmployee Name": f"{StaffEmployee.user.first_name} {StaffEmployee.user.last_name}",
                     "Branch": branch.name if branch else "N/A",
-                    "Department": staff.department,
-                    "Position": staff.position,
+                    "Department": StaffEmployee.department,
+                    "Position": StaffEmployee.position,
                     "Total Working Days": total_days,
                     "Present Days": present_days,
                     "Absent Days": absent_days,
                     "Late Days": late_days,
                     "Leave Days": leave_days,
                     "Attendance Percentage": round((present_days / total_days * 100) if total_days > 0 else 0, 2),
-                    "Salary": float(staff.salary),
-                    "Date of Joining": staff.date_of_joining.strftime("%Y-%m-%d")
+                    "Salary": float(StaffEmployee.salary),
+                    "Date of Joining": StaffEmployee.date_of_joining.strftime("%Y-%m-%d")
                 })
             
             # Create DataFrame
             df = pd.DataFrame(report_data)
             
             # Create Excel file
-            filename = f"vaidya_vihar_staff_attendance_{year}_{month:02d}_{uuid.uuid4().hex[:8]}.xlsx"
+            filename = f"vaidya_vihar_StaffEmployee_attendance_{year}_{month:02d}_{uuid.uuid4().hex[:8]}.xlsx"
             filepath = os.path.join(self.base_path, filename)
             
             with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='Attendance Report', index=False)
+                df.to_excel(writer, sheet_name='Attendance Order', index=False)
                 
                 # Summary sheet
                 summary_data = {
                     "Metric": [
-                        "Total Staff",
+                        "Total StaffEmployee",
                         "Average Attendance %",
                         "Total Salary",
                         "Departments"
@@ -273,7 +273,7 @@ class ExcelExportService:
             
             return ExportResponse(
                 success=True,
-                message=f"Staff attendance report generated successfully for {year}-{month:02d}",
+                message=f"StaffEmployee attendance report generated successfully for {year}-{month:02d}",
                 file_path=filepath,
                 download_url=f"/api/export/download/{filename}"
             )
@@ -281,7 +281,7 @@ class ExcelExportService:
         except Exception as e:
             return ExportResponse(
                 success=False,
-                message=f"Error generating staff attendance report: {str(e)}"
+                message=f"Error generating StaffEmployee attendance report: {str(e)}"
             )
     
     def generate_inventory_report(
@@ -366,7 +366,7 @@ class ExcelExportService:
             filepath = os.path.join(self.base_path, filename)
             
             with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='Inventory Report', index=False)
+                df.to_excel(writer, sheet_name='Inventory Order', index=False)
                 
                 # Summary sheet
                 total_value = (df["Current Stock"] * df["Purchase Price"]).sum()

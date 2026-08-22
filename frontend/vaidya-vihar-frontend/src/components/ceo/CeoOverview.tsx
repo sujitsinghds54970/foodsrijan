@@ -722,7 +722,7 @@ export default function CeoOverview() {
           {[
             { label: 'Total Branches', value: masterSummary?.total_branches ?? 0 },
             { label: 'Total Users', value: masterSummary?.total_users ?? 0 },
-            { label: 'Total Patients', value: masterSummary?.total_patients ?? 0 },
+            { label: 'Total Customers', value: masterSummary?.total_customers ?? 0 },
           ].map((item) => (
             <button
               type="button"

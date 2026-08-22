@@ -14,9 +14,9 @@ from sqlalchemy.orm import Session
 
 from app.database import Base, engine, get_db
 from app.models.daily_entry_module import DailyEntryModule
-from app.models.patient import PatientProfile, FamilyMember
-from app.models.patient_b2c import ReportSummary
-from app.models.patient_phase4 import EmergencyAlert, PatientVaultDocument, SecondOpinionRequest, WearableSync
+from app.models.customer import CustomerProfile, FamilyMember
+from app.models.patient_b2c import OrderSummary
+from app.models.patient_phase4 import EmergencyAlert, CustomerVaultDocument, SecondOpinionRequest, WearableSync
 from app.routes.patient_b2c_phase1 import (
     _build_ai_summary,
     _ensure_patient_b2c_schema,
@@ -26,7 +26,7 @@ from app.routes.patient_b2c_phase1 import (
     _resolve_report_download_url,
 )
 
-router = APIRouter(tags=["Patient Phase 4"])
+router = APIRouter(tags=["Customer Phase 4"])
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 PATIENT_VAULT_DIR = BASE_DIR / "uploads" / "patient_vault"
@@ -40,7 +40,7 @@ def _ensure_phase4_schema() -> None:
             WearableSync.__table__,
             SecondOpinionRequest.__table__,
             EmergencyAlert.__table__,
-            PatientVaultDocument.__table__,
+            CustomerVaultDocument.__table__,
         ],
     )
 
@@ -70,7 +70,7 @@ class HomeCollectionMapResponse(BaseModel):
     message: str
 
 
-def _patient_family_payload(profile: PatientProfile) -> dict:
+def _patient_family_payload(profile: CustomerProfile) -> dict:
     members = [
         {
             "id": member.id,
@@ -99,7 +99,7 @@ def _patient_family_payload(profile: PatientProfile) -> dict:
     }
 
 
-def _home_collection_map(profile: PatientProfile) -> HomeCollectionMapResponse:
+def _home_collection_map(profile: CustomerProfile) -> HomeCollectionMapResponse:
     patient_lat = 28.6139
     patient_lng = 77.209
     phlebotomist_lat = 28.6201
@@ -130,7 +130,7 @@ def _detect_critical_report(report: DailyEntryModule, abnormal_flags: dict[str, 
 
 @router.get("/api/patient/family-profile")
 def get_family_profile(
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_phase4_schema()
     return _patient_family_payload(profile)
@@ -138,7 +138,7 @@ def get_family_profile(
 
 @router.get("/api/patient/home-collection/map")
 def get_home_collection_map(
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_phase4_schema()
     _ = profile
@@ -148,13 +148,13 @@ def get_home_collection_map(
 @router.get("/api/patient/vault")
 def list_patient_vault_documents(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_phase4_schema()
     rows = (
-        db.query(PatientVaultDocument)
-        .filter(PatientVaultDocument.patient_id == profile.id)
-        .order_by(PatientVaultDocument.created_at.desc())
+        db.query(CustomerVaultDocument)
+        .filter(CustomerVaultDocument.patient_id == profile.id)
+        .order_by(CustomerVaultDocument.created_at.desc())
         .all()
     )
     return {
@@ -180,7 +180,7 @@ async def upload_patient_vault_document(
     file: UploadFile = File(...),
     document_label: Optional[str] = Form(default=None),
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_phase4_schema()
 
@@ -203,7 +203,7 @@ async def upload_patient_vault_document(
     target_path.write_bytes(file_bytes)
 
     ocr_excerpt = _mock_ocr_text(file.filename, file.content_type, file_bytes)
-    vault_row = PatientVaultDocument(
+    vault_row = CustomerVaultDocument(
         patient_id=profile.id,
         original_filename=file.filename,
         file_url=f"/api/files/patient_vault/{profile.id}/{safe_name}",
@@ -244,7 +244,7 @@ async def upload_patient_vault_document(
 def create_emergency_alert(
     payload: CriticalAlertPayload,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_phase4_schema()
 
@@ -254,7 +254,7 @@ def create_emergency_alert(
         .first()
     )
     if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="Order not found")
 
     abnormal_flags = _infer_abnormal_flags(report.test_name)
     if not _detect_critical_report(report, abnormal_flags) and "critical" not in payload.alert_type.lower():
@@ -297,7 +297,7 @@ def create_emergency_alert(
 @router.get("/api/patient/emergency-alerts")
 def list_emergency_alerts(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_phase4_schema()
     rows = (
@@ -326,7 +326,7 @@ def list_emergency_alerts(
 def request_second_opinion(
     payload: SecondOpinionPayload,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_phase4_schema()
 
@@ -336,7 +336,7 @@ def request_second_opinion(
         .first()
     )
     if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="Order not found")
 
     row = SecondOpinionRequest(
         patient_id=profile.id,
@@ -374,7 +374,7 @@ def request_second_opinion(
 @router.get("/api/patient/second-opinion")
 def list_second_opinion_requests(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_phase4_schema()
     rows = (
@@ -403,7 +403,7 @@ def list_second_opinion_requests(
 @router.get("/api/patient/wearables")
 def list_wearables(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_phase4_schema()
     rows = (
@@ -432,7 +432,7 @@ def list_wearables(
 def connect_wearable(
     payload: WearableConnectPayload,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_phase4_schema()
 
@@ -472,7 +472,7 @@ def connect_wearable(
 
 @router.get("/api/patient/home-collection/summary")
 def home_collection_summary(
-    profile: PatientProfile = Depends(_get_patient_profile_from_token),
+    profile: CustomerProfile = Depends(_get_patient_profile_from_token),
 ):
     _ensure_phase4_schema()
     family = _patient_family_payload(profile)

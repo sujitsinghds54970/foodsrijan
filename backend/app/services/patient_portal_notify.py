@@ -3,7 +3,7 @@ from urllib.parse import quote
 from sqlalchemy.orm import Session
 
 from app.models.daily_entry_module import DailyEntryModule
-from app.models.patient import PatientProfile
+from app.models.customer import CustomerProfile
 
 
 def _resolve_report_download_url(report_pdf_url: str) -> str:
@@ -13,7 +13,7 @@ def _resolve_report_download_url(report_pdf_url: str) -> str:
         return report_pdf_url
     if report_pdf_url.startswith("/uploads/"):
         filename = report_pdf_url.split("/")[-1]
-        return f"/api/files/daily_entry_reports/{filename}"
+        return f"/api/files/daily_entry_orders/{filename}"
     return f"/api/files/{report_pdf_url.lstrip('/')}"
 
 
@@ -24,10 +24,10 @@ def build_patient_notify_payload(
     channel: str = "whatsapp",
 ) -> dict | None:
     profile = (
-        db.query(PatientProfile)
+        db.query(CustomerProfile)
         .filter(
-            PatientProfile.mobile == daily_entry.mobile,
-            PatientProfile.is_active == True,
+            CustomerProfile.mobile == daily_entry.mobile,
+            CustomerProfile.is_active == True,
         )
         .first()
     )
@@ -39,7 +39,7 @@ def build_patient_notify_payload(
 
     if channel == "email":
         recipient = profile.email or ""
-        channel_url = f"mailto:{recipient}?subject=Your%20Lab%20Report&body={quote(text)}"
+        channel_url = f"mailto:{recipient}?subject=Your%20Lab%20Order&body={quote(text)}"
     else:
         channel_url = f"https://wa.me/{profile.mobile}?text={quote(text)}"
 
@@ -57,10 +57,10 @@ def notify_on_daily_entry_completion(db: Session, daily_entry: DailyEntryModule)
     if daily_entry.status != "Completed":
         return None
     profile = (
-        db.query(PatientProfile)
+        db.query(CustomerProfile)
         .filter(
-            PatientProfile.mobile == daily_entry.mobile,
-            PatientProfile.is_active == True,
+            CustomerProfile.mobile == daily_entry.mobile,
+            CustomerProfile.is_active == True,
         )
         .first()
     )

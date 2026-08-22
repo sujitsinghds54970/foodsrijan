@@ -14,14 +14,14 @@ def generate_daily_report_pdf(report_data: dict) -> bytes:
         </style>
     </head>
     <body>
-        <h1>Daily Report - {{ date }} ({{ branch }})</h1>
+        <h1>Daily Order - {{ date }} ({{ branch }})</h1>
         <p>Status: {{ status }}</p>
         <p>Summary: {{ summary }}</p>
 
-        <h2>Patients</h2>
+        <h2>Customers</h2>
         <table>
             <tr><th>Name</th><th>Age</th><th>Gender</th></tr>
-            {% for p in patients %}
+            {% for p in customers %}
             <tr><td>{{ p.name }}</td><td>{{ p.age }}</td><td>{{ p.gender }}</td></tr>
             {% endfor %}
         </table>
@@ -64,13 +64,13 @@ def generate_invoice_pdf(invoice_data: dict) -> bytes:
     </head>
     <body>
         <h1>Invoice - VaidyaVihar Diagnostic</h1>
-        <p><strong>Patient:</strong> {{ patient.name }} ({{ patient.gender }}, Age {{ patient.age }})</p>
+        <p><strong>Customer:</strong> {{ patient.name }} ({{ patient.gender }}, Age {{ patient.age }})</p>
         <p><strong>Date:</strong> {{ date }}</p>
 
-        <h2>Tests</h2>
+        <h2>MenuItems</h2>
         <table>
-            <tr><th>Test Name</th><th>Result</th><th>Price</th></tr>
-            {% for t in tests %}
+            <tr><th>MenuItem Name</th><th>Result</th><th>Price</th></tr>
+            {% for t in menu_items %}
             <tr><td>{{ t.test_name }}</td><td>{{ t.result }}</td><td>₹{{ t.price }}</td></tr>
             {% endfor %}
         </table>

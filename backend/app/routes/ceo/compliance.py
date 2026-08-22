@@ -183,7 +183,7 @@ def get_compliance_legal_contract_management(db: Session = Depends(get_db)):
     return {
         "is_mock": True,
         "contract_lifecycle_management": [
-            {"contract_id": "CTR-DR-2026-014", "contract_type": "Doctor Agreement", "counterparty": "Dr. R. Sharma", "start_date": "2026-01-01", "expiry_date": "2026-12-31", "status": "Active"},
+            {"contract_id": "CTR-DR-2026-014", "contract_type": "Staff Agreement", "counterparty": "Dr. R. Sharma", "start_date": "2026-01-01", "expiry_date": "2026-12-31", "status": "Active"},
             {"contract_id": "CTR-VN-2025-202", "contract_type": "Vendor Contract", "counterparty": "MedChem Reagents Pvt Ltd", "start_date": "2025-10-01", "expiry_date": "2026-09-30", "status": "Renewal Due"},
             {"contract_id": "CTR-EMP-2026-077", "contract_type": "Employee Agreement", "counterparty": "Senior Lab Manager", "start_date": "2026-04-01", "expiry_date": "2028-03-31", "status": "Active"},
             {"contract_id": "CTR-LS-2024-011", "contract_type": "Lease Agreement", "counterparty": "Delhi Facility Lease", "start_date": "2024-06-01", "expiry_date": "2027-05-31", "status": "Active"},
@@ -221,7 +221,7 @@ def get_compliance_incident_risk_management(db: Session = Depends(get_db)):
     return {
         "is_mock": True,
         "incident_dashboard": [
-            {"incident_id": "INC-2026-112", "category": "Patient Complaint", "severity": "Medium", "branch": "Mumbai", "status": "Open", "reported_at": "2026-07-24T10:20:00Z"},
+            {"incident_id": "INC-2026-112", "category": "Customer Complaint", "severity": "Medium", "branch": "Mumbai", "status": "Open", "reported_at": "2026-07-24T10:20:00Z"},
             {"incident_id": "INC-2026-109", "category": "Safety Incident", "severity": "High", "branch": "Delhi", "status": "In Progress", "reported_at": "2026-07-23T15:40:00Z"},
             {"incident_id": "INC-2026-105", "category": "Data Breach", "severity": "Critical", "branch": "Patna", "status": "Open", "reported_at": "2026-07-21T08:05:00Z"},
             {"incident_id": "INC-2026-101", "category": "Quality Issue", "severity": "Low", "branch": "Bhabua", "status": "Resolved", "reported_at": "2026-07-20T13:30:00Z"},
@@ -247,7 +247,7 @@ def get_compliance_incident_risk_management(db: Session = Depends(get_db)):
         ],
         "complaint_analysis_trends": {
             "top_recurring_themes": [
-                {"theme": "Report Delay", "share_percent": 34},
+                {"theme": "Order Delay", "share_percent": 34},
                 {"theme": "Billing Clarification", "share_percent": 27},
                 {"theme": "Collection Experience", "share_percent": 18},
                 {"theme": "Portal Access Issues", "share_percent": 11},
@@ -304,7 +304,7 @@ def get_compliance_audit_inspection_readiness(db: Session = Depends(get_db)):
             "audit_trail": "Tamper-evident compliance activity ledger with evidence attachments.",
             "nc_capa": "Non-conformance lifecycle with corrective and preventive action status.",
             "pre_audit_checklist": "Dynamic readiness checklist validated against audit type and branch profile.",
-            "inspection_repository": "Historical inspection reports, observations, and closure records.",
+            "inspection_repository": "Historical inspection orders, observations, and closure records.",
         },
     }
 
@@ -464,7 +464,7 @@ def get_compliance_wow_features(db: Session = Depends(get_db)):
             "simulation_status": "Ready",
             "coverage_scope": "Licenses, audits, incidents, privacy, statutory filings",
             "current_posture_score": 84,
-            "change_simulation_note": "Run scenario tests to estimate compliance posture impact before operational changes.",
+            "change_simulation_note": "Run scenario menu_items to estimate compliance posture impact before operational changes.",
             "recent_simulation": {
                 "scenario": "Open full-service branch in Karnataka",
                 "projected_posture_score": 78,

@@ -30,7 +30,7 @@ from app.routes.patient_portal_routes import router as patient_portal_router
 from app.routes.doctor_portal_routes import router as doctor_portal_router
 from app.routes.doctor_portal_api import router as doctor_portal_api_router
 from app.routes.ai_routes import router as ai_router
-from app.routes.doctors import router as doctors_router
+from app.routes.staff_crm import router as staff_router
 from app.routes.report_distribution import router as report_dist_router
 from app.routes.dailyentry_demo import router as dailyentry_demo_router
 from app.routes.daily_entry_module import router as daily_entry_module_router
@@ -104,7 +104,7 @@ app.include_router(auth_otp_router, tags=["OTP Authentication"])
 # IMPORTANT: daily_entry_module_router MUST be registered before patient_router
 # to ensure /api/daily-entries/grid is matched before /api/daily-entries/{entry_id}
 app.include_router(daily_entry_module_router, tags=["Daily Entry Module"])
-app.include_router(patient_router, prefix="/api", tags=["Patients"])
+app.include_router(patient_router, prefix="/api", tags=["Customers"])
 # Register staff self-service routes before generic /api/staff/{staff_profile_id} routes.
 # This prevents 'me' from being treated as a dynamic path parameter.
 app.include_router(staff_self_service_router, prefix="/api", tags=["Staff Self Service"])
@@ -127,12 +127,12 @@ app.include_router(payment_router, prefix="/api/payments", tags=["Payments"])
 app.include_router(accounting_router, prefix="/api/accounting", tags=["Accounting"])
 app.include_router(hr_router, prefix="/api/hr", tags=["HR & Payroll"])
 app.include_router(branch_lis_router, tags=["Branch LIS"])
-app.include_router(patient_portal_router, prefix="/api/patient-portal", tags=["Patient Portal"])
-app.include_router(doctor_portal_router, prefix="/api/doctor-portal", tags=["Doctor Portal"], dependencies=[Depends(require_role(["doctor"]))])
-app.include_router(doctor_portal_api_router, prefix="/api/doctor", tags=["Doctor Portal API"])
+app.include_router(patient_portal_router, prefix="/api/patient-portal", tags=["Customer Portal"])
+app.include_router(doctor_portal_router, prefix="/api/doctor-portal", tags=["Staff Portal"], dependencies=[Depends(require_role(["doctor"]))])
+app.include_router(doctor_portal_api_router, prefix="/api/doctor", tags=["Staff Portal API"])
 app.include_router(ai_router, prefix="/api/ai", tags=["AI Features"])
-app.include_router(doctors_router, tags=["Doctor Management CRM"])
-app.include_router(report_dist_router, prefix="/api/reports", tags=["Report Distribution"])
+app.include_router(staff_router, tags=["Staff Management CRM"])
+app.include_router(report_dist_router, prefix="/api/orders", tags=["Order Distribution"])
 app.include_router(dailyentry_demo_router, tags=["Daily Entry Demo"])
 app.include_router(branch_bank_router, prefix="/api/branches", tags=["Branch Bank Details"])
 app.include_router(file_serving_router, prefix="/api", tags=["File Serving"])
@@ -140,9 +140,9 @@ app.include_router(director_staff_router, prefix="/api/director", tags=["Directo
 app.include_router(director_profile_router, prefix="/api/director-v2", tags=["Director Management V2"])
 app.include_router(inventory_v2_router, tags=["Inventory V2"])
 app.include_router(accounts_router, tags=["Accounts & Finance"])
-app.include_router(patient_b2c_phase1_router, tags=["Patient B2C Phase 1"])
-app.include_router(patient_phase4_router, tags=["Patient Phase 4"])
-app.include_router(patient_portal_v2_router, tags=["Patient Portal V2"])
+app.include_router(patient_b2c_phase1_router, tags=["Customer B2C Phase 1"])
+app.include_router(patient_phase4_router, tags=["Customer Phase 4"])
+app.include_router(patient_portal_v2_router, tags=["Customer Portal V2"])
 app.include_router(overview_router, prefix="/api/overview", tags=["Overview Dashboard"])
 app.include_router(payroll_router, prefix="/api", tags=["Payroll Management"])
 app.include_router(branch_payroll_router, prefix="/api/branch/payroll", tags=["Branch Payroll Command Center"])

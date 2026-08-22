@@ -9,10 +9,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Branch, Patient
+from app.models import Branch, Customer
 from app.models.daily_entry_module import DailyEntryModule
-from app.models.doctor import Doctor, DoctorBranch
-from app.models.patient import FamilyMember, PatientProfile
+from app.models.staff import Staff, StaffBranch
+from app.models.customer import FamilyMember, CustomerProfile
 from app.services.patient_portal_notify import build_patient_notify_payload
 from app.utils.auth_system import ALGORITHM, SECRET_KEY, auth_guard
 
@@ -20,7 +20,7 @@ router = APIRouter()
 patient_security = HTTPBearer()
 
 
-class PatientLoginRequest(BaseModel):
+class CustomerLoginRequest(BaseModel):
     mode: str
     mobile: Optional[str] = None
     otp: Optional[str] = None
@@ -28,7 +28,7 @@ class PatientLoginRequest(BaseModel):
     password: Optional[str] = None
 
 
-class PatientNotifyRequest(BaseModel):
+class CustomerNotifyRequest(BaseModel):
     report_id: int
     channel: str = "whatsapp"
 
@@ -65,7 +65,7 @@ def _ensure_patient_portal_schema(db: Session = Depends(get_db)) -> None:
                 cashback_percent FLOAT NOT NULL DEFAULT 5,
                 created_at DATETIME,
                 updated_at DATETIME,
-                FOREIGN KEY(patient_id) REFERENCES patients(id)
+                FOREIGN KEY(patient_id) REFERENCES customers(id)
             )
             """
         )
@@ -94,22 +94,22 @@ def _get_current_patient_profile(
     _schema_ready: None = Depends(_ensure_patient_portal_schema),
     credentials: HTTPAuthorizationCredentials = Depends(patient_security),
     db: Session = Depends(get_db),
-) -> PatientProfile:
+) -> CustomerProfile:
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     if payload.get("role") != "patient":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Patient role required")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Customer role required")
 
     profile_id = payload.get("patient_profile_id")
     if not profile_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid patient session")
 
-    profile = db.query(PatientProfile).filter(PatientProfile.id == profile_id).first()
+    profile = db.query(CustomerProfile).filter(CustomerProfile.id == profile_id).first()
     if not profile or not profile.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Patient account not found")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Customer account not found")
 
     return profile
 
@@ -121,21 +121,21 @@ def _resolve_report_download_url(report_pdf_url: Optional[str]) -> Optional[str]
         return report_pdf_url
     if report_pdf_url.startswith("/uploads/"):
         filename = report_pdf_url.split("/")[-1]
-        return f"/api/files/daily_entry_reports/{filename}"
+        return f"/api/files/daily_entry_orders/{filename}"
     return f"/api/files/{report_pdf_url.lstrip('/')}"
 
 
 def _get_doctor_white_label_for_branch(branch_id: int, db: Session) -> dict:
     assignment = (
-        db.query(DoctorBranch)
-        .filter(DoctorBranch.branch_id == branch_id, DoctorBranch.is_active.is_(True))
-        .order_by(DoctorBranch.is_primary.desc(), DoctorBranch.assigned_date.desc())
+        db.query(StaffBranch)
+        .filter(StaffBranch.branch_id == branch_id, StaffBranch.is_active.is_(True))
+        .order_by(StaffBranch.is_primary.desc(), StaffBranch.assigned_date.desc())
         .first()
     )
     if not assignment:
         return {}
 
-    doctor = db.query(Doctor).filter(Doctor.id == assignment.doctor_id, Doctor.is_active.is_(True)).first()
+    doctor = db.query(Staff).filter(Staff.id == assignment.doctor_id, Staff.is_active.is_(True)).first()
     if not doctor or not isinstance(doctor.report_preferences, dict):
         return {}
 
@@ -150,10 +150,10 @@ def _get_doctor_white_label_for_branch(branch_id: int, db: Session) -> dict:
     }
 
 
-def _resolve_patient_branding(profile: PatientProfile, db: Session) -> dict:
+def _resolve_patient_branding(profile: CustomerProfile, db: Session) -> dict:
     patient = None
     if profile.patient_id:
-        patient = db.query(Patient).filter(Patient.id == profile.patient_id).first()
+        patient = db.query(Customer).filter(Customer.id == profile.patient_id).first()
 
     branch_id = patient.branch_id if patient else None
     if not branch_id:
@@ -197,11 +197,11 @@ def _resolve_patient_branding(profile: PatientProfile, db: Session) -> dict:
 
 @router.post("/api/patient/login")
 async def patient_login(
-    payload: PatientLoginRequest,
+    payload: CustomerLoginRequest,
     db: Session = Depends(get_db),
     _schema_ready: None = Depends(_ensure_patient_portal_schema),
 ):
-    profile: Optional[PatientProfile] = None
+    profile: Optional[CustomerProfile] = None
 
     if payload.mode == "otp":
         if not payload.mobile:
@@ -209,13 +209,13 @@ async def patient_login(
         if payload.otp != "123456":
             raise HTTPException(status_code=401, detail="Invalid OTP")
 
-        profile = db.query(PatientProfile).filter(PatientProfile.mobile == payload.mobile).first()
+        profile = db.query(CustomerProfile).filter(CustomerProfile.mobile == payload.mobile).first()
     elif payload.mode == "password":
         if not payload.patient_id or not payload.password:
             raise HTTPException(status_code=400, detail="patient_id and password are required")
         profile = (
-            db.query(PatientProfile)
-            .filter(PatientProfile.patient_code == payload.patient_id)
+            db.query(CustomerProfile)
+            .filter(CustomerProfile.patient_code == payload.patient_id)
             .first()
         )
         if profile and profile.password != payload.password:
@@ -224,7 +224,7 @@ async def patient_login(
         raise HTTPException(status_code=400, detail="mode must be otp or password")
 
     if not profile or not profile.is_active:
-        raise HTTPException(status_code=404, detail="Patient account not found")
+        raise HTTPException(status_code=404, detail="Customer account not found")
 
     access_token = auth_guard.create_access_token(
         data={
@@ -252,15 +252,15 @@ async def patient_login(
 @router.get("/api/patient/dashboard")
 async def patient_dashboard(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_current_patient_profile),
+    profile: CustomerProfile = Depends(_get_current_patient_profile),
 ):
     branding = _resolve_patient_branding(profile, db)
-    reports_query = db.query(DailyEntryModule).filter(DailyEntryModule.mobile == profile.mobile)
-    reports = reports_query.order_by(DailyEntryModule.auto_entry_datetime.desc()).all()
+    orders_query = db.query(DailyEntryModule).filter(DailyEntryModule.mobile == profile.mobile)
+    orders = orders_query.order_by(DailyEntryModule.auto_entry_datetime.desc()).all()
 
-    total_reports = len(reports)
-    completed_reports = sum(1 for row in reports if (row.status or "").lower() == "completed")
-    pending_reports = total_reports - completed_reports
+    total_orders = len(orders)
+    completed_orders = sum(1 for row in orders if (row.status or "").lower() == "completed")
+    pending_orders = total_orders - completed_orders
 
     family_members = (
         db.query(FamilyMember)
@@ -269,9 +269,9 @@ async def patient_dashboard(
         .all()
     )
 
-    recent_reports = []
-    for row in reports[:5]:
-        recent_reports.append(
+    recent_orders = []
+    for row in orders[:5]:
+        recent_orders.append(
             {
                 "id": row.id,
                 "patient_id": row.auto_patient_id,
@@ -285,14 +285,14 @@ async def patient_dashboard(
     return {
         "branding": branding,
         "kpis": {
-            "total_reports": total_reports,
-            "completed_reports": completed_reports,
-            "pending_reports": pending_reports,
+            "total_orders": total_orders,
+            "completed_orders": completed_orders,
+            "pending_orders": pending_orders,
             "wallet_balance": round(profile.wallet_balance or 0.0, 2),
             "cashback_percent": profile.cashback_percent or 0.0,
             "family_members": len(family_members),
         },
-        "recent_reports": recent_reports,
+        "recent_orders": recent_orders,
         "family_members": [
             {
                 "id": member.id,
@@ -304,19 +304,19 @@ async def patient_dashboard(
             for member in family_members
         ],
         "sample_tracking": [
-            {"step": "Sample Collected", "done": total_reports > 0},
-            {"step": "In Processing", "done": pending_reports > 0},
-            {"step": "Report Ready", "done": completed_reports > 0},
+            {"step": "Sample Collected", "done": total_orders > 0},
+            {"step": "In Processing", "done": pending_orders > 0},
+            {"step": "Order Ready", "done": completed_orders > 0},
         ],
     }
 
 
-@router.get("/api/patient/reports")
-async def patient_reports(
+@router.get("/api/patient/orders")
+async def patient_orders(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_current_patient_profile),
+    profile: CustomerProfile = Depends(_get_current_patient_profile),
 ):
     branding = _resolve_patient_branding(profile, db)
     base_query = db.query(DailyEntryModule).filter(DailyEntryModule.mobile == profile.mobile)
@@ -334,7 +334,7 @@ async def patient_reports(
         "page": page,
         "page_size": page_size,
         "total": total,
-        "reports": [
+        "orders": [
             {
                 "id": row.id,
                 "patient_id": row.auto_patient_id,
@@ -350,11 +350,11 @@ async def patient_reports(
     }
 
 
-@router.get("/api/patient/reports/{report_id}/download")
+@router.get("/api/patient/orders/{report_id}/download")
 async def patient_report_download(
     report_id: int,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_current_patient_profile),
+    profile: CustomerProfile = Depends(_get_current_patient_profile),
 ):
     branding = _resolve_patient_branding(profile, db)
     row = (
@@ -366,11 +366,11 @@ async def patient_report_download(
         .first()
     )
     if not row:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="Order not found")
 
     download_url = _resolve_report_download_url(row.report_pdf_url)
     if not download_url:
-        raise HTTPException(status_code=404, detail="Report file not available")
+        raise HTTPException(status_code=404, detail="Order file not available")
 
     return {
         "report_id": row.id,
@@ -382,9 +382,9 @@ async def patient_report_download(
 
 @router.post("/api/patient/notify")
 async def patient_notify(
-    payload: PatientNotifyRequest,
+    payload: CustomerNotifyRequest,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_current_patient_profile),
+    profile: CustomerProfile = Depends(_get_current_patient_profile),
 ):
     row = (
         db.query(DailyEntryModule)
@@ -395,11 +395,11 @@ async def patient_notify(
         .first()
     )
     if not row:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="Order not found")
 
     notify_payload = build_patient_notify_payload(db=db, daily_entry=row, channel=payload.channel)
     if not notify_payload:
-        raise HTTPException(status_code=404, detail="Patient contact not configured")
+        raise HTTPException(status_code=404, detail="Customer contact not configured")
 
     return {
         "success": True,
@@ -410,7 +410,7 @@ async def patient_notify(
 @router.get("/api/patient/family-members")
 async def list_family_members(
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_current_patient_profile),
+    profile: CustomerProfile = Depends(_get_current_patient_profile),
 ):
     members = (
         db.query(FamilyMember)
@@ -436,7 +436,7 @@ async def list_family_members(
 async def add_family_member(
     payload: FamilyMemberRequest,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_current_patient_profile),
+    profile: CustomerProfile = Depends(_get_current_patient_profile),
 ):
     member = FamilyMember(
         owner_profile_id=profile.id,
@@ -462,7 +462,7 @@ async def add_family_member(
 async def redeem_wallet(
     payload: WalletRedeemRequest,
     db: Session = Depends(get_db),
-    profile: PatientProfile = Depends(_get_current_patient_profile),
+    profile: CustomerProfile = Depends(_get_current_patient_profile),
 ):
     amount = round(payload.amount, 2)
     if amount <= 0:

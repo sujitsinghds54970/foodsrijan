@@ -20,7 +20,7 @@ def generate_daily_report(calendar_day_id: int, db: Session = Depends(get_db)):
     if not day:
         return {"error": "Calendar day not found"}
 
-    patients = db.query(PatientEntry).filter(PatientEntry.calendar_day_id == calendar_day_id).all()
+    customers = db.query(CustomerEntry).filter(CustomerEntry.calendar_day_id == calendar_day_id).all()
     expenses = db.query(ExpenseEntry).filter(ExpenseEntry.calendar_day_id == calendar_day_id).all()
     notes = db.query(NoteEntry).filter(NoteEntry.calendar_day_id == calendar_day_id).all()
 
@@ -30,7 +30,7 @@ def generate_daily_report(calendar_day_id: int, db: Session = Depends(get_db)):
         "date": str(day.date),
         "status": day.status,
         "summary": day.summary,
-        "patients": [{"name": p.name, "age": p.age, "gender": p.gender} for p in patients],
+        "customers": [{"name": p.name, "age": p.age, "gender": p.gender} for p in customers],
         "expenses": [{"amount": e.amount, "category": e.category, "notes": e.notes} for e in expenses],
         "notes": [{"author": n.author, "content": n.content} for n in notes],
         "total_expense": total_expense
@@ -46,7 +46,7 @@ def download_daily_report_pdf(calendar_day_id: int, db: Session = Depends(get_db
     if not day:
         raise HTTPException(status_code=404, detail="Calendar day not found")
 
-    patients = db.query(PatientEntry).filter(PatientEntry.calendar_day_id == calendar_day_id).all()
+    customers = db.query(CustomerEntry).filter(CustomerEntry.calendar_day_id == calendar_day_id).all()
     expenses = db.query(ExpenseEntry).filter(ExpenseEntry.calendar_day_id == calendar_day_id).all()
     notes = db.query(NoteEntry).filter(NoteEntry.calendar_day_id == calendar_day_id).all()
 
@@ -55,7 +55,7 @@ def download_daily_report_pdf(calendar_day_id: int, db: Session = Depends(get_db
         "date": str(day.date),
         "status": day.status,
         "summary": day.summary,
-        "patients": patients,
+        "customers": customers,
         "expenses": expenses,
         "notes": notes,
         "total_expense": sum(e.amount for e in expenses)
