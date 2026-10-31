@@ -1,4 +1,7 @@
-from weasyprint import HTML
+try:
+    from weasyprint import HTML
+except Exception:  # pragma: no cover - optional PDF generator support
+    HTML = None
 from jinja2 import Template
 
 def generate_daily_report_pdf(report_data: dict) -> bytes:
@@ -48,6 +51,8 @@ def generate_daily_report_pdf(report_data: dict) -> bytes:
 
     template = Template(html_template)
     rendered_html = template.render(**report_data)
+    if HTML is None:
+        raise RuntimeError("PDF export is unavailable because the required native libraries are not installed")
     pdf = HTML(string=rendered_html).write_pdf()
     return pdf
 def generate_invoice_pdf(invoice_data: dict) -> bytes:
@@ -84,5 +89,7 @@ def generate_invoice_pdf(invoice_data: dict) -> bytes:
     """
     template = Template(html_template)
     rendered_html = template.render(**invoice_data)
+    if HTML is None:
+        raise RuntimeError("PDF export is unavailable because the required native libraries are not installed")
     pdf = HTML(string=rendered_html).write_pdf()
     return pdf

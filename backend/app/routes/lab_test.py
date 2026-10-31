@@ -57,7 +57,10 @@ def submit_lab_result(
         "status": test.status,
         "result": test.result
     }
-from weasyprint import HTML
+try:
+    from weasyprint import HTML
+except Exception:  # pragma: no cover - native PDF library may be unavailable in some environments
+    HTML = None
 from fastapi.responses import Response
 
 @router.get("/lab-menu_items/{test_id}/pdf/")
@@ -86,5 +89,7 @@ def generate_lab_report_pdf(
     </html>
     """
 
+    if HTML is None:
+        raise HTTPException(status_code=503, detail="PDF export is unavailable because the required native libraries are not installed")
     pdf = HTML(string=html_content).write_pdf()
     return Response(content=pdf, media_type="application/pdf")

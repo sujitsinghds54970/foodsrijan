@@ -7,12 +7,14 @@ from typing import Optional
 
 from app.database import get_db
 from app.utils.auth_system import (
-    authenticate_user, create_user_token, update_last_login,
-    auth_guard, TokenData, get_current_user
+    authenticate_user, create_user_token, get_user_company_context, update_last_login,
+    auth_guard, TokenData, get_current_user, is_super_ceo_user, resolve_login_user
 )
-from app.models import User, Branch, ActivityLog
+from app.models import User, Branch, ActivityLog, Company, UserCompany, Role
 from app.models.hr import StaffProfile
 from app.schemas.user import UserCreate, UserResponse, TokenResponse
+from app.services.rate_limit import ensure_login_allowed, record_login_attempt
+from app.services.staff_rate_limit import clear_staff_login_failures, ensure_staff_login_allowed, record_staff_login_failure
 from app.utils.auth_system import auth_guard
 from app.utils.schema_compat import ensure_staff_daily_ops_column
 from app.utils.schema_compat import ensure_branch_logo_column
@@ -34,7 +36,7 @@ def _public_file_url(path: Optional[str]) -> Optional[str]:
 
 def _build_user_photo_payload(db: Session, user: User) -> dict:
     profile = None
-    if user.role != "super_admin":
+    if not is_super_ceo_user(user):
         try:
             profile = db.query(StaffProfile).filter(StaffProfile.user_id == user.id).first()
         except Exception:
@@ -42,7 +44,7 @@ def _build_user_photo_payload(db: Session, user: User) -> dict:
             db.rollback()
             profile = None
     photo_url = _public_file_url(profile.photo_path) if profile else None
-    if not photo_url and user.role == "super_admin":
+    if not photo_url and is_super_ceo_user(user):
         if table_exists(db, "system_settings"):
             profile_row = db.execute(
                 text("SELECT setting_value FROM system_settings WHERE setting_key = 'ceo_profile' LIMIT 1")
@@ -98,10 +100,18 @@ def _fetch_company_logo_url(db: Session) -> Optional[str]:
 
 
 def _build_company_payload(db: Session, user: User) -> dict:
-    company_logo = _fetch_company_logo_url(db) if user.role == "super_admin" else None
+    company_logo = _fetch_company_logo_url(db) if is_super_ceo_user(user) else None
     return {
         "companyLogo": company_logo,
     }
+
+
+def _build_user_company_payload(db: Session, user: User) -> list[dict]:
+    companies, active_company_id = get_user_company_context(db, user)
+    for company in companies:
+        company["company_id"] = company["id"]
+        company["current_company_id"] = active_company_id
+    return companies
 
 
 def _fetch_branch_logo_url(db: Session, branch_id: int) -> Optional[str]:
@@ -194,14 +204,22 @@ async def login_for_access_token(
                 detail="Both username and password are required"
             )
 
+        client_ip = request.client.host if request.client else None
+        resolved_user = resolve_login_user(db, username)
+        is_staff_identifier = bool(resolved_user and getattr(resolved_user, "is_staff", False))
+        if is_staff_identifier:
+            ensure_staff_login_allowed(username)
+        else:
+            ensure_login_allowed(db, username)
+
         # DEBUG LOGGING
-        logger.info(f"🔐 LOGIN ATTEMPT - Username: {username}, Password Length: {len(password)}")
+        logger.info(f"🔐 LOGIN ATTEMPT - Username: {username}")
         print(f"[AUTH DEBUG] route received username={username!r}")
         
         # Check if user exists
-        db_user = db.query(User).filter(User.username == username).first()
+        db_user = resolved_user
         if db_user:
-            logger.info(f"✅ USER FOUND - ID: {db_user.id}, Username: {db_user.username}, Role: {db_user.role}, Active: {db_user.is_active}, Hash: {db_user.hashed_password[:20]}...")
+            logger.info(f"✅ USER FOUND - ID: {db_user.id}, Username: {db_user.username}, Role: {db_user.role}, Active: {db_user.is_active}")
             print(
                 "[AUTH DEBUG] route fetched user="
                 f"id={db_user.id}, username={db_user.username!r}, role={db_user.role!r}, is_active={db_user.is_active}"
@@ -214,6 +232,10 @@ async def login_for_access_token(
         
         if not user:
             logger.error(f"❌ AUTHENTICATION FAILED - Username: {username}")
+            if is_staff_identifier:
+                record_staff_login_failure(username)
+            else:
+                record_login_attempt(db, username, successful=False, ip_address=client_ip)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password",
@@ -221,6 +243,10 @@ async def login_for_access_token(
             )
         
         logger.info(f"✅ AUTHENTICATION SUCCESS - User: {user.username}, Role: {user.role}")
+        if getattr(user, "is_staff", False):
+            clear_staff_login_failures(username)
+        else:
+            record_login_attempt(db, username, successful=True, ip_address=client_ip)
         
         # Create access token
         access_token = create_user_token(user)
@@ -248,6 +274,8 @@ async def login_for_access_token(
         branch_payload = _build_branch_payload(db, user.branch_id)
         user_photo_payload = _build_user_photo_payload(db, user)
         company_payload = _build_company_payload(db, user)
+        companies_payload = _build_user_company_payload(db, user)
+        effective_company_id = getattr(user, "current_company_id", None) or getattr(user, "company_id", None)
         
         return {
             "access_token": access_token,
@@ -260,6 +288,15 @@ async def login_for_access_token(
                 "last_name": user.last_name,
                 "phone": user.phone,
                 "role": user.role,
+                "company_id": effective_company_id,
+                "current_company_id": effective_company_id,
+                "companies": companies_payload,
+                "is_super_admin": bool(getattr(user, "is_super_admin", False)),
+                "is_super_ceo": bool(getattr(user, "is_super_ceo", False)),
+                "is_company_ceo": bool(getattr(user, "is_company_ceo", False)),
+                "is_outlet_manager": bool(getattr(user, "is_outlet_manager", False)),
+                "outlet_id": getattr(user, "outlet_id", None),
+                "force_password_change": bool(getattr(user, "force_password_change", False)),
                 "branch_id": user.branch_id,
                 "branch": branch_payload,
                 **user_photo_payload,
@@ -385,6 +422,8 @@ def public_register_user(
     update_last_login(db, db_user)
     branch_payload = _build_branch_payload(db, db_user.branch_id)
     company_payload = _build_company_payload(db, db_user)
+    companies_payload = _build_user_company_payload(db, db_user)
+    effective_company_id = getattr(db_user, "current_company_id", None) or getattr(db_user, "company_id", None)
     
     # Return token and user data for immediate login
     return {
@@ -398,6 +437,10 @@ def public_register_user(
             "last_name": db_user.last_name,
             "phone": db_user.phone,
             "role": db_user.role,
+            "company_id": effective_company_id,
+            "current_company_id": effective_company_id,
+            "companies": companies_payload,
+            "is_super_admin": bool(getattr(db_user, "is_super_admin", False)),
             "branch_id": db_user.branch_id,
             "branch": branch_payload,
             **company_payload,
@@ -411,7 +454,7 @@ def public_register_user(
 def register_user(
     user_data: UserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(auth_guard.require_role(['super_admin', 'branch_admin']))
+    current_user: User = Depends(auth_guard.require_role(['super_ceo', 'branch_admin']))
 ):
     """Register new user (admin only)"""
     
@@ -519,6 +562,11 @@ def get_current_user_info(current_user: User = Depends(get_current_user), db: Se
         "first_name": current_user.first_name,
         "last_name": current_user.last_name,
         "role": current_user.role,
+        "company_id": current_user.company_id,
+        "is_company_ceo": bool(getattr(current_user, "is_company_ceo", False)),
+        "is_outlet_manager": bool(getattr(current_user, "is_outlet_manager", False)),
+        "outlet_id": getattr(current_user, "outlet_id", None),
+        "force_password_change": bool(getattr(current_user, "force_password_change", False)),
         "branch_id": current_user.branch_id,
         "is_active": current_user.is_active,
         "branch": branch_payload,
@@ -555,7 +603,7 @@ def get_user_branches(
 ):
     """Get branches accessible to current user"""
     
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         branches = db.query(Branch).filter(Branch.is_active == True).all()
     else:
         branches = db.query(Branch).filter(

@@ -37,18 +37,31 @@ class UserResponse(BaseModel):
     last_name: str
     phone: Optional[str] = None  # Allow None or empty for response
     role: str
+    company_id: Optional[int] = None
+    current_company_id: Optional[int] = None
+    companies: list = Field(default_factory=list)
+    is_super_admin: bool = False
+    is_super_ceo: bool = False
     branch_id: Optional[int]
+    branch: Optional[dict] = None
+    profilePhoto: Optional[str] = None
+    photo: Optional[str] = None
+    companyLogo: Optional[str] = None
     is_active: bool
     created_at: datetime
     last_login: Optional[datetime]
     
     class Config:
         from_attributes = True
+        extra = "allow"
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+    class Config:
+        extra = "allow"
 
 class LoginRequest(BaseModel):
     username: str

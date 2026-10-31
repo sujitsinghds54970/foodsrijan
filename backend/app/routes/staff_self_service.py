@@ -31,7 +31,7 @@ from app.models.hr import (
     StaffSalaryRecord,
     StaffTask,
 )
-from app.utils.auth_system import get_current_user
+from app.utils.auth_system import get_current_user, is_super_ceo_user
 from app.utils.attendance_utils import stamp_image_with_gps
 from app.utils.file_utils import replace_file, storage_relative_path_from_public_url
 from app.utils.schema_compat import ensure_branch_logo_column, ensure_staff_daily_ops_column
@@ -100,10 +100,15 @@ def _normalize_role(role: Optional[str]) -> str:
     return (role or "").strip().lower()
 
 
+def _is_global_executive_role(role: Optional[str]) -> bool:
+    normalized = _normalize_role(role)
+    return normalized in {"super_ceo", "super_admin"}
+
+
 def _require_staff(current_user: User) -> None:
     normalized_role = _normalize_role(current_user.role)
-    # Accept any staff-type role (not super_admin, branch_admin, branch_director, or doctor)
-    non_staff_roles = ['super_admin', 'branch_admin', 'branch_director', 'doctor']
+    # Accept any staff-type role (not super_ceo/super_admin, branch_admin, branch_director, or doctor)
+    non_staff_roles = ['branch_admin', 'branch_director', 'doctor']
     if normalized_role in non_staff_roles:
         raise HTTPException(status_code=403, detail="Only staff users can access this endpoint")
 
@@ -1491,14 +1496,14 @@ def director_attendance_detail_for_staff(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if _normalize_role(current_user.role) not in {"branch_director", "branch_admin", "super_admin"}:
+    if _normalize_role(current_user.role) not in {"branch_director", "branch_admin", "super_admin", "super_ceo"}:
         raise HTTPException(status_code=403, detail="Access denied")
 
     profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Staff profile not found")
 
-    if _normalize_role(current_user.role) != "super_admin" and current_user.branch_id != profile.branch_id:
+    if not _is_global_executive_role(current_user.role) and current_user.branch_id != profile.branch_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     target_month = month or datetime.utcnow().strftime("%Y-%m")
@@ -1638,13 +1643,13 @@ def director_assign_task_to_attendance(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if _normalize_role(current_user.role) not in {"branch_director", "branch_admin", "super_admin"}:
+    if _normalize_role(current_user.role) not in {"branch_director", "branch_admin", "super_admin", "super_ceo"}:
         raise HTTPException(status_code=403, detail="Access denied")
 
     profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Staff profile not found")
-    if _normalize_role(current_user.role) != "super_admin" and current_user.branch_id != profile.branch_id:
+    if not _is_global_executive_role(current_user.role) and current_user.branch_id != profile.branch_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     row = (
@@ -1696,13 +1701,13 @@ def director_update_attendance_review(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if _normalize_role(current_user.role) not in {"branch_director", "branch_admin", "super_admin"}:
+    if _normalize_role(current_user.role) not in {"branch_director", "branch_admin", "super_admin", "super_ceo"}:
         raise HTTPException(status_code=403, detail="Access denied")
 
     profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Staff profile not found")
-    if _normalize_role(current_user.role) != "super_admin" and current_user.branch_id != profile.branch_id:
+    if not _is_global_executive_role(current_user.role) and current_user.branch_id != profile.branch_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     row = (

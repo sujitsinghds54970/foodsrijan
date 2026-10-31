@@ -745,6 +745,24 @@ class StaffNotification(Base):
     branch = relationship("Branch", foreign_keys=[branch_id])
 
 
+class StaffRequest(Base):
+    __tablename__ = "staff_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    staff_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False, index=True)
+    outlet_id = Column(Integer, ForeignKey("branches.id"), nullable=False, index=True)
+    type = Column(String(40), nullable=False)
+    reason = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    staff = relationship("User", foreign_keys=[staff_id])
+    company = relationship("Company", foreign_keys=[company_id])
+    outlet = relationship("Branch", foreign_keys=[outlet_id])
+
+
 class StaffDocument(Base):
     __tablename__ = "staff_documents"
 

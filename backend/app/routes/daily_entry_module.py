@@ -25,7 +25,7 @@ from app.schemas.daily_entry_module import (
     DailyExpenseCreate, DailyExpenseUpdate, DailyExpenseResponse,
     DailyStatsResponse
 )
-from app.utils.auth_system import get_current_user
+from app.utils.auth_system import get_current_user, is_super_ceo_user
 from app.utils.schema_compat import ensure_staff_daily_ops_column
 from app.services.qrcode_service import generate_qr_code
 from app.services.finance_integration import ensure_daily_entry_invoice, ensure_daily_entry_revenue
@@ -48,7 +48,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 def _is_staff_role(role: str) -> bool:
     """Check if role is a staff type role (not admin or doctor)."""
-    non_staff_roles = ['super_admin', 'branch_admin', 'branch_director', 'doctor']
+    non_staff_roles = ['branch_admin', 'branch_director', 'doctor']
     return role not in non_staff_roles
 
 
@@ -296,7 +296,7 @@ def parse_entry_datetime(value: Optional[str]) -> datetime:
 
 def get_user_branch_id(current_user: User) -> int:
     """Extract branch_id from current user, raise error if not available"""
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         # Super admin can view all, but for creation they need to specify
         return None
     
@@ -313,7 +313,7 @@ def require_daily_ops_actor(
     db: Session = Depends(get_db),
 ) -> User:
     """Authorize Daily Operations using role permissions and per-staff toggle."""
-    if current_user.role in ['super_admin', 'branch_admin', 'branch_director']:
+    if is_super_ceo_user(current_user) or current_user.role in ['branch_admin', 'branch_director']:
         return current_user
 
     if not _is_staff_role(current_user.role):
@@ -356,7 +356,7 @@ async def get_daily_entries_grid(
     query = db.query(DailyEntryModule)
     
     # Branch scoping
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         # Branch admin can only see their own branch
         user_branch_id = get_user_branch_id(current_user)
         query = query.filter(DailyEntryModule.branch_id == user_branch_id)
@@ -389,7 +389,7 @@ async def get_daily_entries(
     query = db.query(DailyEntryModule)
     
     # Branch scoping
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         branch_id = get_user_branch_id(current_user)
         query = query.filter(DailyEntryModule.branch_id == branch_id)
     
@@ -423,7 +423,7 @@ async def create_daily_entry(
     from sqlalchemy.exc import IntegrityError
     
     # Get branch_id - handle super_admin case
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         # For super_admin, use branch_id from request or default to 1
         branch_id = getattr(entry, 'branch_id', None) or current_user.branch_id or 1
     else:
@@ -601,7 +601,7 @@ async def update_daily_entry(
         raise HTTPException(status_code=404, detail="Entry not found")
     
     # Branch access check
-    if current_user.role != 'super_admin' and db_entry.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and db_entry.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this entry")
     
     # Update fields
@@ -656,7 +656,7 @@ async def delete_daily_entry(
         raise HTTPException(status_code=404, detail="Entry not found")
     
     # Branch access check
-    if current_user.role != 'super_admin' and db_entry.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and db_entry.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this entry")
     
     db.delete(db_entry)
@@ -679,7 +679,7 @@ async def upload_report_pdf(
         raise HTTPException(status_code=404, detail="Entry not found")
     
     # Branch access check
-    if current_user.role != 'super_admin' and db_entry.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and db_entry.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this entry")
     
     # Validate file type
@@ -725,7 +725,7 @@ async def complete_daily_entry(
     if not db_entry:
         raise HTTPException(status_code=404, detail="Entry not found")
 
-    if current_user.role != 'super_admin' and db_entry.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and db_entry.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this entry")
 
     previous_status = db_entry.status
@@ -757,7 +757,7 @@ async def get_entry_qr_code(
         raise HTTPException(status_code=404, detail="Entry not found")
     
     # Branch access check
-    if current_user.role != 'super_admin' and db_entry.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and db_entry.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this entry")
     
     # Generate QR code
@@ -783,7 +783,7 @@ async def get_daily_expenses(
     query = db.query(DailyExpense)
     
     # Branch scoping
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         branch_id = get_user_branch_id(current_user)
         query = query.filter(DailyExpense.branch_id == branch_id)
     
@@ -843,7 +843,7 @@ async def update_daily_expense(
         raise HTTPException(status_code=404, detail="Expense not found")
     
     # Branch access check
-    if current_user.role != 'super_admin' and db_expense.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and db_expense.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this expense")
     
     update_data = expense.dict(exclude_unset=True)
@@ -872,7 +872,7 @@ async def delete_daily_expense(
         raise HTTPException(status_code=404, detail="Expense not found")
     
     # Branch access check
-    if current_user.role != 'super_admin' and db_expense.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and db_expense.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this expense")
     
     db.delete(db_expense)
@@ -945,7 +945,7 @@ async def search_staff(
     """
     # Get branch_id for scoping
     branch_id = None
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         branch_id = get_user_branch_id(current_user)
     
     query = db.query(DailyEntryModule.referred_doctor).filter(

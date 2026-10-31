@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, time
 from decimal import Decimal
 
 from app.database import get_db
-from app.utils.auth_system import auth_guard, require_StaffEmployee, get_current_user
+from app.utils.auth_system import auth_guard, require_StaffEmployee, get_current_user, is_super_ceo_user
 from app.models import User, Branch, StaffEmployee, AttendanceRecord, SalaryRecord
 from pydantic import BaseModel, Field
 from datetime import time as dt_time
@@ -151,7 +151,7 @@ def create_StaffEmployee(
         raise HTTPException(status_code=404, detail="User not found")
     
     # Check branch access
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         StaffEmployee_data.branch_id = current_user.branch_id
     
     # Generate employee ID
@@ -222,7 +222,7 @@ def get_StaffEmployee_list(
     """Get list of StaffEmployee members"""
     
     # Filter by branch access
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         query = db.query(StaffEmployee).join(User).join(Branch)
         if branch_id:
             query = query.filter(StaffEmployee.branch_id == branch_id)
@@ -267,7 +267,7 @@ def get_StaffEmployee(
         raise HTTPException(status_code=404, detail="StaffEmployee member not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and StaffEmployee.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and StaffEmployee.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this StaffEmployee member")
     
     return StaffEmployee
@@ -287,7 +287,7 @@ def update_StaffEmployee(
         raise HTTPException(status_code=404, detail="StaffEmployee member not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and StaffEmployee.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and StaffEmployee.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this StaffEmployee member")
     
     # Update fields
@@ -323,7 +323,7 @@ def deactivate_StaffEmployee(
         raise HTTPException(status_code=404, detail="StaffEmployee member not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and StaffEmployee.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and StaffEmployee.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this StaffEmployee member")
     
     # Deactivate StaffEmployee
@@ -358,7 +358,7 @@ def create_attendance_record(
         raise HTTPException(status_code=404, detail="StaffEmployee member not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and StaffEmployee.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and StaffEmployee.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this StaffEmployee member")
     
     # Check for existing attendance record for the same date
@@ -420,7 +420,7 @@ def get_attendance_records(
     """Get attendance records with filtering"""
     
     # Filter by branch access
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         query = db.query(AttendanceRecord).join(StaffEmployee).join(User).join(Branch)
         if branch_id:
             query = query.filter(StaffEmployee.branch_id == branch_id)
@@ -458,7 +458,7 @@ def update_attendance_record(
         raise HTTPException(status_code=404, detail="Attendance record not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and attendance.StaffEmployee.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and attendance.StaffEmployee.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this attendance record")
     
     # Update fields
@@ -492,7 +492,7 @@ def get_attendance_summary(
     """Get attendance summary for a specific month"""
     
     # Filter by branch access
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         query = db.query(AttendanceRecord).join(StaffEmployee).join(User).join(Branch)
         if branch_id:
             query = query.filter(StaffEmployee.branch_id == branch_id)
@@ -551,7 +551,7 @@ def create_salary_record(
         raise HTTPException(status_code=404, detail="StaffEmployee member not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and StaffEmployee.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and StaffEmployee.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this StaffEmployee member")
     
     # Check if salary record already exists for this month/year
@@ -616,7 +616,7 @@ def get_salary_records(
     """Get salary records with filtering"""
     
     # Filter by branch access
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         query = db.query(SalaryRecord).join(StaffEmployee).join(User).join(Branch)
         if branch_id:
             query = query.filter(StaffEmployee.branch_id == branch_id)
@@ -651,7 +651,7 @@ def mark_salary_as_paid(
         raise HTTPException(status_code=404, detail="Salary record not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and salary.StaffEmployee.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and salary.StaffEmployee.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this salary record")
     
     # Mark as paid
@@ -681,7 +681,7 @@ def get_departments(
     """Get list of departments"""
     
     # Filter by branch access
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         query = db.query(StaffEmployee.department).distinct()
         if branch_id:
             query = query.filter(StaffEmployee.branch_id == branch_id)

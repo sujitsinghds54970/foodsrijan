@@ -2,12 +2,16 @@
 Unified Database Configuration for VaidyaVihar Diagnostic ERP
 This is the single source of truth for database configuration
 """
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
@@ -52,10 +56,9 @@ def get_db():
 # Database connection test
 def test_connection():
     try:
-        db = SessionLocal()
-        db.execute("SELECT 1")
-        db.close()
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
         return True
-    except Exception as e:
-        print(f"Database connection failed: {e}")
+    except SQLAlchemyError:
+        logger.exception("Database connection check failed")
         return False

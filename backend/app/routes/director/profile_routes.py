@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User, Branch
 from app.models.hr import DirectorProfile, DirectorNotification, StaffProfile, StaffLeaveRequest, LeaveStatus
-from app.utils.auth_system import get_current_user
+from app.utils.auth_system import get_current_user, is_super_ceo_user
 from app.utils.security import hash_password
 
 
@@ -47,12 +47,12 @@ def _generate_temp_password(length: int = 12) -> str:
 
 
 def _assert_director_scope(user: User) -> None:
-    if user.role not in ["branch_director", "branch_admin", "super_admin"]:
+    if user.role not in ["branch_director", "branch_admin"] and not is_super_ceo_user(user):
         raise HTTPException(status_code=403, detail="Access denied")
 
 
 def _assert_branch_access(user: User, branch_id: int) -> None:
-    if user.role == "super_admin":
+    if is_super_ceo_user(user):
         return
     if user.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied for this branch")
@@ -72,8 +72,8 @@ def create_branch_director(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ["branch_admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Only branch admin/super admin can create branch director")
+    if current_user.role not in ["branch_admin"] and not is_super_ceo_user(current_user):
+        raise HTTPException(status_code=403, detail="Only branch admin or the Super CEO can create branch director")
     if not current_user.branch_id:
         raise HTTPException(status_code=400, detail="Branch assignment required")
 

@@ -1,3 +1,10 @@
-from .management_routes import router as staff_management_v2_router
+from fastapi import APIRouter
 
-__all__ = ["staff_management_v2_router"]
+from app.routes.staff.profile import router as profile_router
+
+
+router = APIRouter()
+router.include_router(profile_router)
+
+
+__all__ = ["router"]

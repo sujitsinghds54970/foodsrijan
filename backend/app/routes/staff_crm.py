@@ -18,7 +18,7 @@ from app.database import Base, engine, get_db
 from app.models import User
 from app.models.daily_entry_module import DailyEntryModule
 from app.models.referring_doctor import StaffShareLink, ReferralLog, ReferringStaff
-from app.utils.auth_system import get_current_user
+from app.utils.auth_system import get_current_user, is_super_ceo_user
 
 
 router = APIRouter()
@@ -42,10 +42,10 @@ def _ensure_tables() -> None:
 
 
 def _require_branch_director(current_user: User) -> None:
-    if current_user.role not in ["super_admin", "branch_director", "branch_admin"]:
+    if current_user.role not in ["branch_director", "branch_admin"] and not is_super_ceo_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only super_admin, branch_director or branch_admin can access this module",
+            detail="Only the Super CEO, branch_director or branch_admin can access this module",
         )
 
 

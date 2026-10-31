@@ -288,7 +288,7 @@ def create_staff(
         raw_password = payload.temporary_password or f"VV@{secrets.token_hex(4)}"
         hashed_password = hash_password(raw_password)
         
-        print(f"Generated Username: {username}, Password Hash: {hashed_password[:20]}...")
+        print(f"Generated Username: {username} (password hash omitted from logs)")
 
         # Create User record
         user = User(

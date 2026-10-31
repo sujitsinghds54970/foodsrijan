@@ -12,7 +12,7 @@ from app.database import SessionLocal, get_db
 from app.models import User
 from app.models.analytics import DailyAnalyticsSnapshot
 from app.models.daily_entry_module import DailyEntryModule, DailyExpense
-from app.utils.auth_system import get_current_user
+from app.utils.auth_system import get_current_user, is_super_ceo_user
 
 router = APIRouter()
 
@@ -42,9 +42,9 @@ def _extract_test_tokens(test_name: Optional[str]) -> List[str]:
 
 
 def _check_analytics_access(current_user: User, branch_id: Optional[int] = None) -> None:
-    if current_user.role not in ["super_admin", "branch_admin", "branch_director"]:
+    if current_user.role not in ["branch_admin", "branch_director"] and not is_super_ceo_user(current_user):
         raise HTTPException(status_code=403, detail="Analytics access denied")
-    if current_user.role != "super_admin" and branch_id and current_user.branch_id != branch_id:
+    if not is_super_ceo_user(current_user) and branch_id and current_user.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied for branch")
 
 

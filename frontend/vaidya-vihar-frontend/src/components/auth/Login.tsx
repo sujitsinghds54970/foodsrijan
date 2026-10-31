@@ -27,23 +27,14 @@ export default function Login({ onSwitchToRegistration }: LoginProps) {
   useEffect(() => {
     const loadBranding = async () => {
       try {
-        const response = await axios.get('/api/public/branding')
+        const response = await axios.get(`${API_BASE}/api/public/branding`)
         setBranding({
           logo: response.data?.primary_logo_url || null,
           name: 'FoodSrijan Group',
           tagline: 'One Platform. Infinite Possibilities.',
         })
       } catch {
-        try {
-          const response = await axios.get(`${API_BASE}/api/public/branding`)
-          setBranding({
-            logo: response.data?.primary_logo_url || null,
-            name: 'FoodSrijan Group',
-            tagline: 'One Platform. Infinite Possibilities.',
-          })
-        } catch {
-          setBranding({ logo: null, name: 'FoodSrijan Group', tagline: 'One Platform. Infinite Possibilities.' })
-        }
+        setBranding({ logo: null, name: 'FoodSrijan Group', tagline: 'One Platform. Infinite Possibilities.' })
       }
     }
     void loadBranding()

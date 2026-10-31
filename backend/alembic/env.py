@@ -11,7 +11,8 @@ load_dotenv()
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
-config.set_main_option('sqlalchemy.url', os.getenv('DATABASE_URL'))
+from app.database import DATABASE_URL
+config.set_main_option('sqlalchemy.url', DATABASE_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -27,6 +28,7 @@ from app.models import (
     SalaryRecord, InventoryItem, StockMovement, Appointment, Invoice,
     InvoiceItem, LabResult, ActivityLog, SystemSettings
 )
+from app.models.authority import ProfileType, ProfileMembership, RoleAssignment
 from app.models.lis import (
     MenuItemOrder, MenuItemOrderItem, Sample, MenuItemResult,
     LabMenuItemMaster, LISOrderTemplate, GeneratedOrder,

@@ -6,6 +6,8 @@
     "@ag-grid-community/all-modules": "^27.3.0",
     "@emotion/react": "^11.10.0",
     "@emotion/styled": "^11.10.0",
+    "@fontsource/fraunces": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0",
     "@headlessui/react": "^2.2.10",
     "@mui/icons-material": "^5.11.0",
     "@mui/material": "^5.11.0",
@@ -79,8 +81,8 @@
     ]
   },
   "devDependencies": {
-    "tailwindcss": "^3.4.19",
     "@types/file-saver": "^2.0.5",
-    "@types/react-joyride": "^2.0.2"
+    "@types/react-joyride": "^2.0.2",
+    "tailwindcss": "^3.4.19"
   }
 }

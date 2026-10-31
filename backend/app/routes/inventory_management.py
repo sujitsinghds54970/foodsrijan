@@ -5,7 +5,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 
 from app.database import get_db
-from app.utils.auth_system import auth_guard, require_staff, get_current_user
+from app.utils.auth_system import auth_guard, require_staff, get_current_user, is_super_ceo_user
 from app.models import User, Branch, InventoryItem, StockMovement
 from pydantic import BaseModel, Field
 
@@ -115,7 +115,7 @@ def create_inventory_item(
     """Create a new inventory item"""
     
     # Ensure branch access
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         item_data.branch_id = current_user.branch_id
     
     # Check for duplicate item code
@@ -185,7 +185,7 @@ def get_inventory_items(
     """Get inventory items with filtering and search"""
     
     # Filter by branch access
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         query = db.query(InventoryItem)
         if branch_id:
             query = query.filter(InventoryItem.branch_id == branch_id)
@@ -269,7 +269,7 @@ def get_inventory_item(
         raise HTTPException(status_code=404, detail="Inventory item not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and item.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and item.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this item")
     
     # Calculate stock status
@@ -321,7 +321,7 @@ def update_inventory_item(
         raise HTTPException(status_code=404, detail="Inventory item not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and item.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and item.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this item")
     
     # Update fields
@@ -357,7 +357,7 @@ def deactivate_inventory_item(
         raise HTTPException(status_code=404, detail="Inventory item not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and item.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and item.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this item")
     
     # Deactivate item
@@ -391,7 +391,7 @@ def create_stock_movement(
         raise HTTPException(status_code=404, detail="Inventory item not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and item.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and item.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this item")
     
     # Store previous stock
@@ -465,7 +465,7 @@ def get_stock_movements(
         raise HTTPException(status_code=404, detail="Inventory item not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and item.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and item.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this item")
     
     # Query stock movements
@@ -501,7 +501,7 @@ def get_inventory_alerts(
     """Get inventory alerts (low stock, expiring items)"""
     
     # Filter by branch access
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         items = db.query(InventoryItem).filter(InventoryItem.is_active == True).all()
     else:
         items = db.query(InventoryItem).filter(
@@ -555,7 +555,7 @@ def get_inventory_categories(
     """Get list of inventory categories"""
     
     # Filter by branch access
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         categories = db.query(InventoryItem.category).distinct().all()
     else:
         categories = db.query(InventoryItem.category).filter(

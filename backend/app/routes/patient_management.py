@@ -5,7 +5,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 
 from app.database import get_db
-from app.utils.auth_system import auth_guard, require_staff, get_current_user
+from app.utils.auth_system import auth_guard, require_staff, get_current_user, is_super_ceo_user
 from app.models import User, Customer, DailyEntry, Branch
 from app.schemas.user import CustomerCreate, CustomerUpdate, CustomerResponse, DailyEntryCreate, DailyEntryUpdate, DailyEntryResponse
 
@@ -20,7 +20,7 @@ def create_patient(
     """Create a new patient record"""
     
     # Ensure branch access
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         patient_data.branch_id = current_user.branch_id
     
     # Check for duplicate patient (same phone number in same branch)
@@ -109,7 +109,7 @@ def get_customers(
     """Get list of customers with search and filtering"""
     
     # Filter by branch access
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         query = db.query(Customer)
         if branch_id:
             query = query.filter(Customer.branch_id == branch_id)
@@ -148,7 +148,7 @@ def get_patient(
         raise HTTPException(status_code=404, detail="Customer not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and patient.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and patient.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this patient")
     
     return patient
@@ -168,7 +168,7 @@ def update_patient(
         raise HTTPException(status_code=404, detail="Customer not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and patient.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and patient.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this patient")
     
     # Update fields
@@ -206,7 +206,7 @@ def get_patient_history(
         raise HTTPException(status_code=404, detail="Customer not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and patient.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and patient.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this patient")
     
     # Get date range (default: last 30 days)
@@ -280,7 +280,7 @@ def deactivate_patient(
         raise HTTPException(status_code=404, detail="Customer not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and patient.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and patient.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this patient")
     
     # Deactivate patient
@@ -309,7 +309,7 @@ def create_daily_entry(
     """Create a new daily entry"""
     
     # Ensure branch access
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         entry_data.branch_id = current_user.branch_id
     
     # Validate branch exists
@@ -385,7 +385,7 @@ def get_daily_entries(
     """Get daily entries with filtering"""
     
     # Filter by branch access
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         query = db.query(DailyEntry)
         if branch_id:
             query = query.filter(DailyEntry.branch_id == branch_id)
@@ -424,7 +424,7 @@ def get_daily_entry(
         raise HTTPException(status_code=404, detail="Daily entry not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and entry.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and entry.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this entry")
     
     return entry
@@ -444,7 +444,7 @@ def update_daily_entry(
         raise HTTPException(status_code=404, detail="Daily entry not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and entry.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and entry.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this entry")
     
     # Update fields
@@ -480,7 +480,7 @@ def delete_daily_entry(
         raise HTTPException(status_code=404, detail="Daily entry not found")
     
     # Check branch access
-    if current_user.role != 'super_admin' and entry.branch_id != current_user.branch_id:
+    if not is_super_ceo_user(current_user) and entry.branch_id != current_user.branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this entry")
     
     db.delete(entry)

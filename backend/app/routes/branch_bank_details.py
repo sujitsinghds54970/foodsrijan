@@ -15,7 +15,7 @@ from app.schemas.branch_bank_details import (
     BranchBankDetailsUpdate,
     BranchBankDetailsResponse
 )
-from app.utils.auth_system import get_current_user
+from app.utils.auth_system import get_current_user, is_super_ceo_user
 
 router = APIRouter()
 
@@ -50,8 +50,8 @@ async def get_branch_bank_details(
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
     
-    # Access control: Super Admin or Branch Admin of this specific branch
-    if current_user.role != 'super_admin' and current_user.branch_id != branch_id:
+    # Access control: Super CEO or Branch Admin of this specific branch
+    if not is_super_ceo_user(current_user) and current_user.branch_id != branch_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. You can only view your own branch's bank details."
@@ -66,7 +66,7 @@ async def get_branch_bank_details(
     if not bank_details:
         return {}
 
-    if current_user.role == 'super_admin':
+    if is_super_ceo_user(current_user):
         return {
             "id": bank_details.id,
             "branch_id": bank_details.branch_id,
@@ -105,11 +105,11 @@ async def create_or_update_branch_bank_details(
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
     
-    # Strict access control: Super Admin only
-    if current_user.role != 'super_admin':
+    # Strict access control: Super CEO only
+    if not is_super_ceo_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only super admin can modify bank details."
+            detail="Only the Super CEO can modify bank details."
         )
     
     # Check if bank details already exist
@@ -155,10 +155,10 @@ async def update_branch_bank_details(
         raise HTTPException(status_code=404, detail="Branch not found")
     
     # Strict access control
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only super admin can modify bank details."
+            detail="Only the Super CEO can modify bank details."
         )
     
     # Get existing details
@@ -190,10 +190,10 @@ async def delete_branch_bank_details(
     Soft delete (deactivate) bank details for a branch.
     Only Super Admin can delete.
     """
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only Super Admin can delete bank details."
+            detail="Only the Super CEO can delete bank details."
         )
     
     bank_details = db.query(BranchBankDetails).filter(

@@ -13,7 +13,7 @@ from app.database import get_db
 from app.models import Branch, User
 from app.models import Modality
 from app.models.hr import BranchNotification, BranchNotificationType
-from app.utils.auth_system import auth_guard, get_current_user
+from app.utils.auth_system import auth_guard, get_current_user, is_super_ceo_user
 from app.utils.onboarding_offer import run_offer_letter_workflow
 from app.utils.security import hash_password
 
@@ -234,9 +234,9 @@ def create_branch(
     try:
         _ensure_branch_schema(db)
 
-        # Check if user is super admin
-        if current_user.role != "super_admin":
-            raise HTTPException(status_code=403, detail="Only super admin can create branches")
+        # Check if user is authorized to manage the system portfolio
+        if not is_super_ceo_user(current_user):
+            raise HTTPException(status_code=403, detail="Only the Super CEO can create branches")
 
         branch_name = branch_data.name.strip()
         location = branch_data.location.strip()
@@ -413,7 +413,7 @@ def get_branches(
 ):
     _ensure_branch_schema(db)
     # Super admins can see all branches, others see only their own
-    if current_user.role == "super_admin":
+    if is_super_ceo_user(current_user):
         _ensure_main_branch(db)
         db.commit()
         query = db.query(Branch)
@@ -498,7 +498,7 @@ def get_branch(
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
 
-    if current_user.role != "super_admin" and current_user.branch_id != branch_id:
+    if not is_super_ceo_user(current_user) and current_user.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this branch")
 
     from app.models import DailyEntry, Customer
@@ -554,7 +554,7 @@ def update_branch(
     current_user: User = Depends(get_current_user),
 ):
     # Check if user has permission
-    if current_user.role not in ["super_admin", "branch_admin"]:
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_admin"]:
         raise HTTPException(status_code=403, detail="Access denied")
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not branch:
@@ -622,7 +622,7 @@ def delete_branch(
 ):
     try:
         # Check if user is super admin
-        if current_user.role != "super_admin":
+        if not is_super_ceo_user(current_user):
             raise HTTPException(status_code=403, detail="Only super admin can delete branches")
         
         branch = db.query(Branch).filter(Branch.id == branch_id).first()
@@ -734,7 +734,7 @@ def delete_branch_permanent(
 ):
     """Permanently delete a branch - archives associated data instead of hard delete"""
     # Check if user is super admin
-    if current_user.role != "super_admin":
+    if not is_super_ceo_user(current_user):
         raise HTTPException(status_code=403, detail="Only super admin can delete branches")
     
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
@@ -808,7 +808,7 @@ def activate_branch(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role != "super_admin":
+    if not is_super_ceo_user(current_user):
         raise HTTPException(status_code=403, detail="Only super admin can activate branches")
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
     if not branch:
@@ -856,7 +856,7 @@ def reset_branch_admin_credentials(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.role != "super_admin":
+    if not is_super_ceo_user(current_user):
         raise HTTPException(status_code=403, detail="Only super admin can access branch admin credentials")
 
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
@@ -907,7 +907,7 @@ def get_branch_admin_credentials(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.role != "super_admin":
+    if not is_super_ceo_user(current_user):
         raise HTTPException(status_code=403, detail="Only super admin can access branch admin credentials")
 
     branch = db.query(Branch).filter(Branch.id == branch_id).first()
@@ -942,7 +942,7 @@ def update_branch_admin_credentials(
     db: Session = Depends(get_db),
 ):
     try:
-        if current_user.role != "super_admin":
+        if not is_super_ceo_user(current_user):
             raise HTTPException(status_code=403, detail="Only super admin can update branch admin credentials")
 
         branch = db.query(Branch).filter(Branch.id == branch_id).first()
@@ -1019,7 +1019,7 @@ def get_branch_statistics(
     if not branch:
         raise HTTPException(status_code=404, detail="Branch not found")
 
-    if current_user.role != "super_admin" and current_user.branch_id != branch_id:
+    if not is_super_ceo_user(current_user) and current_user.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied to this branch")
 
     from app.database import Base

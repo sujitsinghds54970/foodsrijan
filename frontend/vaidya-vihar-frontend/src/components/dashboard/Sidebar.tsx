@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
-import GroupsIcon from '@mui/icons-material/Groups'
 import { FaBell, FaBoxes, FaCogs, FaGavel, FaMoneyBillWave, FaStethoscope, FaUserCircle, FaUserInjured, FaUsers, FaWallet } from 'react-icons/fa'
 import { useAuth } from '../../contexts/AuthContext'
 import { staffSelfApi } from '../staff/api'
@@ -14,6 +13,7 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   const auth = useAuth()
   const { user } = auth
   const role = (user?.role || '').trim().toLowerCase()
+  const isSystemAdmin = Boolean((user as any)?.is_super_admin || role === 'super_admin' || role === 'super_ceo')
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [branchUnreadNotifications, setBranchUnreadNotifications] = useState(0)
   const API_BASE =
@@ -22,26 +22,26 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
       ? 'http://127.0.0.1:8000'
       : window.location.origin)
 
-  const isStaff = role !== 'super_admin' &&
+  const isStaff = !isSystemAdmin &&
     role !== 'branch_admin' &&
     role !== 'branch_director' &&
     role !== 'doctor'
   const staffProfilePhoto = auth.user?.profilePhoto
   const sidebarLogoSrc =
-    auth.user?.role === 'super_admin'
+    isSystemAdmin
       ? auth.user?.companyLogo || auth.user?.profilePhoto || '/default-company-logo.png'
       : auth.user?.branch?.logo_url || '/default-logo.png'
-  const sidebarFallbackLogo = auth.user?.role === 'super_admin' ? '/default-company-logo.png' : '/default-logo.png'
+  const sidebarFallbackLogo = isSystemAdmin ? '/default-company-logo.png' : '/default-logo.png'
 
   const canAccessDailyOps = isStaff ? Boolean((user as any)?.can_access_daily_ops) : false
   const deskTitle = useMemo(() => {
-    if (role === 'super_admin') return 'FoodSrijan Group'
+    if (isSystemAdmin) return 'FoodSrijan Group'
     if (role === 'branch_admin' || role === 'branch_director') return 'Director Desk'
     if (role === 'doctor') return 'Staff Desk'
     if (role === 'staff') return 'Staff Desk'
     if (isStaff) return 'Staff Desk'
     return 'Staff Desk'
-  }, [isStaff, role])
+  }, [isStaff, isSystemAdmin, role])
 
   useEffect(() => {
     const loadUnread = async () => {
@@ -132,7 +132,7 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     ? staffMenuItems
     : role === 'doctor'
       ? doctorMenuItems
-      : role === 'super_admin'
+      : isSystemAdmin
         ? superAdminMenuItems
         : defaultMenuItems
 

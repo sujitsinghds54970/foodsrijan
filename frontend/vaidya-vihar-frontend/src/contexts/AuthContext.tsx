@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
-import axios from 'axios';
+import axios, { AxiosHeaders } from 'axios';
 import toast from 'react-hot-toast';
 
 interface User {
@@ -7,11 +7,23 @@ interface User {
   username: string;
   email: string;
   role: string;
+  company_id?: number | null;
+  current_company_id?: number | null;
+  is_super_admin?: boolean;
+  is_company_ceo?: boolean;
+  companies?: Array<{
+    id?: number;
+    company_id?: number | null;
+    name?: string;
+    company_name?: string;
+    slug?: string;
+    is_active?: boolean;
+  }>;
   companyLogo?: string | null;
-  profilePhoto?: string;
-  photo?: string;
-  profile_photo?: string;
-  photo_url?: string;
+  profilePhoto?: string | null;
+  photo?: string | null;
+  profile_photo?: string | null;
+  photo_url?: string | null;
   branch_id?: number | null;
   branch?: {
     id?: number;
@@ -47,26 +59,7 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-const normalizeApiBase = (rawBase: string): string => {
-  const trimmed = (rawBase || '').trim();
-  if (!trimmed) return '';
-
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.hostname === 'localhost') {
-      parsed.hostname = '127.0.0.1';
-    }
-    return parsed.toString().replace(/\/$/, '');
-  } catch {
-    return trimmed.replace('://localhost', '://127.0.0.1').replace(/\/$/, '');
-  }
-};
-
-const configuredApiBase = normalizeApiBase((process as any).env.REACT_APP_API_BASE_URL || '');
-const API_BASE = configuredApiBase ||
-  ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://127.0.0.1:8000'
-    : window.location.origin);
+const API_BASE = 'http://127.0.0.1:8000';
 console.log('[AUTH_DEBUG] API_BASE_FIXED', API_BASE);
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
@@ -107,8 +100,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               const meResponse = await axios.get(`${API_BASE}/api/auth/me`);
               const verifiedUser = meResponse.data;
               if (verifiedUser?.role) {
-                setUser(verifiedUser);
-                localStorage.setItem('user', JSON.stringify(verifiedUser));
+                const hydratedUser = { ...(parsedStoredUser || {}), ...verifiedUser };
+                setUser(hydratedUser);
+                localStorage.setItem('user', JSON.stringify(hydratedUser));
               }
             } catch (error) {
               console.error('[AUTH_DEBUG] Failed to hydrate stored user from /api/auth/me', error);
@@ -128,6 +122,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const requestInterceptor = axios.interceptors.request.use(
       (config) => {
         const fullUrl = `${config.baseURL || ''}${config.url || ''}`;
+
+        try {
+          const workspaceCompanyId = localStorage.getItem('workspace.companyId');
+          const workspaceBrandId = localStorage.getItem('workspace.brandId');
+          const headers = AxiosHeaders.from(config.headers ?? {});
+
+          if (workspaceCompanyId) {
+            headers.set('X-Company-ID', workspaceCompanyId);
+          }
+          if (workspaceBrandId) {
+            headers.set('X-Brand-ID', workspaceBrandId);
+          }
+          config.headers = headers;
+        } catch {
+          // Ignore storage access issues during server-side or stale contexts.
+        }
+
         console.info('[API REQUEST]', {
           method: config.method,
           baseURL: config.baseURL || API_BASE,
@@ -211,15 +222,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setToken(null);
       setUser(null);
 
-      // Log exact payload being sent (Step 3 debugging)
-      console.log('LOGIN_PAYLOAD:', { username: normalizedUsername, password });
-      console.log('LOGIN_PAYLOAD_LENGTHS:', { 
-        usernameLength: normalizedUsername.length, 
-        passwordLength: password.length,
-        usernameHasSpaces: username !== normalizedUsername,
-        passwordHasSpaces: password !== password.trim()
-      });
-
       const formData = new FormData();
       formData.append('username', normalizedUsername);
       formData.append('password', password);
@@ -247,11 +249,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error('Missing access token in login response');
       }
 
-      console.log('[AUTH_DEBUG] LOGIN_RESPONSE', {
-        hasToken: !!access_token,
-        tokenPreview: access_token ? `${access_token.slice(0, 20)}...` : null,
-      });
-
       // Persist token first for subsequent protected calls
       setToken(access_token);
       localStorage.setItem('token', access_token);
@@ -260,13 +257,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Mandatory verification call to prevent half-logged-in state
       try {
         const meUrl = `${API_BASE}/api/auth/me`;
-        console.log('[AUTH_DEBUG] ME_REQUEST', {
-          url: meUrl,
-          headers: {
-            Authorization: axios.defaults.headers.common['Authorization'],
-          },
-        });
-
         const loginUser = response.data?.user;
 
         console.log('[AUTH_DEBUG] LOGIN_USER', {
@@ -280,8 +270,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           throw new Error('User role missing in profile response');
         }
         const mergedUser = { ...(loginUser || {}), ...verifiedUser };
+        const activeCompanyId = Number(mergedUser.current_company_id ?? mergedUser.company_id ?? 0) || null;
+        const primaryCompanies = Array.isArray(mergedUser.companies) && mergedUser.companies.length
+          ? mergedUser.companies
+          : [];
+
+        if (primaryCompanies.length) {
+          const normalizedCompanies = primaryCompanies.map((company: any) => ({
+            id: Number(company.company_id ?? company.id ?? 0),
+            name: company.name || company.company_name || 'Company',
+            slug: company.slug || (company.name || company.company_name || 'company').toLowerCase().replace(/\s+/g, '-'),
+            is_active: company.is_active ?? true,
+          })).filter((company: any) => company.id);
+
+          if (normalizedCompanies.length) {
+            localStorage.setItem('workspace.companies', JSON.stringify(normalizedCompanies));
+            const selectedCompany = normalizedCompanies.find((company: any) => Number(company.id) === Number(activeCompanyId)) || normalizedCompanies[0];
+            if (selectedCompany) {
+              localStorage.setItem('workspace.companyId', String(selectedCompany.id));
+            }
+          }
+        }
+
         setUser(mergedUser);
         localStorage.setItem('user', JSON.stringify(mergedUser));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('workspace:user-updated', { detail: mergedUser }));
+        }
       } catch (meError: any) {
         setUser(null);
         setToken(null);
@@ -310,7 +325,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setToken(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('workspace.companyId');
+    localStorage.removeItem('workspace.brandId');
+    localStorage.removeItem('workspace.companies');
+    localStorage.removeItem('workspace.brands');
     delete axios.defaults.headers.common['Authorization'];
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('workspace:user-updated', { detail: null }));
+    }
     toast.success('Logged out successfully');
   };
 

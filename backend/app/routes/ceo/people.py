@@ -32,6 +32,16 @@ def _table_reference_snapshot(db: Session) -> dict[str, Any]:
     }
 
 
+def _ensure_branch_labels(db: Session, minimum: int, fallback: list[str]) -> list[str]:
+    labels = [branch.name for branch in db.query(Branch).order_by(Branch.id.asc()).all()]
+    for name in fallback:
+        if name not in labels:
+            labels.append(name)
+    while len(labels) < minimum:
+        labels.append(f"Branch {len(labels) + 1}")
+    return labels[:minimum]
+
+
 @router.get("/health-score")
 def get_people_health_score(db: Session = Depends(get_db)):
     return {
@@ -72,9 +82,7 @@ def get_people_health_score(db: Session = Depends(get_db)):
 
 @router.get("/talent-retention")
 def get_people_talent_retention(db: Session = Depends(get_db)):
-    branches = db.query(Branch).order_by(Branch.id.asc()).limit(4).all()
-    branch_labels = [branch.name for branch in branches] or ["Mumbai", "Delhi", "Patna", "Bhabua"]
-    padded_branch_labels = (branch_labels + ["Pune", "Noida"])[:4]
+    padded_branch_labels = _ensure_branch_labels(db, 4, ["Mumbai", "Delhi", "Patna", "Bhabua", "Pune", "Noida"])
 
     return {
         "is_mock": True,
@@ -216,9 +224,7 @@ def get_people_engagement_culture(db: Session = Depends(get_db)):
 
 @router.get("/leadership-development")
 def get_people_leadership_development(db: Session = Depends(get_db)):
-    branches = db.query(Branch).order_by(Branch.id.asc()).limit(4).all()
-    branch_labels = [branch.name for branch in branches] or ["Mumbai", "Delhi", "Patna", "Bhabua"]
-    padded_branch_labels = (branch_labels + ["Noida", "Pune"])[:4]
+    padded_branch_labels = _ensure_branch_labels(db, 4, ["Mumbai", "Delhi", "Patna", "Bhabua", "Noida", "Pune"])
     return {
         "is_mock": True,
         "leadership_pipeline": [
@@ -257,9 +263,7 @@ def get_people_leadership_development(db: Session = Depends(get_db)):
 
 @router.get("/workforce-productivity")
 def get_people_workforce_productivity(db: Session = Depends(get_db)):
-    branches = db.query(Branch).order_by(Branch.id.asc()).limit(4).all()
-    branch_labels = [branch.name for branch in branches] or ["Mumbai", "Delhi", "Patna", "Bhabua"]
-    padded_branch_labels = (branch_labels + ["Noida", "Pune"])[:4]
+    padded_branch_labels = _ensure_branch_labels(db, 4, ["Mumbai", "Delhi", "Patna", "Bhabua", "Noida", "Pune"])
     return {
         "is_mock": True,
         "revenue_per_employee": 1250000,

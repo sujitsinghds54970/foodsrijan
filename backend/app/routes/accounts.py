@@ -19,7 +19,7 @@ from app.database import get_db
 from app.models import Branch, User
 from app.models.finance import BranchAccount, FinanceExpense, FinanceInvoice, FinanceTransaction
 from app.services.finance_integration import create_transaction, ensure_branch_account
-from app.utils.auth_system import get_current_user
+from app.utils.auth_system import get_current_user, is_super_ceo_user
 
 router = APIRouter()
 UPLOAD_DIR = Path("uploads/finance")
@@ -77,13 +77,13 @@ def _generate_invoice_pdf_file(invoice: FinanceInvoice) -> str:
 
 
 def _require_finance_role(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role not in ["super_admin", "branch_admin", "branch_director"]:
+    if current_user.role not in ["branch_admin", "branch_director"] and not is_super_ceo_user(current_user):
         raise HTTPException(status_code=403, detail="Finance access denied")
     return current_user
 
 
 def _resolve_branch_id(db: Session, current_user: User, requested_branch_id: Optional[int]) -> int:
-    if current_user.role == "super_admin":
+    if is_super_ceo_user(current_user):
         if requested_branch_id is None:
             first_branch = db.query(Branch).order_by(Branch.id.asc()).first()
             if not first_branch:
@@ -206,7 +206,7 @@ def list_branch_accounts(
     db: Session = Depends(get_db),
     current_user: User = Depends(_require_finance_role),
 ):
-    resolved_branch = _resolve_branch_id(db, current_user, branch_id) if branch_id or current_user.role != "super_admin" else None
+    resolved_branch = _resolve_branch_id(db, current_user, branch_id) if branch_id or not is_super_ceo_user(current_user) else None
 
     query = db.query(BranchAccount)
     if resolved_branch:

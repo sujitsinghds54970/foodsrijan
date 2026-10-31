@@ -20,7 +20,7 @@ from app.models.hr import (
     TaskAttachment,
     TaskComment,
 )
-from app.utils.auth_system import get_current_user
+from app.utils.auth_system import get_current_user, is_super_ceo_user
 
 
 router = APIRouter(prefix="/tasks", tags=["Task Management"])
@@ -55,6 +55,11 @@ class TaskCommentRequest(BaseModel):
 
 def _normalize_role(role: Optional[str]) -> str:
     return (role or "").strip().lower()
+
+
+def _is_global_executive_role(role: Optional[str]) -> bool:
+    normalized = _normalize_role(role)
+    return normalized in {"super_ceo", "super_admin"}
 
 
 def _normalize_priority(value: Optional[str]) -> str:
@@ -105,19 +110,19 @@ def _serialize_task(task: StaffTask) -> dict:
 
 
 def _is_director_like(user: User) -> bool:
-    return _normalize_role(user.role) in {"branch_director", "branch_admin", "super_admin"}
+    return _normalize_role(user.role) in {"branch_director", "branch_admin", "super_admin", "super_ceo"}
 
 
 def _is_staff_role(role: Optional[str]) -> bool:
     """Check if role is a staff-type role (not admin/director/doctor)"""
     role_normalized = _normalize_role(role)
-    non_staff_roles = {'super_admin', 'branch_admin', 'branch_director', 'admin', 'doctor'}
+    non_staff_roles = {'super_admin', 'super_ceo', 'branch_admin', 'branch_director', 'admin', 'doctor'}
     return role_normalized not in non_staff_roles
 
 
 def _ensure_task_access(task: StaffTask, current_user: User) -> None:
     role = _normalize_role(current_user.role)
-    if role == "super_admin":
+    if _is_global_executive_role(role):
         return
     if role in {"branch_director", "branch_admin"}:
         if current_user.branch_id != task.branch_id:
@@ -185,10 +190,10 @@ def list_tasks(
 ):
     role = _normalize_role(current_user.role)
     # Allow staff roles, directors, and admins
-    if not _is_staff_role(current_user.role) and role not in {"branch_director", "branch_admin", "super_admin"}:
+    if not _is_staff_role(current_user.role) and role not in {"branch_director", "branch_admin", "super_admin", "super_ceo"}:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    _apply_overdue_flags(db, None if role == "super_admin" else current_user.branch_id)
+    _apply_overdue_flags(db, None if _is_global_executive_role(role) else current_user.branch_id)
 
     query = db.query(StaffTask)
     if _is_staff_role(current_user.role):
@@ -225,7 +230,7 @@ def create_task(
     if not assigned_user:
         raise HTTPException(status_code=404, detail="Assigned staff user not found")
 
-    if _normalize_role(current_user.role) != "super_admin":
+    if not _is_global_executive_role(current_user.role):
         if current_user.branch_id is None:
             raise HTTPException(status_code=400, detail="Your account has no branch association")
         if assigned_user.branch_id != current_user.branch_id:
@@ -303,7 +308,7 @@ def update_task(
         assigned_user = db.query(User).filter(User.id == payload.assigned_to, User.is_active == True).first()
         if not assigned_user:
             raise HTTPException(status_code=404, detail="Assigned staff user not found")
-        if _normalize_role(current_user.role) != "super_admin" and assigned_user.branch_id != current_user.branch_id:
+        if not _is_global_executive_role(current_user.role) and assigned_user.branch_id != current_user.branch_id:
             raise HTTPException(status_code=400, detail="Can only reassign inside your branch")
         profile = _resolve_staff_profile(db, assigned_user.id, assigned_user.branch_id)
         if not profile:
@@ -361,7 +366,7 @@ def update_task_status(
     current_user: User = Depends(get_current_user),
 ):
     role = _normalize_role(current_user.role)
-    if not _is_staff_role(current_user.role) and role not in {"branch_director", "branch_admin", "super_admin"}:
+    if not _is_staff_role(current_user.role) and role not in {"branch_director", "branch_admin", "super_admin", "super_ceo"}:
         raise HTTPException(status_code=403, detail="Access denied")
 
     task = db.query(StaffTask).filter(StaffTask.id == task_id).first()

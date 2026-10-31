@@ -2,6 +2,7 @@ import axios from 'axios'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useWorkspace } from '../../context/WorkspaceContext'
 import { resolveStaffMediaUrl, staffSelfApi } from '../staff/api'
 
 interface User {
@@ -31,9 +32,12 @@ export default function Header({ user, onLogout }: HeaderProps) {
   const { user: authUser } = auth
   const location = useLocation()
   const [showDropdown, setShowDropdown] = useState(false)
+  const [showCompanyMenu, setShowCompanyMenu] = useState(false)
   const [branchName, setBranchName] = useState<string>('FoodSrijan Group')
   const [branchLogoSrc, setBranchLogoSrc] = useState<string>('/default-branch-logo.png')
   const dropdownRef = useRef<HTMLDivElement | null>(null)
+  const companyMenuRef = useRef<HTMLDivElement | null>(null)
+  const { companies, company, setCurrentWorkspace, companyId } = useWorkspace()
   const API_BASE =
     (process as any).env.REACT_APP_API_BASE_URL ||
     ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
@@ -49,8 +53,9 @@ export default function Header({ user, onLogout }: HeaderProps) {
   }
 
   const role = (authUser?.role || user?.role || '').toLowerCase()
+  const isSystemAdmin = Boolean((authUser as any)?.is_super_admin || (user as any)?.is_super_admin || role === 'super_admin' || role === 'super_ceo')
   const isStaffRoute = location.pathname.toLowerCase().startsWith('/staff/')
-  const isStaffLikeRole = role !== 'super_admin' &&
+  const isStaffLikeRole = !isSystemAdmin &&
     role !== 'branch_admin' &&
     role !== 'branch_director' &&
     role !== 'doctor'
@@ -93,9 +98,11 @@ export default function Header({ user, onLogout }: HeaderProps) {
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
-      if (!dropdownRef.current) return
-      if (!dropdownRef.current.contains(event.target as Node)) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false)
+      }
+      if (companyMenuRef.current && !companyMenuRef.current.contains(event.target as Node)) {
+        setShowCompanyMenu(false)
       }
     }
     document.addEventListener('mousedown', onPointerDown)
@@ -104,6 +111,7 @@ export default function Header({ user, onLogout }: HeaderProps) {
 
   useEffect(() => {
     setShowDropdown(false)
+    setShowCompanyMenu(false)
   }, [location.pathname])
 
   useEffect(() => {
@@ -130,6 +138,50 @@ export default function Header({ user, onLogout }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-4">
+          {(companies.length > 1 || authUser?.is_super_admin || isSystemAdmin) && (
+            <div className="relative z-40" ref={companyMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowCompanyMenu((current) => !current)}
+                className="flex items-center gap-2 rounded-full border border-white/40 bg-white/10 px-4 py-2 text-sm font-bold text-white shadow-lg backdrop-blur-sm transition hover:bg-white/20"
+              >
+                <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                <span className="max-w-[160px] truncate">{company?.name || 'Company'}</span>
+                <svg className={`h-4 w-4 transition-transform ${showCompanyMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {showCompanyMenu && (
+                <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+                  <div className="border-b border-slate-100 px-4 py-3 text-xs font-black uppercase tracking-[0.22em] text-slate-500">
+                    Company Switcher
+                  </div>
+                  <div className="max-h-72 overflow-y-auto py-2">
+                    {companies.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          setCurrentWorkspace(option.id, null)
+                          setShowCompanyMenu(false)
+                        }}
+                        className={`flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold transition ${
+                          Number(companyId) === Number(option.id) ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="truncate">{option.name}</span>
+                        {Number(companyId) === Number(option.id) && (
+                          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-indigo-600" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* User Profile Dropdown */}
           <div className="relative z-50" ref={dropdownRef}>
             <button

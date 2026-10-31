@@ -32,7 +32,7 @@ from app.models.hr import (
     LeaveStatus,
     StaffNotification,
 )
-from app.utils.auth_system import get_current_user, auth_guard
+from app.utils.auth_system import get_current_user, auth_guard, is_super_ceo_user
 from app.utils.security import hash_password
 
 
@@ -46,7 +46,7 @@ def _generate_temp_password(length: int = 12) -> str:
 
 
 def _assert_branch_access(current_user: User, branch_id: int) -> None:
-    if current_user.role == "super_admin":
+    if is_super_ceo_user(current_user):
         return
     if current_user.branch_id != branch_id:
         raise HTTPException(status_code=403, detail="Access denied for this branch")
@@ -61,7 +61,7 @@ def _get_director_for_branch(db: Session, branch_id: int) -> Optional[User]:
 
 
 def _ensure_director_or_admin(current_user: User) -> None:
-    if current_user.role not in ["branch_director", "branch_admin", "super_admin", "staff"]:
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_director", "branch_admin", "staff"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
 
@@ -202,8 +202,8 @@ def create_branch_director(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ["branch_admin", "super_admin"]:
-        raise HTTPException(status_code=403, detail="Only branch admin can create branch director")
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_admin"]:
+        raise HTTPException(status_code=403, detail="Only the Super CEO or branch admin can create a branch director")
 
     if not current_user.branch_id:
         raise HTTPException(status_code=400, detail="Branch assignment required")
@@ -626,7 +626,7 @@ def deactivate_staff(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ["branch_director", "branch_admin", "super_admin"]:
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_director", "branch_admin"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
     profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
@@ -651,7 +651,7 @@ def upload_staff_photo(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ["branch_director", "branch_admin", "super_admin"]:
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_director", "branch_admin"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
     profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
@@ -740,7 +740,7 @@ def clock_attendance(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ["branch_director", "staff", "branch_admin", "super_admin"]:
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_director", "staff", "branch_admin"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
     profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
@@ -976,7 +976,7 @@ def decide_leave_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ["branch_director", "branch_admin", "super_admin"]:
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_director", "branch_admin"]:
         raise HTTPException(status_code=403, detail="Only director/admin can approve leaves")
 
     req = db.query(StaffLeaveRequest).filter(StaffLeaveRequest.id == leave_request_id).first()
@@ -1091,7 +1091,7 @@ def director_dashboard_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ["branch_director", "branch_admin", "super_admin"]:
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_director", "branch_admin"]:
         raise HTTPException(status_code=403, detail="Access denied")
     if not current_user.branch_id:
         raise HTTPException(status_code=400, detail="Branch assignment missing")
@@ -1247,7 +1247,7 @@ def upload_staff_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ["branch_director", "staff", "branch_admin", "super_admin"]:
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_director", "staff", "branch_admin"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
     profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
@@ -1277,7 +1277,7 @@ def list_staff_documents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ["branch_director", "staff", "branch_admin", "super_admin"]:
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_director", "staff", "branch_admin"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
     profile = db.query(StaffProfile).filter(StaffProfile.id == staff_profile_id).first()
@@ -1309,7 +1309,7 @@ def export_attendance_csv(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ["branch_director", "branch_admin", "super_admin"]:
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_director", "branch_admin"]:
         raise HTTPException(status_code=403, detail="Access denied")
 
     if not current_user.branch_id:

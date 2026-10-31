@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.activity_log import ActivityLog
 from app.models.user import User
-from app.utils.auth_system import get_current_user
+from app.utils.auth_system import get_current_user, is_super_ceo_user
 
 router = APIRouter()
 
@@ -39,8 +39,8 @@ def list_logs(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Only super admin can view activity logs")
+    if not is_super_ceo_user(current_user):
+        raise HTTPException(status_code=403, detail="Only the Super CEO can view activity logs")
 
     query = db.query(ActivityLog)
     if entity_type:

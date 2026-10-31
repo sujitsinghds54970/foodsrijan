@@ -51,18 +51,32 @@ from app.models.appointment import Appointment
 from app.models.calendar_day import CalendarDay
 from app.models.release_day import ReleaseDay
 from app.models.ceo import CeoAuditLog, CeoBreakGlassGrant, CeoSecurityProfile, CeoWebAuthnCredential
-from app.models.hr import StaffProfile
+from app.models.hr import StaffProfile, StaffRequest
+from app.models import attendance  # Register the managed ledger without replacing legacy AttendanceRecord.
 from app.models.otp import OTPRequest
+from app.models.company_structure import Company, Brand, Department, Role, Permission, UserRole, UserCompany, RateLimitEntry
+from app.models.authority import ProfileMembership, ProfileType, RoleAssignment
+from app.models.themes import Theme, ThemeAssignment, ThemeVersion
+from app.models.auth_security import LoginAttempt
 import json
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text, Float, DECIMAL, JSON
+from sqlalchemy import Column, Integer, String, Date, DateTime, Boolean, ForeignKey, Text, Float, DECIMAL, JSON, Index, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 
 class Branch(Base):
     __tablename__ = "branches"
+    __table_args__ = (
+        Index("uq_branches_company_code", "company_id", "code", unique=True),
+        Index("uq_branches_company_slug", "company_id", "slug", unique=True),
+        Index("uq_branches_gstin", "gstin", unique=True),
+        Index("ix_branches_company_status", "company_id", "status"),
+        Index("ix_branches_is_deleted", "is_deleted"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=True, index=True)
     name = Column(String(100), nullable=False, unique=True)
     location = Column(String(200), nullable=False)
     address = Column(Text, nullable=False)
@@ -83,12 +97,78 @@ class Branch(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     established_date = Column(DateTime, default=func.now())
+
+    # Outlet identity
+    slug = Column(String(120), nullable=True)
+    code = Column(String(20), nullable=True)
+    outlet_type = Column(String(32), nullable=True)
+    status = Column(String(32), nullable=True, default="active", server_default="active")
+    description = Column(Text, nullable=True)
+    opening_date = Column(Date, nullable=True)
+    cover_photo_url = Column(String(2048), nullable=True)
+
+    # Outlet location
+    address_line_1 = Column(String(255), nullable=True)
+    address_line_2 = Column(String(255), nullable=True)
+    country = Column(String(2), nullable=True)
+    region = Column(String(32), nullable=True)
+    timezone = Column(String(64), nullable=True)
+
+    # Outlet operations
+    opening_time = Column(String(5), nullable=True)
+    closing_time = Column(String(5), nullable=True)
+    operating_days = Column(JSON, nullable=True)
+    seating_capacity = Column(Integer, nullable=True)
+    kitchen_capacity = Column(Integer, nullable=True)
+    is_delivery_enabled = Column(Boolean, nullable=False, default=False, server_default=text("0"))
+    is_dine_in_enabled = Column(Boolean, nullable=False, default=False, server_default=text("0"))
+    is_takeaway_enabled = Column(Boolean, nullable=False, default=False, server_default=text("0"))
+    delivery_radius_km = Column(Float, nullable=True)
+
+    # Outlet legal & compliance
+    fssai_license = Column(String(14), nullable=True)
+    gstin = Column(String(15), nullable=True)
+    trade_license = Column(String(100), nullable=True)
+    fire_safety_certificate = Column(String(100), nullable=True)
+    health_permit = Column(String(100), nullable=True)
+    license_expiry_date = Column(Date, nullable=True)
+
+    # Outlet financial
+    rent_amount = Column(DECIMAL(14, 2), nullable=True)
+    security_deposit = Column(DECIMAL(14, 2), nullable=True)
+    lease_start_date = Column(Date, nullable=True)
+    lease_end_date = Column(Date, nullable=True)
+    bank_account_name = Column(String(255), nullable=True)
+    bank_account_number = Column(String(34), nullable=True)
+    ifsc_code = Column(String(11), nullable=True)
+    bank_name = Column(String(255), nullable=True)
+    branch_name = Column(String(255), nullable=True)
+    upi_id = Column(String(100), nullable=True)
+    cost_center_code = Column(String(50), nullable=True)
+
+    # Outlet digital
+    manager_contact_email = Column(String(254), nullable=True)
+    manager_contact_phone = Column(String(32), nullable=True)
+    outlet_email = Column(String(254), nullable=True)
+    outlet_phone = Column(String(32), nullable=True)
+    google_maps_url = Column(String(2048), nullable=True)
+    swiggy_store_id = Column(String(64), nullable=True)
+    zomato_store_id = Column(String(64), nullable=True)
+
+    # Outlet metadata
+    created_by = Column(Integer, ForeignKey("users.id", name="fk_branches_created_by_users"), nullable=True)
+    deleted_at = Column(DateTime, nullable=True)
+    is_deleted = Column(Boolean, nullable=False, default=False, server_default=text("0"))
+    outlet_metadata = Column("metadata", JSON, nullable=True)
+
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # Relationships
-    users = relationship("User", back_populates="branch")
+    company = relationship("Company", back_populates="branches")
+    brand = relationship("Brand", back_populates="branches")
+    users = relationship("User", foreign_keys="User.branch_id", back_populates="branch")
     customers = relationship("Customer", back_populates="branch")
     daily_entries = relationship("DailyEntry", back_populates="branch")
     StaffEmployee = relationship("StaffEmployee", back_populates="branch")
@@ -101,14 +181,143 @@ class Branch(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        Index(
+            "uq_users_active_super_ceo",
+            "is_super_ceo",
+            unique=True,
+            sqlite_where=text("is_super_ceo = 1 AND is_active = 1"),
+            postgresql_where=text("is_super_ceo AND is_active"),
+        ),
+        Index("ix_users_is_company_ceo", "is_company_ceo"),
+        Index("ix_users_company_id_ceo", "company_id", "is_company_ceo"),
+        Index("ix_users_outlet_id", "outlet_id"),
+        Index("ix_users_company_outlet_manager", "company_id", "is_outlet_manager"),
+        Index("ix_users_company_outlet_staff", "company_id", "outlet_id", "is_staff"),
+        Index(
+            "uq_users_active_outlet_manager",
+            "outlet_id",
+            unique=True,
+            sqlite_where=text("is_outlet_manager = 1 AND is_active = 1"),
+            postgresql_where=text("is_outlet_manager AND is_active"),
+        ),
+        Index(
+            "uq_users_staff_phone_active",
+            "phone",
+            unique=True,
+            sqlite_where=text("is_staff = 1 AND is_deleted = 0"),
+            postgresql_where=text("is_staff AND NOT is_deleted"),
+        ),
+        Index(
+            "uq_users_staff_outlet_employee_code",
+            "outlet_id",
+            "employee_code",
+            unique=True,
+            sqlite_where=text("is_staff = 1 AND is_deleted = 0 AND employee_code IS NOT NULL"),
+            postgresql_where=text("is_staff AND NOT is_deleted AND employee_code IS NOT NULL"),
+        ),
+        Index(
+            "uq_users_staff_aadhaar_active",
+            "aadhaar_number",
+            unique=True,
+            sqlite_where=text("is_staff = 1 AND is_deleted = 0 AND aadhaar_number IS NOT NULL"),
+            postgresql_where=text("is_staff AND NOT is_deleted AND aadhaar_number IS NOT NULL"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, nullable=False)
     email = Column(String(100), unique=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(50), default="StaffEmployee")  # super_admin, branch_admin, StaffEmployee, patient
+    current_company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=True)
     is_active = Column(Boolean, default=True)
+    is_super_admin = Column(Boolean, default=False, nullable=False)
+    is_super_ceo = Column(Boolean, default=False, nullable=False)
+    is_company_ceo = Column(Boolean, default=False, nullable=False, server_default=text("0"))
+    ceo_assigned_at = Column(DateTime, nullable=True)
+    ceo_assigned_by = Column(Integer, ForeignKey("users.id", name="fk_users_ceo_assigned_by_users"), nullable=True)
+    password_changed_at = Column(DateTime, nullable=True)
+    force_password_change = Column(Boolean, default=False, nullable=False, server_default=text("0"))
+    display_name = Column(String(150), nullable=True)
+    bio = Column(Text, nullable=True)
+    profile_photo_url = Column(String(2048), nullable=True)
+    cover_photo_url = Column(String(2048), nullable=True)
+    date_of_birth = Column(Date, nullable=True)
+    gender = Column(String(32), nullable=True)
+    location_city = Column(String(120), nullable=True)
+    location_state = Column(String(120), nullable=True)
+    location_country = Column(String(120), nullable=True)
+    timezone = Column(String(64), nullable=True)
+    emergency_contact_name = Column(String(150), nullable=True)
+    emergency_contact_phone = Column(String(32), nullable=True)
+    assistant_name = Column(String(150), nullable=True)
+    assistant_email = Column(String(254), nullable=True)
+    assistant_phone = Column(String(32), nullable=True)
+    preferred_contact_method = Column(String(20), nullable=True)
+    qualifications = Column(JSON, nullable=True)
+    certifications = Column(JSON, nullable=True)
+    achievements = Column(JSON, nullable=True)
+    preferences = Column(JSON, nullable=True)
+    recovery_email = Column(String(254), nullable=True)
+    recovery_phone = Column(String(32), nullable=True)
+    is_outlet_manager = Column(Boolean, default=False, nullable=False, server_default=text("0"))
+    outlet_id = Column(Integer, ForeignKey("branches.id", name="fk_users_outlet_id_branches"), nullable=True)
+    manager_assigned_at = Column(DateTime, nullable=True)
+    manager_assigned_by = Column(Integer, ForeignKey("users.id", name="fk_users_manager_assigned_by_users"), nullable=True)
+    manager_photo_url = Column(String(2048), nullable=True)
+    manager_address = Column(Text, nullable=True)
+    manager_bank_account_name = Column(String(255), nullable=True)
+    manager_bank_account_number = Column(String(34), nullable=True)
+    manager_ifsc_code = Column(String(11), nullable=True)
+    manager_bank_name = Column(String(255), nullable=True)
+    is_staff = Column(Boolean, default=False, nullable=False, server_default=text("0"))
+    staff_role = Column(String(40), nullable=True)
+    employee_code = Column(String(40), nullable=True)
+    manager_id = Column(Integer, ForeignKey("users.id", name="fk_users_manager_id_users"), nullable=True)
+    staff_assigned_at = Column(DateTime, nullable=True)
+    staff_assigned_by = Column(Integer, ForeignKey("users.id", name="fk_users_staff_assigned_by_users"), nullable=True)
+    alternate_phone = Column(String(32), nullable=True)
+    blood_group = Column(String(10), nullable=True)
+    marital_status = Column(String(32), nullable=True)
+    current_address = Column(Text, nullable=True)
+    permanent_address = Column(Text, nullable=True)
+    emergency_contact_relation = Column(String(100), nullable=True)
+    aadhaar_number = Column(String(32), nullable=True)
+    pan_number = Column(String(16), nullable=True)
+    voter_id = Column(String(32), nullable=True)
+    driving_license = Column(String(32), nullable=True)
+    passport_number = Column(String(32), nullable=True)
+    bank_account_name = Column(String(255), nullable=True)
+    bank_account_number = Column(String(34), nullable=True)
+    ifsc_code = Column(String(11), nullable=True)
+    bank_name = Column(String(255), nullable=True)
+    branch_name = Column(String(255), nullable=True)
+    upi_id = Column(String(100), nullable=True)
+    experience_years = Column(Float, nullable=True)
+    previous_employer = Column(String(255), nullable=True)
+    skills = Column(JSON, nullable=True)
+    joining_date = Column(Date, nullable=True)
+    employment_type = Column(String(20), nullable=True)
+    probation_end_date = Column(Date, nullable=True)
+    salary_type = Column(String(20), nullable=True)
+    monthly_salary = Column(DECIMAL(12, 2), nullable=True)
+    daily_wage = Column(DECIMAL(12, 2), nullable=True)
+    hourly_rate = Column(DECIMAL(12, 2), nullable=True)
+    shift_preference = Column(String(100), nullable=True)
+    weekly_off_day = Column(String(20), nullable=True)
+    pf_applicable = Column(Boolean, default=False, nullable=False, server_default=text("0"))
+    esi_applicable = Column(Boolean, default=False, nullable=False, server_default=text("0"))
+    tds_applicable = Column(Boolean, default=False, nullable=False, server_default=text("0"))
+    deactivated_at = Column(DateTime, nullable=True)
+    deactivated_reason = Column(Text, nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id", name="fk_users_created_by_users"), nullable=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    deleted_at = Column(DateTime, nullable=True)
+    is_deleted = Column(Boolean, default=False, nullable=False, server_default=text("0"))
     created_at = Column(DateTime, default=func.now())
     last_login = Column(DateTime)
     
@@ -118,13 +327,24 @@ class User(Base):
     phone = Column(String(15), nullable=False)
     
     # Relationships
-    branch = relationship("Branch", back_populates="users")
+    current_company = relationship("Company", foreign_keys=[current_company_id], back_populates="current_users")
+    company = relationship("Company", foreign_keys=[company_id], back_populates="users")
+    brand = relationship("Brand")
+    branch = relationship("Branch", foreign_keys=[branch_id], back_populates="users")
+    outlet = relationship("Branch", foreign_keys=[outlet_id], viewonly=True)
+    companies = relationship("Company", secondary="user_companies", back_populates="users")
+    role_assignments = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
+    profile_memberships = relationship("ProfileMembership", back_populates="user", cascade="all, delete-orphan")
+    canonical_role_assignments = relationship("RoleAssignment", back_populates="user", cascade="all, delete-orphan")
+    roles = relationship("Role", secondary="user_roles", viewonly=True, overlaps="role_assignments")
     activity_logs = relationship("ActivityLog", back_populates="user")
 
 class Customer(Base):
     __tablename__ = "customers"
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=True, index=True)
     patient_id = Column(String(20), unique=True, nullable=False)  # Auto-generated
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     
@@ -207,6 +427,8 @@ class StaffEmployee(Base):
     __tablename__ = "staff_employees"
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
@@ -293,6 +515,8 @@ class InventoryItem(Base):
     __tablename__ = "inventory_items"
 
     id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True, index=True)
+    brand_id = Column(Integer, ForeignKey("brands.id"), nullable=True, index=True)
     branch_id = Column(Integer, ForeignKey("branches.id"), nullable=False)
     
     # Item Details

@@ -1,0 +1,20 @@
+.attendance-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.attendance-links a {
+  padding: 9px 13px;
+  border: 1px solid var(--exec-border-visible);
+  border-radius: 12px;
+  color: var(--exec-text-primary);
+  text-decoration: none;
+}
+.attendance-links a:hover,
+.attendance-links a:focus-visible { background: rgba(68, 199, 181, .12); }
+.attendance-clock-row { display: grid; gap: 18px; justify-items: start; }
+.attendance-clock-row .manager-stat-list { width: 100%; }
+.attendance-pager { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 20px; color: var(--exec-text-secondary); }
+@media (prefers-reduced-motion: reduce) {
+  .attendance-links a, .attendance-clock-row button { transition: none; animation: none; }
+}

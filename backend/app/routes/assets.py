@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Asset, Branch
 from app.models import User
-from app.utils.auth_system import auth_guard, get_current_user
+from app.utils.auth_system import auth_guard, get_current_user, is_super_ceo_user
 
 router = APIRouter()
 
@@ -42,7 +42,7 @@ class AssetResponse(BaseModel):
 
 @router.post("/assets/", response_model=AssetResponse)
 def create_asset(asset: AssetCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.role != "super_admin" and current_user.role != "branch_admin":
+    if not is_super_ceo_user(current_user) and current_user.role != "branch_admin":
         raise HTTPException(status_code=403, detail="Access denied")
 
     branch = db.query(Branch).filter(Branch.id == asset.branch_id).first()
@@ -84,7 +84,7 @@ def list_assets(branch_id: Optional[int] = None, db: Session = Depends(get_db), 
     query = db.query(Asset)
     if branch_id:
         query = query.filter(Asset.branch_id == branch_id)
-    if current_user.role != "super_admin":
+    if not is_super_ceo_user(current_user):
         query = query.filter(Asset.branch_id == current_user.branch_id)
     return query.order_by(Asset.created_at.desc()).all()
 
@@ -95,7 +95,7 @@ def update_asset(asset_id: int, payload: AssetCreate, db: Session = Depends(get_
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    if current_user.role != "super_admin" and current_user.branch_id != asset.branch_id:
+    if not is_super_ceo_user(current_user) and current_user.branch_id != asset.branch_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     for k, v in payload.model_dump(exclude_unset=True).items():
@@ -121,7 +121,7 @@ def delete_asset(asset_id: int, db: Session = Depends(get_db), current_user: Use
     asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-    if current_user.role != "super_admin" and current_user.branch_id != asset.branch_id:
+    if not is_super_ceo_user(current_user) and current_user.branch_id != asset.branch_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
     auth_guard.log_activity(

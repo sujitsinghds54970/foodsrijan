@@ -18,7 +18,7 @@ from app.models.inventory import (
     InventoryStockMovement,
     Supplier,
 )
-from app.utils.auth_system import get_current_user
+from app.utils.auth_system import get_current_user, is_super_ceo_user
 from app.services.finance_integration import create_stock_purchase_expense
 
 
@@ -26,18 +26,18 @@ router = APIRouter()
 
 
 def _require_inventory_role(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role not in ["branch_admin", "branch_director", "super_admin"]:
+    if not is_super_ceo_user(current_user) and current_user.role not in ["branch_admin", "branch_director"]:
         raise HTTPException(
             status_code=403,
-            detail="Only branch_admin, branch_director, or super_admin can access inventory endpoints",
+            detail="Only branch_admin, branch_director, or super_ceo can access inventory endpoints",
         )
     return current_user
 
 
 def _resolve_branch_id(current_user: User, requested_branch_id: Optional[int]) -> int:
-    if current_user.role == "super_admin":
+    if is_super_ceo_user(current_user):
         if requested_branch_id is None or int(requested_branch_id) <= 0:
-            raise HTTPException(status_code=400, detail="branch_id is required for super_admin inventory access")
+            raise HTTPException(status_code=400, detail="branch_id is required for super_ceo inventory access")
         return int(requested_branch_id)
     if not current_user.branch_id:
         raise HTTPException(status_code=403, detail="User is not assigned to a branch")

@@ -135,10 +135,10 @@ export default function Dashboard() {
   // List of staff roles (not just 'staff', but also receptionist, technician, etc.)
   const isStaffRole = (role: string | undefined) => {
     const normalizedRole = (role || '').trim().toLowerCase()
-    return normalizedRole !== 'super_admin' && 
-           normalizedRole !== 'branch_admin' && 
-           normalizedRole !== 'branch_director' &&
-           normalizedRole !== 'doctor'
+    return normalizedRole !== 'super_admin' &&
+      normalizedRole !== 'branch_admin' &&
+      normalizedRole !== 'branch_director' &&
+      normalizedRole !== 'doctor'
   }
 
   // Log every location pathname change
@@ -151,13 +151,14 @@ export default function Dashboard() {
     if (isLoading || !user) return
 
     const userRole = (user.role || '').trim().toLowerCase()
+    const isSystemAdmin = Boolean((user as any)?.is_super_admin || userRole === 'super_admin')
     const currentPath = normalizePath(window.location.pathname)
-    console.log('[DASHBOARD] Checking role for redirect:', { role: userRole, currentPath })
+    console.log('[DASHBOARD] Checking role for redirect:', { role: userRole, isSystemAdmin, currentPath })
 
     // Redirect only from root/generic dashboard entry paths to prevent redirect loops on tab navigation.
     if (currentPath === '/' || currentPath === '/dashboard') {
-      if (userRole === 'super_admin') {
-        navigate('/ceo/overview', { replace: true })
+      if (isSystemAdmin) {
+        navigate('/super-admin/dashboard', { replace: true })
       } else if (userRole === 'branch_admin' || userRole === 'branch_director') {
         navigate('/branch/dashboard', { replace: true })
       } else if (isStaffRole(userRole)) {
@@ -170,8 +171,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (isLoading) return
     const normalizedRole = (user?.role || '').trim().toLowerCase()
+    const isSystemAdmin = Boolean((user as any)?.is_super_admin || normalizedRole === 'super_admin')
     if (
-      normalizedRole === 'super_admin' &&
+      isSystemAdmin &&
       (normalizedLocationPath === '/branch/daily-operations' ||
         normalizedLocationPath === '/branch/inventory' ||
         normalizedLocationPath === '/branch/analytics' ||
@@ -224,30 +226,31 @@ export default function Dashboard() {
 
   const renderContent = () => {
     const normalizedRole = (user?.role || '').trim().toLowerCase()
-    console.log('[DASHBOARD] renderContent:', { activeTab, normalizedRole })
+    const isSystemAdmin = Boolean((user as any)?.is_super_admin || normalizedRole === 'super_admin')
+    console.log('[DASHBOARD] renderContent:', { activeTab, normalizedRole, isSystemAdmin })
 
     switch (activeTab) {
       case 'overview':
         if (isStaffRole(normalizedRole)) return <MyProfileTab />
         return <Overview />
       case 'ceo-overview':
-        return normalizedRole === 'super_admin' ? <CeoOverview /> : <Overview />
+        return isSystemAdmin ? <CeoOverview /> : <Overview />
       case 'ceo-profile':
-        return normalizedRole === 'super_admin' ? <CeoProfile /> : <Overview />
+        return isSystemAdmin ? <CeoProfile /> : <Overview />
       case 'ceo-people-culture':
-        return normalizedRole === 'super_admin' ? <CeoPeopleCulture /> : <Overview />
+        return isSystemAdmin ? <CeoPeopleCulture /> : <Overview />
       case 'ceo-finance-accounts':
-        return normalizedRole === 'super_admin' ? <CeoFinanceAccounts /> : <Overview />
+        return isSystemAdmin ? <CeoFinanceAccounts /> : <Overview />
       case 'ceo-doctor-network':
-        return normalizedRole === 'super_admin' ? <CeoStaffNetwork /> : <Overview />
+        return isSystemAdmin ? <CeoStaffNetwork /> : <Overview />
       case 'ceo-patient-insights':
-        return normalizedRole === 'super_admin' ? <CeoCustomerInsights /> : <Overview />
+        return isSystemAdmin ? <CeoCustomerInsights /> : <Overview />
       case 'ceo-inventory-supply':
-        return normalizedRole === 'super_admin' ? <CeoInventorySupply /> : <Overview />
+        return isSystemAdmin ? <CeoInventorySupply /> : <Overview />
       case 'ceo-compliance-legal':
-        return normalizedRole === 'super_admin' ? <CeoComplianceLegal /> : <Overview />
+        return isSystemAdmin ? <CeoComplianceLegal /> : <Overview />
       case 'ceo-system-settings':
-        return normalizedRole === 'super_admin' ? <CeoSystemSettings /> : <Overview />
+        return isSystemAdmin ? <CeoSystemSettings /> : <Overview />
       case 'customers':
         return <CustomerManagement />
       case 'daily-operations':
@@ -295,9 +298,9 @@ export default function Dashboard() {
       case 'branch-management':
         return <BranchManagement />
       case 'ceo':
-        return normalizedRole === 'super_admin' ? <CeoDashboard /> : <Overview />
+        return isSystemAdmin ? <CeoDashboard /> : <Overview />
       case 'branch-details':
-        return normalizedRole === 'super_admin' ? <BranchDetailsDashboard /> : <Overview />
+        return isSystemAdmin ? <BranchDetailsDashboard /> : <Overview />
       default:
         if (isStaffRole(normalizedRole)) return <MyProfileTab />
         return <Overview />

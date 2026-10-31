@@ -51,7 +51,10 @@ export default function CeoSecurityGuard({ children, enabled = true, intervalMs 
   const inFlightRef = useRef(false)
   const lastToastTimeRef = useRef<number>(0)
   const TOAST_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes
-  const isSuperAdmin = useMemo(() => (user?.role || '').trim().toLowerCase() === 'super_admin', [user])
+  const isSuperAdmin = useMemo(
+    () => Boolean(user?.is_super_admin || (user?.role || '').trim().toLowerCase() === 'super_admin' || (user?.role || '').trim().toLowerCase() === 'super_ceo'),
+    [user],
+  )
 
   useEffect(() => {
     if (!enabled || !token || !isSuperAdmin) {
@@ -156,7 +159,7 @@ export default function CeoSecurityGuard({ children, enabled = true, intervalMs 
       window.clearInterval(timer)
       void flushSample()
     }
-  }, [enabled, intervalMs, isSuperAdmin, onStepUpRequired, token])
+  }, [enabled, intervalMs, isSuperAdmin, onStepUpRequired, token, TOAST_COOLDOWN_MS])
 
   return <>{children}</>
 }

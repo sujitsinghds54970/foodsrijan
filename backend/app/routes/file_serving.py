@@ -17,11 +17,11 @@ from app.models import Staff, User
 from app.models.daily_entry_module import DailyEntryModule
 from app.models.staff import StaffBranch
 from app.models.doctor_portal import StaffAuditLog
-from app.utils.auth_system import auth_guard
+from app.utils.auth_system import auth_guard, is_super_ceo_user
 
 router = APIRouter()
 
-ALLOWED_FILE_ROLES = {"super_admin", "branch_admin", "branch_director", "staff", "patient"}
+ALLOWED_FILE_ROLES = {"super_ceo", "super_admin", "branch_admin", "branch_director", "staff", "patient"}
 
 # Get the uploads directory path - try multiple possible locations
 BASE_DIR = Path(__file__).parent.parent.parent
@@ -133,7 +133,8 @@ def _resolve_current_user(
     )
     current_user = auth_guard.get_current_user(token_data=token_data, db=db)
 
-    if current_user.role not in ALLOWED_FILE_ROLES:
+    normalized_role = (current_user.role or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized_role not in ALLOWED_FILE_ROLES and not is_super_ceo_user(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
 
     return current_user

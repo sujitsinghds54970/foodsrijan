@@ -10,7 +10,7 @@ from app.database import get_db
 from app.models import Branch, User
 from app.models.branch_bank_details import BranchBankDetails
 from app.models.hr import DirectorAttendanceType, DirectorProfile, StaffAttendanceLog, StaffProfile
-from app.utils.auth_system import get_current_user
+from app.utils.auth_system import get_current_user, is_super_ceo_user
 from app.utils.schema_compat import ensure_branch_logo_column
 from app.utils.security import hash_password
 
@@ -43,14 +43,14 @@ class _OverviewScope:
 
 
 def _assert_allowed(user: User) -> None:
-    if user.role not in ["super_admin", "branch_admin", "branch_director"]:
+    if user.role not in ["branch_admin", "branch_director"] and not is_super_ceo_user(user):
         raise HTTPException(status_code=403, detail="Access denied")
 
 
 def _resolve_scope(db: Session, user: User, requested_branch_id: Optional[int]) -> _OverviewScope:
     _assert_allowed(user)
 
-    if user.role == "super_admin":
+    if is_super_ceo_user(user):
         if requested_branch_id is None:
             branch = db.query(Branch).order_by(Branch.id.asc()).first()
             if not branch:

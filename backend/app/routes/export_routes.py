@@ -7,7 +7,7 @@ import os
 from io import BytesIO
 
 from app.database import get_db
-from app.utils.auth_system import auth_guard, require_staff, get_current_user
+from app.utils.auth_system import auth_guard, require_staff, get_current_user, is_super_ceo_user
 from app.models import User, Branch
 from app.schemas.user import MonthlyOrderRequest, ExportResponse
 from app.utils.excel_export import export_service
@@ -24,10 +24,10 @@ def export_monthly_report(
     
     # Check branch access
     branch_id = request.branch_id
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         branch_id = current_user.branch_id
     elif branch_id:
-        # Verify branch exists and user has access if not super admin
+        # Verify branch exists and user has access if not super_ceo
         branch = db.query(Branch).filter(Branch.id == branch_id).first()
         if not branch:
             raise HTTPException(status_code=404, detail="Branch not found")
@@ -63,7 +63,7 @@ def export_staff_attendance(
     """Generate staff attendance Excel report"""
     
     # Check branch access
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         branch_id = current_user.branch_id
     elif branch_id:
         branch = db.query(Branch).filter(Branch.id == branch_id).first()
@@ -98,7 +98,7 @@ def export_inventory_report(
     """Generate inventory status Excel report"""
     
     # Check branch access
-    if current_user.role != 'super_admin':
+    if not is_super_ceo_user(current_user):
         branch_id = current_user.branch_id
     elif branch_id:
         branch = db.query(Branch).filter(Branch.id == branch_id).first()
